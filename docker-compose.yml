@@ -1,0 +1,34 @@
+services:
+  web:
+    build: .
+    container_name: sistema-ventas-web
+    ports:
+      - "0.0.0.0:4000:4000"
+    volumes:
+      - ./public:/var/www/html
+    environment:
+      - APACHE_DOCUMENT_ROOT=/var/www/html
+      - DB_HOST=10.0.0.3
+      - DB_NAME=ionica
+      - DB_USER=root
+      - DB_PASS=root
+    depends_on:
+      - db
+
+  db:
+    image: mysql:8.0
+    container_name: sistema-ventas-db
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: sistema_ventas
+      MYSQL_USER: ventas_user
+      MYSQL_PASSWORD: ventas_pass
+    ports:
+      - "3307:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./public/api/init_db.sql:/docker-entrypoint-initdb.d/init.sql
+
+volumes:
+  db_data:
+

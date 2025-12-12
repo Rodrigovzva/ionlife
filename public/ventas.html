@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>IONICA - Registro de Ventas</title>
+
+  <!-- Google Font: Source Sans 3 -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Sans+3:300,400,400i,700&display=fallback">
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- AdminLTE -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+  <style>
+    .productos-table {
+      margin-top: 20px;
+    }
+    .productos-table th {
+      background-color: #f4f4f4;
+    }
+    .btn-remove-producto {
+      color: #dc3545;
+      cursor: pointer;
+    }
+    .btn-remove-producto:hover {
+      color: #c82333;
+    }
+    .total-section {
+      background-color: #f8f9fa;
+      padding: 15px;
+      border-radius: 5px;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body class="hold-transition sidebar-mini layout-fixed">
+<div class="wrapper">
+
+  <!-- Navbar -->
+  <nav class="main-header navbar navbar-expand navbar-white navbar-light">
+    <ul class="navbar-nav">
+      <li class="nav-item">
+        <a class="nav-link" data-widget="pushmenu" href="#" role="button"><i class="fas fa-bars"></i></a>
+      </li>
+    </ul>
+    <ul class="navbar-nav ml-auto">
+      <li class="nav-item">
+        <a class="nav-link" href="dashboard.html">
+          <i class="fas fa-arrow-left"></i> Volver
+        </a>
+      </li>
+    </ul>
+  </nav>
+
+  <!-- Main Sidebar -->
+  <aside class="main-sidebar sidebar-dark-primary elevation-4">
+    <a href="dashboard.html" class="brand-link">
+      <span class="brand-text font-weight-light"><b>IONICA</b></span>
+    </a>
+    <div class="sidebar">
+      <nav class="mt-2">
+        <ul class="nav nav-pills nav-sidebar flex-column">
+          <li class="nav-item">
+            <a href="dashboard.html" class="nav-link">
+              <i class="nav-icon fas fa-tachometer-alt"></i>
+              <p>Dashboard</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="ventas.html" class="nav-link active">
+              <i class="nav-icon fas fa-shopping-cart"></i>
+              <p>Ventas</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="ventas-pendientes.html" class="nav-link">
+              <i class="nav-icon fas fa-clock"></i>
+              <p>Ventas Pendientes</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="productos.html" class="nav-link">
+              <i class="nav-icon fas fa-box"></i>
+              <p>Productos</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="almacenes.html" class="nav-link">
+              <i class="nav-icon fas fa-warehouse"></i>
+              <p>Almacenes</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="clientes.html" class="nav-link">
+              <i class="nav-icon fas fa-users"></i>
+              <p>Clientes</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="registro-usuario.html" class="nav-link">
+              <i class="nav-icon fas fa-user-plus"></i>
+              <p>Registro Usuario</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="reportes.html" class="nav-link">
+              <i class="nav-icon fas fa-chart-bar"></i>
+              <p>Reportes</p>
+            </a>
+          </li>
+        </ul>
+      </nav>
+    </div>
+  </aside>
+
+  <!-- Content Wrapper -->
+  <div class="content-wrapper">
+    <div class="content-header">
+      <div class="container-fluid">
+        <div class="row mb-2">
+          <div class="col-sm-6">
+            <h1 class="m-0">Registro de Ventas</h1>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <section class="content">
+      <div class="container-fluid">
+        <div class="row">
+          <div class="col-12">
+            <div class="card card-primary">
+              <div class="card-header">
+                <h3 class="card-title"><i class="fas fa-cash-register"></i> Nueva Venta</h3>
+              </div>
+              <form id="formVenta">
+                <div class="card-body">
+                  <div class="alert alert-success d-none" id="successAlert">
+                    <i class="icon fas fa-check"></i> Venta registrada correctamente.
+                  </div>
+                  <div class="alert alert-danger d-none" id="errorAlert">
+                    <i class="icon fas fa-ban"></i> <span id="errorMessage"></span>
+                  </div>
+
+                  <!-- Información de la Venta -->
+                  <h5 class="mb-3"><i class="fas fa-info-circle"></i> Información de la Venta</h5>
+                  <div class="row">
+                    <div class="col-md-4">
+                      <div class="form-group">
+                        <label for="fecha_registro">Fecha de Registro <span class="text-danger">*</span></label>
+                        <input type="datetime-local" class="form-control" id="fecha_registro" name="fecha_registro" required>
+                        <small class="form-text text-muted">Fecha y hora de registro de la venta</small>
+                      </div>
+                    </div>
+                    <div class="col-md-4">
+                      <div class="form-group">
+                        <label for="cliente_id">Cliente <span class="text-danger">*</span></label>
+                        <select class="form-control" id="cliente_id" name="cliente_id" required>
+                          <option value="">Seleccionar cliente</option>
+                        </select>
+                        <small class="form-text text-muted">Cliente que realiza la compra</small>
+                      </div>
+                    </div>
+                    <div class="col-md-4">
+                      <div class="form-group">
+                        <label for="vendedor_id">Vendedor <span class="text-danger">*</span></label>
+                        <select class="form-control" id="vendedor_id" name="vendedor_id" required>
+                          <option value="">Seleccionar vendedor</option>
+                        </select>
+                        <small class="form-text text-muted">Vendedor que realiza la venta</small>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="row">
+                    <div class="col-md-6">
+                      <div class="form-group">
+                        <label for="tipo_venta">Tipo de Venta <span class="text-danger">*</span></label>
+                        <select class="form-control" id="tipo_venta" name="tipo_venta" required>
+                          <option value="normal">Normal</option>
+                          <option value="mayorista">Mayorista</option>
+                          <option value="distribuidor">Distribuidor</option>
+                        </select>
+                        <small class="form-text text-muted">Afecta el precio aplicado</small>
+                      </div>
+                    </div>
+                    <div class="col-md-6">
+                      <div class="form-group">
+                        <label for="estado_venta">Estado de la Venta <span class="text-danger">*</span></label>
+                        <select class="form-control" id="estado_venta" name="estado_venta" required>
+                          <option value="completada">Completada</option>
+                          <option value="pendiente">Pendiente</option>
+                          <option value="cancelada">Cancelada</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Productos de la Venta -->
+                  <h5 class="mb-3 mt-4"><i class="fas fa-box"></i> Productos</h5>
+                  <div class="row">
+                    <div class="col-md-5">
+                      <div class="form-group">
+                        <label for="producto_select">Producto</label>
+                        <select class="form-control" id="producto_select">
+                          <option value="">Seleccionar producto</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div class="col-md-2">
+                      <div class="form-group">
+                        <label for="cantidad_producto">Cantidad</label>
+                        <input type="number" class="form-control" id="cantidad_producto" min="1" value="1" step="1">
+                      </div>
+                    </div>
+                    <div class="col-md-3">
+                      <div class="form-group">
+                        <label for="precio_unitario">Precio Unitario</label>
+                        <div class="input-group">
+                          <div class="input-group-prepend">
+                            <span class="input-group-text">Bs.</span>
+                          </div>
+                          <input type="number" class="form-control" id="precio_unitario" step="0.01" min="0" readonly>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="col-md-2">
+                      <div class="form-group">
+                        <label>&nbsp;</label>
+                        <button type="button" class="btn btn-success btn-block" id="btnAgregarProducto">
+                          <i class="fas fa-plus"></i> Agregar
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Tabla de Productos -->
+                  <div class="table-responsive productos-table">
+                    <table class="table table-bordered table-striped" id="tablaProductos">
+                      <thead>
+                        <tr>
+                          <th>Producto</th>
+                          <th>Cantidad</th>
+                          <th>Precio Unit.</th>
+                          <th>Subtotal</th>
+                          <th width="50">Acción</th>
+                        </tr>
+                      </thead>
+                      <tbody id="tbodyProductos">
+                        <tr id="sinProductos">
+                          <td colspan="5" class="text-center text-muted">No hay productos agregados</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <!-- Totales -->
+                  <div class="total-section">
+                    <div class="row">
+                      <div class="col-md-6 offset-md-6">
+                        <div class="form-group row">
+                          <label class="col-sm-6 col-form-label"><strong>Subtotal:</strong></label>
+                          <div class="col-sm-6">
+                            <input type="text" class="form-control text-right" id="subtotal" value="0.00" readonly>
+                          </div>
+                        </div>
+                        <div class="form-group row">
+                          <label class="col-sm-6 col-form-label">Descuento (%):</label>
+                          <div class="col-sm-6">
+                            <input type="number" class="form-control text-right" id="descuento_porcentaje" name="descuento_porcentaje" min="0" max="100" value="0" step="0.01">
+                          </div>
+                        </div>
+                        <div class="form-group row">
+                          <label class="col-sm-6 col-form-label">Descuento (Bs.):</label>
+                          <div class="col-sm-6">
+                            <input type="text" class="form-control text-right" id="descuento_monto" name="descuento_monto" value="0.00" step="0.01">
+                          </div>
+                        </div>
+                        <div class="form-group row">
+                          <label class="col-sm-6 col-form-label"><strong>Total:</strong></label>
+                          <div class="col-sm-6">
+                            <input type="text" class="form-control text-right font-weight-bold" id="total" name="total" value="0.00" readonly style="font-size: 1.2em;">
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Información de Pago -->
+                  <h5 class="mb-3 mt-4"><i class="fas fa-money-bill-wave"></i> Información de Pago</h5>
+                  <div class="row">
+                    <div class="col-md-4">
+                      <div class="form-group">
+                        <label for="metodo_pago">Método de Pago <span class="text-danger">*</span></label>
+                        <select class="form-control" id="metodo_pago" name="metodo_pago" required>
+                          <option value="">Seleccionar</option>
+                          <option value="efectivo">Efectivo</option>
+                          <option value="tarjeta_debito">Tarjeta Débito</option>
+                          <option value="tarjeta_credito">Tarjeta Crédito</option>
+                          <option value="transferencia">Transferencia Bancaria</option>
+                          <option value="qr">QR / Pago Móvil</option>
+                          <option value="mixto">Pago Mixto</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div class="col-md-4">
+                      <div class="form-group">
+                        <label for="monto_recibido">Monto Recibido</label>
+                        <div class="input-group">
+                          <div class="input-group-prepend">
+                            <span class="input-group-text">Bs.</span>
+                          </div>
+                          <input type="number" class="form-control" id="monto_recibido" name="monto_recibido" step="0.01" min="0" placeholder="0.00">
+                        </div>
+                        <small class="form-text text-muted">Monto recibido del cliente</small>
+                      </div>
+                    </div>
+                    <div class="col-md-4">
+                      <div class="form-group">
+                        <label for="cambio">Cambio</label>
+                        <div class="input-group">
+                          <div class="input-group-prepend">
+                            <span class="input-group-text">Bs.</span>
+                          </div>
+                          <input type="text" class="form-control" id="cambio" value="0.00" readonly>
+                        </div>
+                        <small class="form-text text-muted">Cambio a devolver</small>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Información Adicional -->
+                  <h5 class="mb-3 mt-4"><i class="fas fa-info"></i> Información Adicional</h5>
+                  <div class="form-group">
+                    <label for="notas_venta">Notas u Observaciones</label>
+                    <textarea class="form-control" id="notas_venta" name="notas_venta" rows="3" placeholder="Notas adicionales sobre la venta..."></textarea>
+                  </div>
+                </div>
+                <div class="card-footer">
+                  <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save"></i> Guardar Venta
+                  </button>
+                  <button type="reset" class="btn btn-secondary">
+                    <i class="fas fa-redo"></i> Limpiar Formulario
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <footer class="main-footer">
+    <strong>Copyright &copy; 2025 <a href="#">IONICA</a>.</strong>
+  </footer>
+</div>
+
+<!-- jQuery -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<!-- Bootstrap 4 -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+<!-- AdminLTE App -->
+<script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+
+<script>
+let productosVenta = [];
+let productosDisponibles = [];
+let clientesDisponibles = [];
+let vendedoresDisponibles = [];
+
+document.addEventListener('DOMContentLoaded', function() {
+  // Establecer fecha actual
+  const now = new Date();
+  const fechaHora = now.toISOString().slice(0, 16);
+  document.getElementById('fecha_registro').value = fechaHora;
+
+  // Cargar datos
+  loadClientes();
+  loadVendedores();
+  loadProductos();
+
+  // Eventos
+  document.getElementById('btnAgregarProducto').addEventListener('click', agregarProducto);
+  document.getElementById('producto_select').addEventListener('change', actualizarPrecio);
+  document.getElementById('tipo_venta').addEventListener('change', actualizarPrecio);
+  document.getElementById('descuento_porcentaje').addEventListener('input', calcularTotales);
+  document.getElementById('descuento_monto').addEventListener('input', calcularTotales);
+  document.getElementById('monto_recibido').addEventListener('input', calcularCambio);
+  document.getElementById('formVenta').addEventListener('submit', guardarVenta);
+});
+
+async function loadClientes() {
+  try {
+    const response = await fetch('api/get_clientes.php');
+    const data = await response.json();
+    if (data.success && data.clientes) {
+      clientesDisponibles = data.clientes;
+      const select = document.getElementById('cliente_id');
+      data.clientes.forEach(cliente => {
+        const option = document.createElement('option');
+        option.value = cliente.id;
+        option.textContent = cliente.nombre_completo + ' (' + cliente.numero_ci + ')';
+        select.appendChild(option);
+      });
+    }
+  } catch (error) {
+    console.error('Error al cargar clientes:', error);
+  }
+}
+
+async function loadVendedores() {
+  try {
+    const response = await fetch('api/get_vendedores.php');
+    const data = await response.json();
+    if (data.success && data.vendedores) {
+      vendedoresDisponibles = data.vendedores;
+      const select = document.getElementById('vendedor_id');
+      data.vendedores.forEach(vendedor => {
+        const option = document.createElement('option');
+        option.value = vendedor.id;
+        option.textContent = vendedor.nombre || vendedor.username;
+        select.appendChild(option);
+      });
+    }
+  } catch (error) {
+    console.error('Error al cargar vendedores:', error);
+  }
+}
+
+async function loadProductos() {
+  try {
+    const response = await fetch('api/get_productos.php');
+    const data = await response.json();
+    if (data.success && data.productos) {
+      productosDisponibles = data.productos.filter(p => p.estado === 'activo');
+      const select = document.getElementById('producto_select');
+      productosDisponibles.forEach(producto => {
+        const option = document.createElement('option');
+        option.value = producto.id;
+        option.textContent = producto.nombre_producto + ' - Bs. ' + parseFloat(producto.precio_venta).toFixed(2);
+        option.dataset.precio = producto.precio_venta;
+        option.dataset.precioMayorista = producto.precio_mayorista || producto.precio_venta;
+        select.appendChild(option);
+      });
+    }
+  } catch (error) {
+    console.error('Error al cargar productos:', error);
+  }
+}
+
+function actualizarPrecio() {
+  const productoSelect = document.getElementById('producto_select');
+  const tipoVenta = document.getElementById('tipo_venta').value;
+  const selectedOption = productoSelect.options[productoSelect.selectedIndex];
+  
+  if (selectedOption && selectedOption.value) {
+    let precio = parseFloat(selectedOption.dataset.precio);
+    
+    if (tipoVenta === 'mayorista' || tipoVenta === 'distribuidor') {
+      precio = parseFloat(selectedOption.dataset.precioMayorista) || precio;
+    }
+    
+    document.getElementById('precio_unitario').value = precio.toFixed(2);
+  } else {
+    document.getElementById('precio_unitario').value = '';
+  }
+}
+
+function agregarProducto() {
+  const productoSelect = document.getElementById('producto_select');
+  const cantidad = parseInt(document.getElementById('cantidad_producto').value) || 1;
+  const precioUnitario = parseFloat(document.getElementById('precio_unitario').value) || 0;
+  
+  if (!productoSelect.value) {
+    alert('Por favor, selecciona un producto');
+    return;
+  }
+  
+  if (precioUnitario <= 0) {
+    alert('El precio unitario debe ser mayor a cero');
+    return;
+  }
+  
+  const selectedOption = productoSelect.options[productoSelect.selectedIndex];
+  const producto = productosDisponibles.find(p => p.id == productoSelect.value);
+  
+  if (!producto) return;
+  
+  const subtotal = cantidad * precioUnitario;
+  
+  productosVenta.push({
+    producto_id: producto.id,
+    nombre: producto.nombre_producto,
+    cantidad: cantidad,
+    precio_unitario: precioUnitario,
+    subtotal: subtotal
+  });
+  
+  actualizarTablaProductos();
+  limpiarCamposProducto();
+  calcularTotales();
+}
+
+function limpiarCamposProducto() {
+  document.getElementById('producto_select').value = '';
+  document.getElementById('cantidad_producto').value = '1';
+  document.getElementById('precio_unitario').value = '';
+}
+
+function actualizarTablaProductos() {
+  const tbody = document.getElementById('tbodyProductos');
+  tbody.innerHTML = '';
+  
+  if (productosVenta.length === 0) {
+    tbody.innerHTML = '<tr id="sinProductos"><td colspan="5" class="text-center text-muted">No hay productos agregados</td></tr>';
+    return;
+  }
+  
+  productosVenta.forEach((producto, index) => {
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td>${producto.nombre}</td>
+      <td>${producto.cantidad}</td>
+      <td>Bs. ${producto.precio_unitario.toFixed(2)}</td>
+      <td>Bs. ${producto.subtotal.toFixed(2)}</td>
+      <td class="text-center">
+        <button type="button" class="btn btn-sm btn-remove-producto" onclick="eliminarProducto(${index})">
+          <i class="fas fa-trash"></i>
+        </button>
+      </td>
+    `;
+    tbody.appendChild(row);
+  });
+}
+
+function eliminarProducto(index) {
+  productosVenta.splice(index, 1);
+  actualizarTablaProductos();
+  calcularTotales();
+}
+
+function calcularTotales() {
+  const subtotal = productosVenta.reduce((sum, p) => sum + p.subtotal, 0);
+  
+  const descuentoPorcentaje = parseFloat(document.getElementById('descuento_porcentaje').value) || 0;
+  const descuentoMonto = parseFloat(document.getElementById('descuento_monto').value) || 0;
+  
+  // Si hay porcentaje, calcular monto
+  if (descuentoPorcentaje > 0) {
+    const montoCalculado = subtotal * (descuentoPorcentaje / 100);
+    document.getElementById('descuento_monto').value = montoCalculado.toFixed(2);
+  }
+  
+  const descuentoFinal = descuentoMonto || (subtotal * (descuentoPorcentaje / 100));
+  const total = subtotal - descuentoFinal;
+  
+  document.getElementById('subtotal').value = subtotal.toFixed(2);
+  document.getElementById('total').value = total.toFixed(2);
+  
+  calcularCambio();
+}
+
+function calcularCambio() {
+  const total = parseFloat(document.getElementById('total').value) || 0;
+  const montoRecibido = parseFloat(document.getElementById('monto_recibido').value) || 0;
+  const cambio = montoRecibido - total;
+  
+  document.getElementById('cambio').value = cambio > 0 ? cambio.toFixed(2) : '0.00';
+}
+
+async function guardarVenta(e) {
+  e.preventDefault();
+  
+  if (productosVenta.length === 0) {
+    alert('Debes agregar al menos un producto a la venta');
+    return;
+  }
+  
+  const formData = {
+    fecha_registro: document.getElementById('fecha_registro').value,
+    cliente_id: document.getElementById('cliente_id').value,
+    vendedor_id: document.getElementById('vendedor_id').value,
+    tipo_venta: document.getElementById('tipo_venta').value,
+    estado_venta: document.getElementById('estado_venta').value,
+    subtotal: parseFloat(document.getElementById('subtotal').value),
+    descuento_porcentaje: parseFloat(document.getElementById('descuento_porcentaje').value) || 0,
+    descuento_monto: parseFloat(document.getElementById('descuento_monto').value) || 0,
+    total: parseFloat(document.getElementById('total').value),
+    metodo_pago: document.getElementById('metodo_pago').value,
+    monto_recibido: parseFloat(document.getElementById('monto_recibido').value) || 0,
+    cambio: parseFloat(document.getElementById('cambio').value) || 0,
+    notas_venta: document.getElementById('notas_venta').value,
+    productos: productosVenta
+  };
+  
+  // Ocultar alertas
+  document.getElementById('successAlert').classList.add('d-none');
+  document.getElementById('errorAlert').classList.add('d-none');
+  
+  // Mostrar loading
+  const submitBtn = e.target.querySelector('button[type="submit"]');
+  const originalText = submitBtn.innerHTML;
+  submitBtn.disabled = true;
+  submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando...';
+  
+  try {
+    const response = await fetch('api/guardar_venta.php', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(formData)
+    });
+
+    const result = await response.json();
+
+    if (result.success) {
+      document.getElementById('successAlert').classList.remove('d-none');
+      document.getElementById('successAlert').innerHTML = '<i class="icon fas fa-check"></i> Venta registrada correctamente. Número de venta: ' + result.numero_venta;
+      e.target.reset();
+      productosVenta = [];
+      actualizarTablaProductos();
+      calcularTotales();
+      // Establecer fecha actual
+      const now = new Date();
+      const fechaHora = now.toISOString().slice(0, 16);
+      document.getElementById('fecha_registro').value = fechaHora;
+      // Limpiar campos de pago
+      document.getElementById('monto_recibido').value = '';
+      document.getElementById('cambio').value = '0.00';
+    } else {
+      document.getElementById('errorMessage').textContent = result.message || 'Error al guardar la venta';
+      document.getElementById('errorAlert').classList.remove('d-none');
+    }
+    
+  } catch (error) {
+    console.error('Error:', error);
+    document.getElementById('errorMessage').textContent = 'Error de conexión. Por favor, intenta nuevamente.';
+    document.getElementById('errorAlert').classList.remove('d-none');
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = originalText;
+  }
+}
+</script>
+</body>
+</html>
+

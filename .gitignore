@@ -1,0 +1,59 @@
+# Dependencias
+node_modules/
+vendor/
+IONICA/node_modules/
+
+# Archivos compilados y de build
+IONICA/dist/
+IONICA/.astro/
+IONICA/.cache/
+IONICA/.sass-cache/
+*.map
+
+# Archivos de configuración local y sensibles
+api/config.local.php
+public/api/config.local.php
+**/config.local.php
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs/
+IONICA/*.log
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+
+# Archivos temporales
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# Sesiones PHP
+sessions/
+*.session
+
+# Archivos de compilación
+*.min.js
+*.min.css
+!IONICA/dist/**/*.min.js
+!IONICA/dist/**/*.min.css
+
+# Package locks (opcional - descomenta si quieres ignorarlos)
+# package-lock.json
+# IONICA/package-lock.json
+

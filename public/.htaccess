@@ -1,0 +1,8 @@
+# Configuración para Apache (opcional)
+# Si usas el servidor PHP built-in, este archivo no es necesario
+
+RewriteEngine On
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^api/(.*)$ api/$1 [L]
+

@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>IONICA - Registro de Productos</title>
+
+  <!-- Google Font: Source Sans 3 -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Sans+3:300,400,400i,700&display=fallback">
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- AdminLTE -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+  <style>
+    .preview-image {
+      max-width: 200px;
+      max-height: 200px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      padding: 5px;
+      margin-top: 10px;
+      display: none;
+    }
+    .stock-alert {
+      color: #dc3545;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body class="hold-transition sidebar-mini layout-fixed">
+<div class="wrapper">
+
+  <!-- Navbar -->
+  <nav class="main-header navbar navbar-expand navbar-white navbar-light">
+    <ul class="navbar-nav">
+      <li class="nav-item">
+        <a class="nav-link" data-widget="pushmenu" href="#" role="button"><i class="fas fa-bars"></i></a>
+      </li>
+    </ul>
+    <ul class="navbar-nav ml-auto">
+      <li class="nav-item">
+        <a class="nav-link" href="dashboard.html">
+          <i class="fas fa-arrow-left"></i> Volver
+        </a>
+      </li>
+    </ul>
+  </nav>
+
+  <!-- Main Sidebar -->
+  <aside class="main-sidebar sidebar-dark-primary elevation-4">
+    <a href="dashboard.html" class="brand-link">
+      <span class="brand-text font-weight-light"><b>IONICA</b></span>
+    </a>
+    <div class="sidebar">
+      <nav class="mt-2">
+        <ul class="nav nav-pills nav-sidebar flex-column">
+          <li class="nav-item">
+            <a href="dashboard.html" class="nav-link">
+              <i class="nav-icon fas fa-tachometer-alt"></i>
+              <p>Dashboard</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="ventas.html" class="nav-link">
+              <i class="nav-icon fas fa-shopping-cart"></i>
+              <p>Ventas</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="ventas-pendientes.html" class="nav-link">
+              <i class="nav-icon fas fa-clock"></i>
+              <p>Ventas Pendientes</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="productos.html" class="nav-link active">
+              <i class="nav-icon fas fa-box"></i>
+              <p>Productos</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="almacenes.html" class="nav-link">
+              <i class="nav-icon fas fa-warehouse"></i>
+              <p>Almacenes</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="clientes.html" class="nav-link">
+              <i class="nav-icon fas fa-users"></i>
+              <p>Clientes</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="registro-usuario.html" class="nav-link">
+              <i class="nav-icon fas fa-user-plus"></i>
+              <p>Registro Usuario</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="reportes.html" class="nav-link">
+              <i class="nav-icon fas fa-chart-bar"></i>
+              <p>Reportes</p>
+            </a>
+          </li>
+        </ul>
+      </nav>
+    </div>
+  </aside>
+
+  <!-- Content Wrapper -->
+  <div class="content-wrapper">
+    <div class="content-header">
+      <div class="container-fluid">
+        <div class="row mb-2">
+          <div class="col-sm-6">
+            <h1 class="m-0">Registro de Productos</h1>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <section class="content">
+      <div class="container-fluid">
+        <div class="row">
+          <div class="col-12">
+            <div class="card card-primary">
+              <div class="card-header">
+                <h3 class="card-title"><i class="fas fa-tint"></i> Nuevo Producto - Agua Iónica</h3>
+              </div>
+              <form id="formProducto">
+                <div class="card-body">
+                  <div class="alert alert-success d-none" id="successAlert">
+                    <i class="icon fas fa-check"></i> Producto registrado correctamente.
+                  </div>
+                  <div class="alert alert-danger d-none" id="errorAlert">
+                    <i class="icon fas fa-ban"></i> <span id="errorMessage"></span>
+                  </div>
+
+                  <!-- Información Básica del Producto -->
+                  <h5 class="mb-3"><i class="fas fa-info-circle"></i> Información Básica</h5>
+                  <div class="row">
+                    <div class="col-md-6">
+                      <div class="form-group">
+                        <label for="codigo_producto">Código de Producto / SKU <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="codigo_producto" name="codigo_producto" required readonly>
+                        <small class="form-text text-muted">Código generado automáticamente</small>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="row">
+                    <div class="col-md-8">
+                      <div class="form-group">
+                        <label for="nombre_producto">Nombre del Producto <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="nombre_producto" name="nombre_producto" required placeholder="Ej: Agua Iónica Premium 500ml">
+                      </div>
+                    </div>
+                    <div class="col-md-4">
+                      <div class="form-group">
+                        <label for="tamano">Tamaño</label>
+                        <input type="number" class="form-control" id="tamano" name="tamano" step="0.01" min="0" placeholder="Ej: 500">
+                        <small class="form-text text-muted">Tamaño en ml o litros</small>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Precios -->
+                  <h5 class="mb-3 mt-4"><i class="fas fa-dollar-sign"></i> Información de Precios</h5>
+                  <div class="row">
+                    <div class="col-md-4">
+                      <div class="form-group">
+                        <label for="precio_compra">Precio de Compra <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                          <div class="input-group-prepend">
+                            <span class="input-group-text">Bs.</span>
+                          </div>
+                          <input type="number" class="form-control" id="precio_compra" name="precio_compra" required step="0.01" min="0" placeholder="0.00">
+                        </div>
+                      </div>
+                    </div>
+                    <div class="col-md-4">
+                      <div class="form-group">
+                        <label for="precio_venta">Precio de Venta <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                          <div class="input-group-prepend">
+                            <span class="input-group-text">Bs.</span>
+                          </div>
+                          <input type="number" class="form-control" id="precio_venta" name="precio_venta" required step="0.01" min="0" placeholder="0.00">
+                        </div>
+                      </div>
+                    </div>
+                    <div class="col-md-4">
+                      <div class="form-group">
+                        <label for="precio_mayorista">Precio Mayorista</label>
+                        <div class="input-group">
+                          <div class="input-group-prepend">
+                            <span class="input-group-text">Bs.</span>
+                          </div>
+                          <input type="number" class="form-control" id="precio_mayorista" name="precio_mayorista" step="0.01" min="0" placeholder="0.00">
+                        </div>
+                        <small class="form-text text-muted">Precio para ventas al por mayor</small>
+                      </div>
+                    </div>
+                  </div>
+
+
+                  <!-- Información Adicional -->
+                  <h5 class="mb-3 mt-4"><i class="fas fa-info"></i> Información Adicional</h5>
+                  <div class="row">
+                    <div class="col-md-6">
+                      <div class="form-group">
+                        <label for="proveedor">Proveedor</label>
+                        <input type="text" class="form-control" id="proveedor" name="proveedor" placeholder="Nombre del proveedor">
+                      </div>
+                    </div>
+                    <div class="col-md-6">
+                      <div class="form-group">
+                        <label for="fecha_vencimiento">Fecha de Vencimiento</label>
+                        <input type="date" class="form-control" id="fecha_vencimiento" name="fecha_vencimiento">
+                        <small class="form-text text-muted">Si el producto tiene fecha de vencimiento</small>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="row">
+                    <div class="col-md-6">
+                      <div class="form-group">
+                        <label for="imagen_producto">Imagen del Producto</label>
+                        <div class="custom-file">
+                          <input type="file" class="custom-file-input" id="imagen_producto" name="imagen_producto" accept="image/*">
+                          <label class="custom-file-label" for="imagen_producto">Seleccionar imagen</label>
+                        </div>
+                        <img id="previewImagen" class="preview-image" alt="Vista previa">
+                        <small class="form-text text-muted">Formatos: JPG, PNG, GIF (máx. 2MB)</small>
+                      </div>
+                    </div>
+                    <div class="col-md-6">
+                      <div class="form-group">
+                        <label for="estado">Estado del Producto <span class="text-danger">*</span></label>
+                        <select class="form-control" id="estado" name="estado" required>
+                          <option value="activo">Activo</option>
+                          <option value="inactivo">Inactivo</option>
+                          <option value="descontinuado">Descontinuado</option>
+                        </select>
+                        <small class="form-text text-muted">Los productos inactivos no aparecerán en ventas</small>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="form-group">
+                    <label for="notas">Notas Adicionales</label>
+                    <textarea class="form-control" id="notas" name="notas" rows="3" placeholder="Notas adicionales sobre el producto..."></textarea>
+                  </div>
+                </div>
+                <div class="card-footer">
+                  <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save"></i> Guardar Producto
+                  </button>
+                  <button type="reset" class="btn btn-secondary">
+                    <i class="fas fa-redo"></i> Limpiar Formulario
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <footer class="main-footer">
+    <strong>Copyright &copy; 2025 <a href="#">IONICA</a>.</strong>
+  </footer>
+</div>
+
+<!-- jQuery -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<!-- Bootstrap 4 -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+<!-- AdminLTE App -->
+<script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const form = document.getElementById('formProducto');
+  const imagenInput = document.getElementById('imagen_producto');
+  const previewImagen = document.getElementById('previewImagen');
+  const precioCompra = document.getElementById('precio_compra');
+  const precioVenta = document.getElementById('precio_venta');
+  const codigoProducto = document.getElementById('codigo_producto');
+
+  // Generar código automático al cargar la página
+  generarCodigoAutomatico();
+
+  // Vista previa de imagen
+  imagenInput.addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (file) {
+      if (file.size > 2 * 1024 * 1024) {
+        alert('La imagen es demasiado grande. Máximo 2MB.');
+        imagenInput.value = '';
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        previewImagen.src = e.target.result;
+        previewImagen.style.display = 'block';
+      };
+      reader.readAsDataURL(file);
+    } else {
+      previewImagen.style.display = 'none';
+    }
+  });
+
+  // Validar que precio de venta sea mayor que precio de compra
+  function validatePrices() {
+    const compra = parseFloat(precioCompra.value) || 0;
+    const venta = parseFloat(precioVenta.value) || 0;
+    
+    if (venta > 0 && compra > 0 && venta < compra) {
+      precioVenta.setCustomValidity('El precio de venta debe ser mayor o igual al precio de compra');
+      return false;
+    } else {
+      precioVenta.setCustomValidity('');
+      return true;
+    }
+  }
+
+  precioCompra.addEventListener('input', validatePrices);
+  precioVenta.addEventListener('input', validatePrices);
+
+  // Función para generar código automático
+  async function generarCodigoAutomatico() {
+    try {
+      // Intentar obtener el último código desde el servidor
+      const response = await fetch('api/obtener_ultimo_codigo.php');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.ultimo_codigo) {
+          codigoProducto.value = data.ultimo_codigo;
+          return;
+        }
+      }
+    } catch (error) {
+      console.log('No se pudo obtener código del servidor, generando localmente');
+    }
+    
+    // Si no hay servidor o falla, empezar desde 1
+    codigoProducto.value = '1';
+  }
+
+  // Actualizar label del input file
+  $('.custom-file-input').on('change', function() {
+    let fileName = $(this).val().split('\\').pop();
+    $(this).siblings('.custom-file-label').addClass('selected').html(fileName);
+  });
+
+  // Enviar formulario
+  form.addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    if (!validatePrices()) {
+      return;
+    }
+
+    const formData = new FormData(form);
+
+    // Ocultar alertas
+    document.getElementById('successAlert').classList.add('d-none');
+    document.getElementById('errorAlert').classList.add('d-none');
+
+    // Mostrar loading
+    const submitBtn = form.querySelector('button[type="submit"]');
+    const originalText = submitBtn.innerHTML;
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando...';
+
+    try {
+      const response = await fetch('api/guardar_producto.php', {
+        method: 'POST',
+        body: formData
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        document.getElementById('successAlert').classList.remove('d-none');
+        document.getElementById('successAlert').innerHTML = '<i class="icon fas fa-check"></i> Producto registrado correctamente. Código: ' + result.codigo;
+        form.reset();
+        previewImagen.style.display = 'none';
+        $('.custom-file-label').html('Seleccionar imagen');
+        // Regenerar código automático para el siguiente producto
+        generarCodigoAutomatico();
+      } else {
+        document.getElementById('errorMessage').textContent = result.message || 'Error al guardar el producto';
+        document.getElementById('errorAlert').classList.remove('d-none');
+      }
+      
+    } catch (error) {
+      console.error('Error:', error);
+      document.getElementById('errorMessage').textContent = 'Error de conexión. Por favor, intenta nuevamente.';
+      document.getElementById('errorAlert').classList.remove('d-none');
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = originalText;
+    }
+  });
+});
+</script>
+</body>
+</html>
+

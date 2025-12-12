@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>IONICA - Registro de Clientes</title>
+
+  <!-- Google Font: Source Sans 3 -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Sans+3:300,400,400i,700&display=fallback">
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- AdminLTE -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+  <!-- Leaflet CSS para el mapa -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    #map {
+      height: 300px;
+      width: 100%;
+      border-radius: 5px;
+      margin-top: 10px;
+    }
+    .gps-status {
+      padding: 8px;
+      border-radius: 5px;
+      margin-top: 10px;
+      display: none;
+    }
+    .gps-success {
+      background-color: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+    }
+    .gps-error {
+      background-color: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+    }
+  </style>
+</head>
+<body class="hold-transition sidebar-mini layout-fixed">
+<div class="wrapper">
+
+  <!-- Navbar -->
+  <nav class="main-header navbar navbar-expand navbar-white navbar-light">
+    <ul class="navbar-nav">
+      <li class="nav-item">
+        <a class="nav-link" data-widget="pushmenu" href="#" role="button"><i class="fas fa-bars"></i></a>
+      </li>
+    </ul>
+    <ul class="navbar-nav ml-auto">
+      <li class="nav-item">
+        <a class="nav-link" href="dashboard.html">
+          <i class="fas fa-arrow-left"></i> Volver
+        </a>
+      </li>
+    </ul>
+  </nav>
+
+  <!-- Main Sidebar -->
+  <aside class="main-sidebar sidebar-dark-primary elevation-4">
+    <a href="dashboard.html" class="brand-link">
+      <span class="brand-text font-weight-light"><b>IONICA</b></span>
+    </a>
+    <div class="sidebar">
+      <nav class="mt-2">
+        <ul class="nav nav-pills nav-sidebar flex-column">
+          <li class="nav-item">
+            <a href="dashboard.html" class="nav-link">
+              <i class="nav-icon fas fa-tachometer-alt"></i>
+              <p>Dashboard</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="ventas.html" class="nav-link">
+              <i class="nav-icon fas fa-shopping-cart"></i>
+              <p>Ventas</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="ventas-pendientes.html" class="nav-link">
+              <i class="nav-icon fas fa-clock"></i>
+              <p>Ventas Pendientes</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="productos.html" class="nav-link">
+              <i class="nav-icon fas fa-box"></i>
+              <p>Productos</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="almacenes.html" class="nav-link">
+              <i class="nav-icon fas fa-warehouse"></i>
+              <p>Almacenes</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="clientes.html" class="nav-link active">
+              <i class="nav-icon fas fa-users"></i>
+              <p>Clientes</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="reportes.html" class="nav-link">
+              <i class="nav-icon fas fa-chart-bar"></i>
+              <p>Reportes</p>
+            </a>
+          </li>
+        </ul>
+      </nav>
+    </div>
+  </aside>
+
+  <!-- Content Wrapper -->
+  <div class="content-wrapper">
+    <div class="content-header">
+      <div class="container-fluid">
+        <div class="row mb-2">
+          <div class="col-sm-6">
+            <h1 class="m-0">Registro de Clientes</h1>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <section class="content">
+      <div class="container-fluid">
+        <div class="row">
+          <div class="col-12">
+            <div class="card card-primary">
+              <div class="card-header">
+                <h3 class="card-title"><i class="fas fa-user-plus"></i> Nuevo Cliente</h3>
+              </div>
+              <form id="formCliente">
+                <div class="card-body">
+                  <div class="alert alert-success d-none" id="successAlert">
+                    <i class="icon fas fa-check"></i> Cliente registrado correctamente.
+                  </div>
+                  <div class="alert alert-danger d-none" id="errorAlert">
+                    <i class="icon fas fa-ban"></i> <span id="errorMessage"></span>
+                  </div>
+
+                  <!-- Información Personal -->
+                  <div class="row">
+                    <div class="col-md-6">
+                      <div class="form-group">
+                        <label for="nombre_completo">Nombre Completo <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="nombre_completo" name="nombre_completo" required>
+                      </div>
+                    </div>
+                    <div class="col-md-6">
+                      <div class="form-group">
+                        <label for="numero_ci">Número de CI <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="numero_ci" name="numero_ci" required>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="row">
+                    <div class="col-md-6">
+                      <div class="form-group">
+                        <label for="telefono_principal">Teléfono Principal</label>
+                        <input type="tel" class="form-control" id="telefono_principal" name="telefono_principal">
+                      </div>
+                    </div>
+                    <div class="col-md-6">
+                      <div class="form-group">
+                        <label for="correo">Correo Electrónico</label>
+                        <input type="email" class="form-control" id="correo" name="correo">
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Información de Ubicación -->
+                  <div class="row">
+                    <div class="col-md-6">
+                      <div class="form-group">
+                        <label for="ciudad">Ciudad</label>
+                        <input type="text" class="form-control" id="ciudad" name="ciudad">
+                      </div>
+                    </div>
+                    <div class="col-md-6">
+                      <div class="form-group">
+                        <label for="direccion">Dirección</label>
+                        <input type="text" class="form-control" id="direccion" name="direccion">
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- GPS -->
+                  <div class="form-group">
+                    <label>Ubicación GPS</label>
+                    <div class="d-flex gap-2 mb-2">
+                      <button type="button" class="btn btn-info btn-sm" id="btnObtenerGPS">
+                        <i class="fas fa-map-marker-alt"></i> Obtener GPS Automático
+                      </button>
+                      <button type="button" class="btn btn-secondary btn-sm" id="btnSeleccionarMapa">
+                        <i class="fas fa-map"></i> Seleccionar en Mapa
+                      </button>
+                    </div>
+                    <div class="gps-status" id="gpsStatus"></div>
+                    <div id="map" style="display: none;"></div>
+                    <input type="hidden" id="latitud" name="latitud">
+                    <input type="hidden" id="longitud" name="longitud">
+                  </div>
+
+                  <!-- Información Comercial -->
+                  <div class="row">
+                    <div class="col-md-4">
+                      <div class="form-group">
+                        <label for="tipo_cliente">Tipo de Cliente <span class="text-danger">*</span></label>
+                        <select class="form-control" id="tipo_cliente" name="tipo_cliente" required>
+                          <option value="normal">Normal</option>
+                          <option value="mayorista">Mayorista</option>
+                          <option value="distribuidor">Distribuidor</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div class="col-md-4">
+                      <div class="form-group">
+                        <label for="negocio_razon_social">Negocio o Razón Social</label>
+                        <input type="text" class="form-control" id="negocio_razon_social" name="negocio_razon_social">
+                      </div>
+                    </div>
+                    <div class="col-md-4">
+                      <div class="form-group">
+                        <label for="nit">NIT</label>
+                        <input type="text" class="form-control" id="nit" name="nit">
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Información Adicional -->
+                  <div class="row">
+                    <div class="col-md-6">
+                      <div class="form-group">
+                        <label for="vendedor_asignado">Vendedor Asignado</label>
+                        <select class="form-control" id="vendedor_asignado" name="vendedor_asignado">
+                          <option value="">Seleccionar vendedor</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div class="col-md-6">
+                      <div class="form-group">
+                        <label for="estado">Estado del Cliente <span class="text-danger">*</span></label>
+                        <select class="form-control" id="estado" name="estado" required>
+                          <option value="activo">Activo</option>
+                          <option value="inactivo">Inactivo</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="form-group">
+                    <label for="notas">Notas del Cliente</label>
+                    <textarea class="form-control" id="notas" name="notas" rows="3" placeholder="Notas adicionales sobre el cliente..."></textarea>
+                  </div>
+                </div>
+                <div class="card-footer">
+                  <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save"></i> Guardar Cliente
+                  </button>
+                  <button type="reset" class="btn btn-secondary">
+                    <i class="fas fa-redo"></i> Limpiar Formulario
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <footer class="main-footer">
+    <strong>Copyright &copy; 2025 <a href="#">IONICA</a>.</strong>
+  </footer>
+</div>
+
+<!-- jQuery -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<!-- Bootstrap 4 -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+<!-- AdminLTE App -->
+<script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+<!-- Leaflet JS para el mapa -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+let map = null;
+let marker = null;
+
+document.addEventListener('DOMContentLoaded', function() {
+  // Cargar vendedores
+  loadVendedores();
+
+  // Botón obtener GPS automático
+  document.getElementById('btnObtenerGPS').addEventListener('click', obtenerGPS);
+
+  // Botón seleccionar en mapa
+  document.getElementById('btnSeleccionarMapa').addEventListener('click', mostrarMapa);
+
+  // Enviar formulario
+  document.getElementById('formCliente').addEventListener('submit', guardarCliente);
+});
+
+function obtenerGPS() {
+  const btn = document.getElementById('btnObtenerGPS');
+  const status = document.getElementById('gpsStatus');
+  
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Obteniendo ubicación...';
+  status.className = 'gps-status';
+  status.style.display = 'none';
+
+  if (!navigator.geolocation) {
+    mostrarErrorGPS('Tu navegador no soporta geolocalización');
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-map-marker-alt"></i> Obtener GPS Automático';
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    function(position) {
+      const lat = position.coords.latitude;
+      const lng = position.coords.longitude;
+      
+      document.getElementById('latitud').value = lat;
+      document.getElementById('longitud').value = lng;
+      
+      status.className = 'gps-status gps-success';
+      status.innerHTML = `<i class="fas fa-check-circle"></i> Ubicación obtenida: ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+      status.style.display = 'block';
+      
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-map-marker-alt"></i> Obtener GPS Automático';
+    },
+    function(error) {
+      let mensaje = 'Error al obtener la ubicación';
+      switch(error.code) {
+        case error.PERMISSION_DENIED:
+          mensaje = 'Permiso de ubicación denegado';
+          break;
+        case error.POSITION_UNAVAILABLE:
+          mensaje = 'Información de ubicación no disponible';
+          break;
+        case error.TIMEOUT:
+          mensaje = 'Tiempo de espera agotado';
+          break;
+      }
+      mostrarErrorGPS(mensaje);
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-map-marker-alt"></i> Obtener GPS Automático';
+    },
+    { timeout: 10000, enableHighAccuracy: true }
+  );
+}
+
+function mostrarErrorGPS(mensaje) {
+  const status = document.getElementById('gpsStatus');
+  status.className = 'gps-status gps-error';
+  status.innerHTML = `<i class="fas fa-exclamation-circle"></i> ${mensaje}`;
+  status.style.display = 'block';
+}
+
+function mostrarMapa() {
+  const mapDiv = document.getElementById('map');
+  const btn = document.getElementById('btnSeleccionarMapa');
+  
+  if (mapDiv.style.display === 'none') {
+    mapDiv.style.display = 'block';
+    
+    if (!map) {
+      // Inicializar mapa (centrado en Bolivia por defecto)
+      map = L.map('map').setView([-16.5000, -68.1500], 13);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+      }).addTo(map);
+
+      // Si ya hay coordenadas, centrar el mapa ahí
+      const lat = document.getElementById('latitud').value;
+      const lng = document.getElementById('longitud').value;
+      if (lat && lng) {
+        map.setView([lat, lng], 13);
+        if (marker) {
+          map.removeLayer(marker);
+        }
+        marker = L.marker([lat, lng]).addTo(map);
+      }
+
+      // Agregar marcador al hacer clic
+      map.on('click', function(e) {
+        const lat = e.latlng.lat;
+        const lng = e.latlng.lng;
+        
+        document.getElementById('latitud').value = lat;
+        document.getElementById('longitud').value = lng;
+        
+        if (marker) {
+          map.removeLayer(marker);
+        }
+        marker = L.marker([lat, lng]).addTo(map);
+        
+        const status = document.getElementById('gpsStatus');
+        status.className = 'gps-status gps-success';
+        status.innerHTML = `<i class="fas fa-check-circle"></i> Ubicación seleccionada: ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+        status.style.display = 'block';
+      });
+    }
+    
+    btn.innerHTML = '<i class="fas fa-eye-slash"></i> Ocultar Mapa';
+  } else {
+    mapDiv.style.display = 'none';
+    btn.innerHTML = '<i class="fas fa-map"></i> Seleccionar en Mapa';
+  }
+}
+
+async function loadVendedores() {
+  try {
+    // Por ahora, cargar desde usuarios (en producción, crear tabla de vendedores)
+    const response = await fetch('api/get_vendedores.php');
+    const data = await response.json();
+    
+    const select = document.getElementById('vendedor_asignado');
+    if (data.success && data.vendedores) {
+      data.vendedores.forEach(vendedor => {
+        const option = document.createElement('option');
+        option.value = vendedor.id;
+        option.textContent = vendedor.nombre || vendedor.username;
+        select.appendChild(option);
+      });
+    }
+  } catch (error) {
+    console.error('Error al cargar vendedores:', error);
+  }
+}
+
+async function guardarCliente(e) {
+  e.preventDefault();
+  
+  const form = e.target;
+  const formData = new FormData(form);
+  const data = Object.fromEntries(formData);
+  
+  // Mostrar loading
+  const submitBtn = form.querySelector('button[type="submit"]');
+  const originalText = submitBtn.innerHTML;
+  submitBtn.disabled = true;
+  submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando...';
+  
+  // Ocultar alertas
+  document.getElementById('successAlert').classList.add('d-none');
+  document.getElementById('errorAlert').classList.add('d-none');
+  
+  try {
+    const response = await fetch('api/guardar_cliente.php', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data)
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      document.getElementById('successAlert').classList.remove('d-none');
+      form.reset();
+      document.getElementById('gpsStatus').style.display = 'none';
+      document.getElementById('map').style.display = 'none';
+      if (marker) {
+        map.removeLayer(marker);
+        marker = null;
+      }
+    } else {
+      document.getElementById('errorMessage').textContent = result.message || 'Error al guardar el cliente';
+      document.getElementById('errorAlert').classList.remove('d-none');
+    }
+  } catch (error) {
+    console.error('Error:', error);
+    document.getElementById('errorMessage').textContent = 'Error de conexión. Por favor, intenta nuevamente.';
+    document.getElementById('errorAlert').classList.remove('d-none');
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = originalText;
+  }
+}
+</script>
+</body>
+</html>
+

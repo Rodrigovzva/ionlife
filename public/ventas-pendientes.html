@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ventas Pendientes - Sistema de Ventas</title>
+
+  <!-- Google Font: Source Sans 3 -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Sans+3:300,400,400i,700&display=fallback">
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- AdminLTE -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    #map {
+      height: 500px;
+      width: 100%;
+      border-radius: 5px;
+      margin-top: 10px;
+      z-index: 0;
+    }
+    .venta-marker {
+      cursor: pointer;
+    }
+    .info-window {
+      padding: 5px;
+    }
+    .info-window strong {
+      display: block;
+      margin-bottom: 5px;
+    }
+  </style>
+</head>
+<body class="hold-transition sidebar-mini layout-fixed">
+<div class="wrapper">
+
+  <!-- Navbar -->
+  <nav class="main-header navbar navbar-expand navbar-white navbar-light">
+    <ul class="navbar-nav">
+      <li class="nav-item">
+        <a class="nav-link" data-widget="pushmenu" href="#" role="button"><i class="fas fa-bars"></i></a>
+      </li>
+    </ul>
+    <ul class="navbar-nav ml-auto">
+      <li class="nav-item">
+        <a class="nav-link" href="dashboard.html">
+          <i class="fas fa-arrow-left"></i> Volver
+        </a>
+      </li>
+    </ul>
+  </nav>
+
+  <!-- Main Sidebar -->
+  <aside class="main-sidebar sidebar-dark-primary elevation-4">
+    <a href="dashboard.html" class="brand-link">
+      <span class="brand-text font-weight-light"><b>IONICA</b></span>
+    </a>
+    <div class="sidebar">
+      <nav class="mt-2">
+        <ul class="nav nav-pills nav-sidebar flex-column">
+          <li class="nav-item">
+            <a href="dashboard.html" class="nav-link">
+              <i class="nav-icon fas fa-tachometer-alt"></i>
+              <p>Dashboard</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="ventas.html" class="nav-link">
+              <i class="nav-icon fas fa-shopping-cart"></i>
+              <p>Ventas</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="ventas-pendientes.html" class="nav-link active">
+              <i class="nav-icon fas fa-clock"></i>
+              <p>Ventas Pendientes</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="productos.html" class="nav-link">
+              <i class="nav-icon fas fa-box"></i>
+              <p>Productos</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="almacenes.html" class="nav-link">
+              <i class="nav-icon fas fa-warehouse"></i>
+              <p>Almacenes</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="clientes.html" class="nav-link">
+              <i class="nav-icon fas fa-users"></i>
+              <p>Clientes</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="registro-usuario.html" class="nav-link">
+              <i class="nav-icon fas fa-user-plus"></i>
+              <p>Registro Usuario</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="reportes.html" class="nav-link">
+              <i class="nav-icon fas fa-chart-bar"></i>
+              <p>Reportes</p>
+            </a>
+          </li>
+        </ul>
+      </nav>
+    </div>
+  </aside>
+
+  <!-- Content Wrapper -->
+  <div class="content-wrapper">
+    <div class="content-header">
+      <div class="container-fluid">
+        <div class="row mb-2">
+          <div class="col-sm-6">
+            <h1 class="m-0">Ventas Pendientes</h1>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <section class="content">
+      <div class="container-fluid">
+        <!-- Mapa -->
+        <div class="card card-primary">
+          <div class="card-header">
+            <h3 class="card-title"><i class="fas fa-map-marked-alt"></i> Mapa de Ventas Pendientes</h3>
+            <div class="card-tools">
+              <button type="button" class="btn btn-tool" data-card-widget="collapse">
+                <i class="fas fa-minus"></i>
+              </button>
+            </div>
+          </div>
+          <div class="card-body">
+            <div id="map"></div>
+          </div>
+        </div>
+
+        <!-- Lista de Ventas Pendientes -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title"><i class="fas fa-list"></i> Lista de Ventas Pendientes</h3>
+          </div>
+          <div class="card-body">
+            <div class="table-responsive">
+              <table class="table table-bordered table-striped table-hover" id="tablaPendientes">
+                <thead>
+                  <tr>
+                    <th>N° Venta</th>
+                    <th>Fecha</th>
+                    <th>Cliente</th>
+                    <th>Dirección</th>
+                    <th>Vendedor</th>
+                    <th>Total</th>
+                    <th>Método Pago</th>
+                    <th>Estado</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="tbodyPendientes">
+                  <tr>
+                    <td colspan="9" class="text-center">Cargando ventas pendientes...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Modal Cambiar Estado -->
+  <div class="modal fade" id="modalCambiarEstado" tabindex="-1" role="dialog">
+    <div class="modal-dialog" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h4 class="modal-title">Cambiar Estado de Venta</h4>
+          <button type="button" class="close" data-dismiss="modal">
+            <span>&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>Número de Venta:</label>
+            <input type="text" class="form-control" id="modal_numero_venta" readonly>
+          </div>
+          <div class="form-group">
+            <label>Cliente:</label>
+            <input type="text" class="form-control" id="modal_cliente" readonly>
+          </div>
+          <div class="form-group">
+            <label>Estado Actual:</label>
+            <input type="text" class="form-control" id="modal_estado_actual" readonly>
+          </div>
+          <div class="form-group">
+            <label>Nuevo Estado <span class="text-danger">*</span></label>
+            <select class="form-control" id="modal_nuevo_estado" required>
+              <option value="">Seleccionar...</option>
+              <option value="pendiente">Pendiente</option>
+              <option value="completada">Completada</option>
+              <option value="cancelada">Cancelada</option>
+            </select>
+          </div>
+          <input type="hidden" id="modal_venta_id">
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+          <button type="button" class="btn btn-primary" id="btnGuardarEstado">Guardar Cambio</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="main-footer">
+    <strong>Copyright &copy; 2025 <a href="#">Sistema de Ventas</a>.</strong>
+    Todos los derechos reservados.
+  </footer>
+</div>
+
+<!-- jQuery -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<!-- Bootstrap 4 -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+<!-- AdminLTE App -->
+<script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+let map = null;
+let markers = [];
+let ventasPendientes = [];
+
+document.addEventListener('DOMContentLoaded', function() {
+  checkSession();
+  inicializarMapa();
+  cargarVentasPendientes();
+  
+  document.getElementById('btnGuardarEstado').addEventListener('click', guardarCambioEstado);
+  
+  document.getElementById('logoutBtn')?.addEventListener('click', function(e) {
+    e.preventDefault();
+    logout();
+  });
+});
+
+function inicializarMapa() {
+  // Inicializar mapa centrado en Bolivia
+  map = L.map('map').setView([-16.5000, -68.1500], 6);
+  
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap contributors',
+    maxZoom: 19
+  }).addTo(map);
+}
+
+async function cargarVentasPendientes() {
+  try {
+    const response = await fetch('api/get_ventas_pendientes.php');
+    const data = await response.json();
+    
+    if (data.success) {
+      ventasPendientes = data.ventas || [];
+      actualizarMapa();
+      actualizarTabla();
+    } else {
+      document.getElementById('tbodyPendientes').innerHTML = 
+        '<tr><td colspan="9" class="text-center text-danger">Error al cargar ventas pendientes</td></tr>';
+    }
+  } catch (error) {
+    console.error('Error:', error);
+    document.getElementById('tbodyPendientes').innerHTML = 
+      '<tr><td colspan="9" class="text-center text-danger">Error de conexión</td></tr>';
+  }
+}
+
+function actualizarMapa() {
+  // Limpiar marcadores anteriores
+  markers.forEach(marker => map.removeLayer(marker));
+  markers = [];
+  
+  if (ventasPendientes.length === 0) {
+    return;
+  }
+  
+  const bounds = [];
+  
+  ventasPendientes.forEach((venta, index) => {
+    if (venta.latitud && venta.longitud) {
+      const lat = parseFloat(venta.latitud);
+      const lng = parseFloat(venta.longitud);
+      
+      // Crear marcador personalizado
+      const icono = L.divIcon({
+        className: 'venta-marker',
+        html: `<div style="background-color: #ffc107; color: #000; border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; font-weight: bold; border: 2px solid #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">${index + 1}</div>`,
+        iconSize: [30, 30],
+        iconAnchor: [15, 15]
+      });
+      
+      const marker = L.marker([lat, lng], { icon: icono }).addTo(map);
+      
+      // Popup con información de la venta
+      const popupContent = `
+        <div class="info-window">
+          <strong>Venta: ${venta.numero_venta}</strong>
+          <div><strong>Cliente:</strong> ${venta.cliente_nombre || 'N/A'}</div>
+          <div><strong>Fecha:</strong> ${new Date(venta.fecha_registro).toLocaleString('es-ES')}</div>
+          <div><strong>Total:</strong> Bs. ${parseFloat(venta.total).toFixed(2)}</div>
+          <div><strong>Dirección:</strong> ${venta.direccion || 'N/A'}</div>
+          <button class="btn btn-sm btn-primary mt-2" onclick="abrirModalCambiarEstado(${venta.id})">
+            Cambiar Estado
+          </button>
+        </div>
+      `;
+      
+      marker.bindPopup(popupContent);
+      markers.push(marker);
+      bounds.push([lat, lng]);
+    }
+  });
+  
+  // Ajustar vista del mapa para mostrar todos los marcadores
+  if (bounds.length > 0) {
+    map.fitBounds(bounds, { padding: [50, 50] });
+  }
+}
+
+function actualizarTabla() {
+  const tbody = document.getElementById('tbodyPendientes');
+  
+  if (ventasPendientes.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">No hay ventas pendientes</td></tr>';
+    return;
+  }
+  
+  tbody.innerHTML = '';
+  
+  ventasPendientes.forEach((venta, index) => {
+    const fecha = new Date(venta.fecha_registro).toLocaleString('es-ES');
+    const estadoBadge = {
+      'completada': '<span class="badge badge-success">Completada</span>',
+      'pendiente': '<span class="badge badge-warning">Pendiente</span>',
+      'cancelada': '<span class="badge badge-danger">Cancelada</span>'
+    }[venta.estado_venta] || venta.estado_venta;
+    
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td>${venta.numero_venta}</td>
+      <td>${fecha}</td>
+      <td>${venta.cliente_nombre || 'N/A'}</td>
+      <td>${venta.direccion || 'N/A'}</td>
+      <td>${venta.vendedor_nombre || 'N/A'}</td>
+      <td><strong>Bs. ${parseFloat(venta.total).toFixed(2)}</strong></td>
+      <td>${venta.metodo_pago.replace('_', ' ').toUpperCase()}</td>
+      <td>${estadoBadge}</td>
+      <td>
+        <button class="btn btn-sm btn-info" onclick="verDetalleVenta(${venta.id})" title="Ver Detalle">
+          <i class="fas fa-eye"></i>
+        </button>
+        <button class="btn btn-sm btn-warning" onclick="abrirModalCambiarEstado(${venta.id})" title="Cambiar Estado">
+          <i class="fas fa-edit"></i>
+        </button>
+      </td>
+    `;
+    tbody.appendChild(row);
+  });
+}
+
+function abrirModalCambiarEstado(ventaId) {
+  const venta = ventasPendientes.find(v => v.id == ventaId);
+  if (!venta) return;
+  
+  document.getElementById('modal_venta_id').value = venta.id;
+  document.getElementById('modal_numero_venta').value = venta.numero_venta;
+  document.getElementById('modal_cliente').value = venta.cliente_nombre || 'N/A';
+  document.getElementById('modal_estado_actual').value = venta.estado_venta;
+  document.getElementById('modal_nuevo_estado').value = venta.estado_venta;
+  
+  $('#modalCambiarEstado').modal('show');
+}
+
+async function guardarCambioEstado() {
+  const ventaId = document.getElementById('modal_venta_id').value;
+  const nuevoEstado = document.getElementById('modal_nuevo_estado').value;
+  
+  if (!nuevoEstado) {
+    alert('Por favor selecciona un nuevo estado');
+    return;
+  }
+  
+  try {
+    const response = await fetch('api/cambiar_estado_venta.php', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        venta_id: ventaId,
+        nuevo_estado: nuevoEstado
+      })
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      $('#modalCambiarEstado').modal('hide');
+      alert('Estado de venta actualizado correctamente');
+      cargarVentasPendientes(); // Recargar la lista
+    } else {
+      alert('Error al actualizar el estado: ' + (result.message || 'Error desconocido'));
+    }
+  } catch (error) {
+    console.error('Error:', error);
+    alert('Error de conexión al actualizar el estado');
+  }
+}
+
+function verDetalleVenta(ventaId) {
+  const venta = ventasPendientes.find(v => v.id == ventaId);
+  if (!venta) return;
+  
+  let productos = [];
+  try {
+    productos = JSON.parse(venta.productos_json || '[]');
+  } catch (e) {
+    productos = [];
+  }
+  
+  let html = `
+    <div class="card">
+      <div class="card-header">
+        <h4>Detalle de Venta: ${venta.numero_venta}</h4>
+      </div>
+      <div class="card-body">
+        <div class="row">
+          <div class="col-md-6">
+            <p><strong>Cliente:</strong> ${venta.cliente_nombre || 'N/A'}</p>
+            <p><strong>Fecha:</strong> ${new Date(venta.fecha_registro).toLocaleString('es-ES')}</p>
+            <p><strong>Vendedor:</strong> ${venta.vendedor_nombre || 'N/A'}</p>
+          </div>
+          <div class="col-md-6">
+            <p><strong>Estado:</strong> ${venta.estado_venta}</p>
+            <p><strong>Método de Pago:</strong> ${venta.metodo_pago.replace('_', ' ')}</p>
+            <p><strong>Dirección:</strong> ${venta.direccion || 'N/A'}</p>
+          </div>
+        </div>
+        <hr>
+        <h5>Productos</h5>
+        <table class="table table-bordered">
+          <thead>
+            <tr>
+              <th>Producto</th>
+              <th>Cantidad</th>
+              <th>Precio Unit.</th>
+              <th>Subtotal</th>
+            </tr>
+          </thead>
+          <tbody>
+  `;
+  
+  productos.forEach(p => {
+    html += `
+      <tr>
+        <td>${p.nombre || 'N/A'}</td>
+        <td>${p.cantidad}</td>
+        <td>Bs. ${parseFloat(p.precio_unitario).toFixed(2)}</td>
+        <td>Bs. ${parseFloat(p.subtotal).toFixed(2)}</td>
+      </tr>
+    `;
+  });
+  
+  html += `
+          </tbody>
+          <tfoot>
+            <tr>
+              <th colspan="3">Total:</th>
+              <th>Bs. ${parseFloat(venta.total).toFixed(2)}</th>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  `;
+  
+  // Crear modal temporal para mostrar el detalle
+  const modal = document.createElement('div');
+  modal.className = 'modal fade';
+  modal.id = 'modalDetalleVenta';
+  modal.innerHTML = `
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h4 class="modal-title">Detalle de Venta</h4>
+          <button type="button" class="close" data-dismiss="modal">
+            <span>&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          ${html}
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+        </div>
+      </div>
+    </div>
+  `;
+  
+  document.body.appendChild(modal);
+  $(modal).modal('show');
+  $(modal).on('hidden.bs.modal', function() {
+    document.body.removeChild(modal);
+  });
+}
+
+async function checkSession() {
+  try {
+    const response = await fetch('api/check_session.php');
+    const data = await response.json();
+    
+    if (!data.success || !data.logged_in) {
+      window.location.href = 'index.html';
+    }
+  } catch (error) {
+    console.error('Error al verificar sesión:', error);
+    window.location.href = 'index.html';
+  }
+}
+
+async function logout() {
+  if (confirm('¿Estás seguro de que deseas salir?')) {
+    try {
+      await fetch('api/logout.php', { method: 'POST' });
+    } catch (error) {
+      console.error('Error al cerrar sesión:', error);
+    }
+    sessionStorage.clear();
+    window.location.href = 'index.html';
+  }
+}
+</script>
+</body>
+</html>
+

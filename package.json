@@ -1,0 +1,20 @@
+{
+  "name": "sistema-login-ventas",
+  "version": "1.0.0",
+  "description": "Sistema de login para ventas con AdminLTE",
+  "main": "index.js",
+  "scripts": {
+    "start": "php -S localhost:4000 -t public",
+    "dev": "php -S localhost:4000 -t public",
+    "serve": "npx serve public -p 4000"
+  },
+  "keywords": [
+    "adminlte",
+    "login",
+    "ventas",
+    "php"
+  ],
+  "author": "",
+  "license": "MIT"
+}
+

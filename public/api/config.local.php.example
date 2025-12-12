@@ -1,0 +1,12 @@
+<?php
+/**
+ * Archivo de configuración local
+ * Copia este archivo a config.local.php y ajusta las credenciales
+ */
+
+// Descomenta y ajusta estas líneas si necesitas sobrescribir la configuración
+// define('DB_HOST_LOCAL', '10.0.0.3');
+// define('DB_NAME_LOCAL', 'ionica');
+// define('DB_USER_LOCAL', 'root');
+// define('DB_PASS_LOCAL', 'tu_contraseña_aqui');
+

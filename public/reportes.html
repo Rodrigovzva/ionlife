@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reportes - Sistema de Ventas</title>
+
+  <!-- Google Font: Source Sans 3 -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Sans+3:300,400,400i,700&display=fallback">
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- AdminLTE -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+  <!-- DataTables -->
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap4.min.css">
+</head>
+<body class="hold-transition sidebar-mini layout-fixed">
+<div class="wrapper">
+
+  <!-- Navbar -->
+  <nav class="main-header navbar navbar-expand navbar-white navbar-light">
+    <!-- Left navbar links -->
+    <ul class="navbar-nav">
+      <li class="nav-item">
+        <a class="nav-link" data-widget="pushmenu" href="#" role="button"><i class="fas fa-bars"></i></a>
+      </li>
+    </ul>
+
+    <!-- Right navbar links -->
+    <ul class="navbar-nav ml-auto">
+      <li class="nav-item">
+        <a class="nav-link" href="#" id="logoutBtn" role="button">
+          <i class="fas fa-sign-out-alt"></i> Salir
+        </a>
+      </li>
+    </ul>
+  </nav>
+  <!-- /.navbar -->
+
+  <!-- Main Sidebar Container -->
+  <aside class="main-sidebar sidebar-dark-primary elevation-4">
+    <!-- Brand Logo -->
+    <a href="dashboard.html" class="brand-link">
+      <span class="brand-text font-weight-light"><b>Sistema</b> Ventas</span>
+    </a>
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <!-- Sidebar user panel -->
+      <div class="user-panel mt-3 pb-3 mb-3 d-flex">
+        <div class="info">
+          <a href="#" class="d-block" id="userName">Usuario</a>
+        </div>
+      </div>
+
+      <!-- Sidebar Menu -->
+      <nav class="mt-2">
+        <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
+          <li class="nav-item">
+            <a href="dashboard.html" class="nav-link">
+              <i class="nav-icon fas fa-tachometer-alt"></i>
+              <p>Dashboard</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="ventas.html" class="nav-link">
+              <i class="nav-icon fas fa-shopping-cart"></i>
+              <p>Ventas</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="ventas-pendientes.html" class="nav-link">
+              <i class="nav-icon fas fa-clock"></i>
+              <p>Ventas Pendientes</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="productos.html" class="nav-link">
+              <i class="nav-icon fas fa-box"></i>
+              <p>Productos</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="almacenes.html" class="nav-link">
+              <i class="nav-icon fas fa-warehouse"></i>
+              <p>Almacenes</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="clientes.html" class="nav-link">
+              <i class="nav-icon fas fa-users"></i>
+              <p>Clientes</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="registro-usuario.html" class="nav-link">
+              <i class="nav-icon fas fa-user-plus"></i>
+              <p>Registro Usuario</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="reportes.html" class="nav-link active">
+              <i class="nav-icon fas fa-chart-bar"></i>
+              <p>Reportes</p>
+            </a>
+          </li>
+        </ul>
+      </nav>
+      <!-- /.sidebar-menu -->
+    </div>
+    <!-- /.sidebar -->
+  </aside>
+
+  <!-- Content Wrapper -->
+  <div class="content-wrapper">
+    <div class="content-header">
+      <div class="container-fluid">
+        <div class="row mb-2">
+          <div class="col-sm-6">
+            <h1 class="m-0">Reportes</h1>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <section class="content">
+      <div class="container-fluid">
+        <!-- Filtros -->
+        <div class="card card-primary">
+          <div class="card-header">
+            <h3 class="card-title"><i class="fas fa-filter"></i> Filtros de Búsqueda</h3>
+            <div class="card-tools">
+              <button type="button" class="btn btn-tool" data-card-widget="collapse">
+                <i class="fas fa-minus"></i>
+              </button>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="row">
+              <div class="col-md-3">
+                <div class="form-group">
+                  <label>Fecha Desde</label>
+                  <input type="date" class="form-control" id="fecha_desde">
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="form-group">
+                  <label>Fecha Hasta</label>
+                  <input type="date" class="form-control" id="fecha_hasta">
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="form-group">
+                  <label>Cliente</label>
+                  <select class="form-control" id="filtro_cliente">
+                    <option value="">Todos los clientes</option>
+                  </select>
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="form-group">
+                  <label>Vendedor</label>
+                  <select class="form-control" id="filtro_vendedor">
+                    <option value="">Todos los vendedores</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div class="row">
+              <div class="col-md-3">
+                <div class="form-group">
+                  <label>Estado</label>
+                  <select class="form-control" id="filtro_estado">
+                    <option value="">Todos</option>
+                    <option value="completada">Completada</option>
+                    <option value="pendiente">Pendiente</option>
+                    <option value="cancelada">Cancelada</option>
+                  </select>
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="form-group">
+                  <label>Tipo de Venta</label>
+                  <select class="form-control" id="filtro_tipo">
+                    <option value="">Todos</option>
+                    <option value="normal">Normal</option>
+                    <option value="mayorista">Mayorista</option>
+                    <option value="distribuidor">Distribuidor</option>
+                  </select>
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="form-group">
+                  <label>Número de Venta</label>
+                  <input type="text" class="form-control" id="filtro_numero" placeholder="Ej: VENT-000001">
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="form-group">
+                  <label>&nbsp;</label>
+                  <div>
+                    <button type="button" class="btn btn-primary btn-block" id="btnBuscar">
+                      <i class="fas fa-search"></i> Buscar
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Resumen -->
+        <div class="row">
+          <div class="col-lg-3 col-6">
+            <div class="small-box bg-info">
+              <div class="inner">
+                <h3 id="totalVentas">0</h3>
+                <p>Total Ventas</p>
+              </div>
+              <div class="icon">
+                <i class="fas fa-shopping-cart"></i>
+              </div>
+            </div>
+          </div>
+          <div class="col-lg-3 col-6">
+            <div class="small-box bg-success">
+              <div class="inner">
+                <h3 id="totalMonto">Bs. 0.00</h3>
+                <p>Monto Total</p>
+              </div>
+              <div class="icon">
+                <i class="fas fa-money-bill-wave"></i>
+              </div>
+            </div>
+          </div>
+          <div class="col-lg-3 col-6">
+            <div class="small-box bg-warning">
+              <div class="inner">
+                <h3 id="promedioVenta">Bs. 0.00</h3>
+                <p>Promedio por Venta</p>
+              </div>
+              <div class="icon">
+                <i class="fas fa-chart-line"></i>
+              </div>
+            </div>
+          </div>
+          <div class="col-lg-3 col-6">
+            <div class="small-box bg-danger">
+              <div class="inner">
+                <h3 id="totalDescuentos">Bs. 0.00</h3>
+                <p>Total Descuentos</p>
+              </div>
+              <div class="icon">
+                <i class="fas fa-percent"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tabla de Ventas -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title"><i class="fas fa-list"></i> Reporte de Ventas</h3>
+            <div class="card-tools">
+              <button type="button" class="btn btn-sm btn-success" id="btnExportar">
+                <i class="fas fa-file-excel"></i> Exportar
+              </button>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="table-responsive">
+              <table id="tablaVentas" class="table table-bordered table-striped table-hover">
+                <thead>
+                  <tr>
+                    <th>N° Venta</th>
+                    <th>Fecha</th>
+                    <th>Cliente</th>
+                    <th>Vendedor</th>
+                    <th>Tipo</th>
+                    <th>Estado</th>
+                    <th>Subtotal</th>
+                    <th>Descuento</th>
+                    <th>Total</th>
+                    <th>Método Pago</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Modal Detalle Venta -->
+  <div class="modal fade" id="modalDetalle" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-lg" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h4 class="modal-title">Detalle de Venta</h4>
+          <button type="button" class="close" data-dismiss="modal">
+            <span>&times;</span>
+          </button>
+        </div>
+        <div class="modal-body" id="detalleVenta">
+          <!-- Contenido del detalle -->
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="main-footer">
+    <strong>Copyright &copy; 2025 <a href="#">Sistema de Ventas</a>.</strong>
+    Todos los derechos reservados.
+  </footer>
+</div>
+
+<!-- jQuery -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<!-- Bootstrap 4 -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+<!-- AdminLTE App -->
+<script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+<!-- DataTables -->
+<script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap4.min.js"></script>
+
+<script>
+let tablaVentas;
+let ventasData = [];
+
+document.addEventListener('DOMContentLoaded', function() {
+  checkSession();
+  inicializarFechas();
+  cargarClientes();
+  cargarVendedores();
+  inicializarTabla();
+  
+  document.getElementById('btnBuscar').addEventListener('click', buscarVentas);
+  document.getElementById('btnExportar').addEventListener('click', exportarVentas);
+  
+  document.getElementById('logoutBtn').addEventListener('click', function(e) {
+    e.preventDefault();
+    logout();
+  });
+  
+  // Buscar al cargar
+  buscarVentas();
+});
+
+function inicializarFechas() {
+  const hoy = new Date();
+  const primerDiaMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+  
+  document.getElementById('fecha_desde').value = primerDiaMes.toISOString().split('T')[0];
+  document.getElementById('fecha_hasta').value = hoy.toISOString().split('T')[0];
+}
+
+async function cargarClientes() {
+  try {
+    const response = await fetch('api/get_clientes.php');
+    const data = await response.json();
+    if (data.success && data.clientes) {
+      const select = document.getElementById('filtro_cliente');
+      data.clientes.forEach(cliente => {
+        const option = document.createElement('option');
+        option.value = cliente.id;
+        option.textContent = cliente.nombre_completo;
+        select.appendChild(option);
+      });
+    }
+  } catch (error) {
+    console.error('Error al cargar clientes:', error);
+  }
+}
+
+async function cargarVendedores() {
+  try {
+    const response = await fetch('api/get_vendedores.php');
+    const data = await response.json();
+    if (data.success && data.vendedores) {
+      const select = document.getElementById('filtro_vendedor');
+      data.vendedores.forEach(vendedor => {
+        const option = document.createElement('option');
+        option.value = vendedor.id;
+        option.textContent = vendedor.nombre || vendedor.username;
+        select.appendChild(option);
+      });
+    }
+  } catch (error) {
+    console.error('Error al cargar vendedores:', error);
+  }
+}
+
+function inicializarTabla() {
+  tablaVentas = $('#tablaVentas').DataTable({
+    language: {
+      url: 'https://cdn.datatables.net/plug-ins/1.13.7/i18n/es-ES.json'
+    },
+    order: [[1, 'desc']],
+    pageLength: 25,
+    responsive: true,
+    columnDefs: [
+      { orderable: false, targets: [10] }
+    ]
+  });
+}
+
+async function buscarVentas() {
+  const filtros = {
+    fecha_desde: document.getElementById('fecha_desde').value,
+    fecha_hasta: document.getElementById('fecha_hasta').value,
+    cliente_id: document.getElementById('filtro_cliente').value,
+    vendedor_id: document.getElementById('filtro_vendedor').value,
+    estado: document.getElementById('filtro_estado').value,
+    tipo_venta: document.getElementById('filtro_tipo').value,
+    numero_venta: document.getElementById('filtro_numero').value
+  };
+  
+  try {
+    const params = new URLSearchParams();
+    Object.keys(filtros).forEach(key => {
+      if (filtros[key]) {
+        params.append(key, filtros[key]);
+      }
+    });
+    
+    const response = await fetch('api/get_ventas.php?' + params.toString());
+    const data = await response.json();
+    
+    if (data.success) {
+      ventasData = data.ventas || [];
+      actualizarTabla();
+      actualizarResumen();
+    } else {
+      alert('Error al cargar ventas: ' + (data.message || 'Error desconocido'));
+    }
+  } catch (error) {
+    console.error('Error:', error);
+    alert('Error de conexión al buscar ventas');
+  }
+}
+
+function actualizarTabla() {
+  tablaVentas.clear();
+  
+  ventasData.forEach(venta => {
+    const fecha = new Date(venta.fecha_registro).toLocaleString('es-ES');
+    const estadoBadge = {
+      'completada': '<span class="badge badge-success">Completada</span>',
+      'pendiente': '<span class="badge badge-warning">Pendiente</span>',
+      'cancelada': '<span class="badge badge-danger">Cancelada</span>'
+    }[venta.estado_venta] || venta.estado_venta;
+    
+    const tipoBadge = {
+      'normal': '<span class="badge badge-info">Normal</span>',
+      'mayorista': '<span class="badge badge-primary">Mayorista</span>',
+      'distribuidor': '<span class="badge badge-secondary">Distribuidor</span>'
+    }[venta.tipo_venta] || venta.tipo_venta;
+    
+    tablaVentas.row.add([
+      venta.numero_venta,
+      fecha,
+      venta.cliente_nombre || 'N/A',
+      venta.vendedor_nombre || 'N/A',
+      tipoBadge,
+      estadoBadge,
+      'Bs. ' + parseFloat(venta.subtotal).toFixed(2),
+      'Bs. ' + parseFloat(venta.descuento_monto || 0).toFixed(2),
+      '<strong>Bs. ' + parseFloat(venta.total).toFixed(2) + '</strong>',
+      venta.metodo_pago.replace('_', ' ').toUpperCase(),
+      '<button class="btn btn-sm btn-info" onclick="verDetalle(' + venta.id + ')"><i class="fas fa-eye"></i></button>'
+    ]);
+  });
+  
+  tablaVentas.draw();
+}
+
+function actualizarResumen() {
+  const totalVentas = ventasData.length;
+  const totalMonto = ventasData.reduce((sum, v) => sum + parseFloat(v.total), 0);
+  const promedioVenta = totalVentas > 0 ? totalMonto / totalVentas : 0;
+  const totalDescuentos = ventasData.reduce((sum, v) => sum + parseFloat(v.descuento_monto || 0), 0);
+  
+  document.getElementById('totalVentas').textContent = totalVentas;
+  document.getElementById('totalMonto').textContent = 'Bs. ' + totalMonto.toFixed(2);
+  document.getElementById('promedioVenta').textContent = 'Bs. ' + promedioVenta.toFixed(2);
+  document.getElementById('totalDescuentos').textContent = 'Bs. ' + totalDescuentos.toFixed(2);
+}
+
+function verDetalle(ventaId) {
+  const venta = ventasData.find(v => v.id == ventaId);
+  if (!venta) return;
+  
+  let productos = [];
+  try {
+    productos = JSON.parse(venta.productos_json || '[]');
+  } catch (e) {
+    productos = [];
+  }
+  
+  let html = `
+    <div class="row">
+      <div class="col-md-6">
+        <strong>Número de Venta:</strong> ${venta.numero_venta}<br>
+        <strong>Fecha:</strong> ${new Date(venta.fecha_registro).toLocaleString('es-ES')}<br>
+        <strong>Cliente:</strong> ${venta.cliente_nombre || 'N/A'}<br>
+        <strong>Vendedor:</strong> ${venta.vendedor_nombre || 'N/A'}<br>
+      </div>
+      <div class="col-md-6">
+        <strong>Tipo:</strong> ${venta.tipo_venta}<br>
+        <strong>Estado:</strong> ${venta.estado_venta}<br>
+        <strong>Método de Pago:</strong> ${venta.metodo_pago.replace('_', ' ')}<br>
+        ${venta.notas_venta ? '<strong>Notas:</strong> ' + venta.notas_venta + '<br>' : ''}
+      </div>
+    </div>
+    <hr>
+    <h5>Productos</h5>
+    <table class="table table-bordered">
+      <thead>
+        <tr>
+          <th>Producto</th>
+          <th>Cantidad</th>
+          <th>Precio Unit.</th>
+          <th>Subtotal</th>
+        </tr>
+      </thead>
+      <tbody>
+  `;
+  
+  productos.forEach(p => {
+    html += `
+      <tr>
+        <td>${p.nombre || 'N/A'}</td>
+        <td>${p.cantidad}</td>
+        <td>Bs. ${parseFloat(p.precio_unitario).toFixed(2)}</td>
+        <td>Bs. ${parseFloat(p.subtotal).toFixed(2)}</td>
+      </tr>
+    `;
+  });
+  
+  html += `
+      </tbody>
+      <tfoot>
+        <tr>
+          <th colspan="3">Subtotal:</th>
+          <th>Bs. ${parseFloat(venta.subtotal).toFixed(2)}</th>
+        </tr>
+        <tr>
+          <th colspan="3">Descuento:</th>
+          <th>Bs. ${parseFloat(venta.descuento_monto || 0).toFixed(2)}</th>
+        </tr>
+        <tr>
+          <th colspan="3">Total:</th>
+          <th>Bs. ${parseFloat(venta.total).toFixed(2)}</th>
+        </tr>
+      </tfoot>
+    </table>
+  `;
+  
+  document.getElementById('detalleVenta').innerHTML = html;
+  $('#modalDetalle').modal('show');
+}
+
+function exportarVentas() {
+  // Crear CSV
+  let csv = 'N° Venta,Fecha,Cliente,Vendedor,Tipo,Estado,Subtotal,Descuento,Total,Método Pago\n';
+  
+  ventasData.forEach(venta => {
+    const fecha = new Date(venta.fecha_registro).toLocaleString('es-ES');
+    csv += `"${venta.numero_venta}","${fecha}","${venta.cliente_nombre || 'N/A'}","${venta.vendedor_nombre || 'N/A'}","${venta.tipo_venta}","${venta.estado_venta}","${venta.subtotal}","${venta.descuento_monto || 0}","${venta.total}","${venta.metodo_pago}"\n`;
+  });
+  
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  link.setAttribute('href', url);
+  link.setAttribute('download', 'reporte_ventas_' + new Date().toISOString().split('T')[0] + '.csv');
+  link.style.visibility = 'hidden';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+async function checkSession() {
+  try {
+    const response = await fetch('api/check_session.php');
+    const data = await response.json();
+    
+    if (data.success && data.logged_in) {
+      const userName = data.user.nombre || data.user.username;
+      document.getElementById('userName').textContent = userName;
+    } else {
+      window.location.href = 'index.html';
+    }
+  } catch (error) {
+    console.error('Error al verificar sesión:', error);
+    window.location.href = 'index.html';
+  }
+}
+
+async function logout() {
+  if (confirm('¿Estás seguro de que deseas salir?')) {
+    try {
+      await fetch('api/logout.php', { method: 'POST' });
+    } catch (error) {
+      console.error('Error al cerrar sesión:', error);
+    }
+    sessionStorage.clear();
+    window.location.href = 'index.html';
+  }
+}
+</script>
+</body>
+</html>
+
