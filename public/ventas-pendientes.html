@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Ventas Pendientes - Sistema de Ventas</title>
+  <title>Pedidos Pendientes - Sistema de Ventas</title>
 
   <!-- Google Font: Source Sans 3 -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Sans+3:300,400,400i,700&display=fallback">
@@ -59,24 +59,35 @@
     </a>
     <div class="sidebar">
       <nav class="mt-2">
-        <ul class="nav nav-pills nav-sidebar flex-column">
+        <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
           <li class="nav-item">
             <a href="dashboard.html" class="nav-link">
               <i class="nav-icon fas fa-tachometer-alt"></i>
               <p>Dashboard</p>
             </a>
           </li>
-          <li class="nav-item">
-            <a href="ventas.html" class="nav-link">
+          <li class="nav-item has-treeview menu-open">
+            <a href="#" class="nav-link active">
               <i class="nav-icon fas fa-shopping-cart"></i>
-              <p>Ventas</p>
+              <p>
+                Pedidos
+                <i class="right fas fa-angle-left"></i>
+              </p>
             </a>
-          </li>
-          <li class="nav-item">
-            <a href="ventas-pendientes.html" class="nav-link active">
-              <i class="nav-icon fas fa-clock"></i>
-              <p>Ventas Pendientes</p>
-            </a>
+            <ul class="nav nav-treeview">
+              <li class="nav-item">
+                <a href="ventas.html" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Registrar Pedido</p>
+                </a>
+              </li>
+              <li class="nav-item">
+                <a href="ventas-pendientes.html" class="nav-link active">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Pedidos Pendientes</p>
+                </a>
+              </li>
+            </ul>
           </li>
           <li class="nav-item">
             <a href="productos.html" class="nav-link">
@@ -119,7 +130,7 @@
       <div class="container-fluid">
         <div class="row mb-2">
           <div class="col-sm-6">
-            <h1 class="m-0">Ventas Pendientes</h1>
+            <h1 class="m-0">Pedidos Pendientes</h1>
           </div>
         </div>
       </div>
@@ -130,7 +141,7 @@
         <!-- Mapa -->
         <div class="card card-primary">
           <div class="card-header">
-            <h3 class="card-title"><i class="fas fa-map-marked-alt"></i> Mapa de Ventas Pendientes</h3>
+            <h3 class="card-title"><i class="fas fa-map-marked-alt"></i> Mapa de Pedidos Pendientes</h3>
             <div class="card-tools">
               <button type="button" class="btn btn-tool" data-card-widget="collapse">
                 <i class="fas fa-minus"></i>
@@ -145,17 +156,19 @@
         <!-- Lista de Ventas Pendientes -->
         <div class="card">
           <div class="card-header">
-            <h3 class="card-title"><i class="fas fa-list"></i> Lista de Ventas Pendientes</h3>
+            <h3 class="card-title"><i class="fas fa-list"></i> Lista de Pedidos Pendientes</h3>
           </div>
           <div class="card-body">
             <div class="table-responsive">
               <table class="table table-bordered table-striped table-hover" id="tablaPendientes">
                 <thead>
                   <tr>
-                    <th>N° Venta</th>
-                    <th>Fecha</th>
+                    <th>N° Pedido</th>
+                    <th>Fecha Registro</th>
+                    <th>Fecha Programada</th>
                     <th>Cliente</th>
                     <th>Dirección</th>
+                    <th>Zona</th>
                     <th>Vendedor</th>
                     <th>Total</th>
                     <th>Método Pago</th>
@@ -165,7 +178,7 @@
                 </thead>
                 <tbody id="tbodyPendientes">
                   <tr>
-                    <td colspan="9" class="text-center">Cargando ventas pendientes...</td>
+                    <td colspan="11" class="text-center">Cargando pedidos pendientes...</td>
                   </tr>
                 </tbody>
               </table>
@@ -181,14 +194,14 @@
     <div class="modal-dialog" role="document">
       <div class="modal-content">
         <div class="modal-header">
-          <h4 class="modal-title">Cambiar Estado de Venta</h4>
+          <h4 class="modal-title">Cambiar Estado de Pedido</h4>
           <button type="button" class="close" data-dismiss="modal">
             <span>&times;</span>
           </button>
         </div>
         <div class="modal-body">
           <div class="form-group">
-            <label>Número de Venta:</label>
+            <label>Número de Pedido:</label>
             <input type="text" class="form-control" id="modal_numero_venta" readonly>
           </div>
           <div class="form-group">
@@ -230,6 +243,7 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
 <!-- AdminLTE App -->
 <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+<script src="js/menu-fix.js"></script>
 <!-- Leaflet JS -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
@@ -272,12 +286,12 @@ async function cargarVentasPendientes() {
       actualizarTabla();
     } else {
       document.getElementById('tbodyPendientes').innerHTML = 
-        '<tr><td colspan="9" class="text-center text-danger">Error al cargar ventas pendientes</td></tr>';
+        '<tr><td colspan="11" class="text-center text-danger">Error al cargar pedidos pendientes</td></tr>';
     }
   } catch (error) {
     console.error('Error:', error);
     document.getElementById('tbodyPendientes').innerHTML = 
-      '<tr><td colspan="9" class="text-center text-danger">Error de conexión</td></tr>';
+      '<tr><td colspan="11" class="text-center text-danger">Error de conexión</td></tr>';
   }
 }
 
@@ -307,14 +321,15 @@ function actualizarMapa() {
       
       const marker = L.marker([lat, lng], { icon: icono }).addTo(map);
       
-      // Popup con información de la venta
+      // Popup con información del pedido
       const popupContent = `
         <div class="info-window">
-          <strong>Venta: ${venta.numero_venta}</strong>
+          <strong>Pedido: ${venta.numero_pedido || venta.numero_venta || 'N/A'}</strong>
           <div><strong>Cliente:</strong> ${venta.cliente_nombre || 'N/A'}</div>
           <div><strong>Fecha:</strong> ${new Date(venta.fecha_registro).toLocaleString('es-ES')}</div>
           <div><strong>Total:</strong> Bs. ${parseFloat(venta.total).toFixed(2)}</div>
           <div><strong>Dirección:</strong> ${venta.direccion || 'N/A'}</div>
+          <div><strong>Zona:</strong> ${venta.zona || 'N/A'}</div>
           <button class="btn btn-sm btn-primary mt-2" onclick="abrirModalCambiarEstado(${venta.id})">
             Cambiar Estado
           </button>
@@ -337,29 +352,36 @@ function actualizarTabla() {
   const tbody = document.getElementById('tbodyPendientes');
   
   if (ventasPendientes.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">No hay ventas pendientes</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted">No hay pedidos pendientes</td></tr>';
     return;
   }
   
   tbody.innerHTML = '';
   
   ventasPendientes.forEach((venta, index) => {
-    const fecha = new Date(venta.fecha_registro).toLocaleString('es-ES');
+    const fechaRegistro = new Date(venta.fecha_registro).toLocaleDateString('es-ES');
+    const fechaProgramada = venta.fecha_programada ? new Date(venta.fecha_programada).toLocaleDateString('es-ES') : '-';
+    const estadoPedido = venta.estado_pedido || venta.estado_venta || 'pendiente';
     const estadoBadge = {
       'completada': '<span class="badge badge-success">Completada</span>',
       'pendiente': '<span class="badge badge-warning">Pendiente</span>',
       'cancelada': '<span class="badge badge-danger">Cancelada</span>'
-    }[venta.estado_venta] || venta.estado_venta;
+    }[estadoPedido] || estadoPedido;
+    
+    const numeroPedido = venta.numero_pedido || venta.numero_venta || 'N/A';
+    const metodoPago = venta.metodo_pago ? venta.metodo_pago.replace('_', ' ').toUpperCase() : 'N/A';
     
     const row = document.createElement('tr');
     row.innerHTML = `
-      <td>${venta.numero_venta}</td>
-      <td>${fecha}</td>
+      <td><strong>${numeroPedido}</strong></td>
+      <td>${fechaRegistro}</td>
+      <td>${fechaProgramada}</td>
       <td>${venta.cliente_nombre || 'N/A'}</td>
       <td>${venta.direccion || 'N/A'}</td>
+      <td>${venta.zona || 'N/A'}</td>
       <td>${venta.vendedor_nombre || 'N/A'}</td>
-      <td><strong>Bs. ${parseFloat(venta.total).toFixed(2)}</strong></td>
-      <td>${venta.metodo_pago.replace('_', ' ').toUpperCase()}</td>
+      <td><strong>Bs. ${parseFloat(venta.total || 0).toFixed(2)}</strong></td>
+      <td>${metodoPago}</td>
       <td>${estadoBadge}</td>
       <td>
         <button class="btn btn-sm btn-info" onclick="verDetalleVenta(${venta.id})" title="Ver Detalle">
@@ -378,11 +400,14 @@ function abrirModalCambiarEstado(ventaId) {
   const venta = ventasPendientes.find(v => v.id == ventaId);
   if (!venta) return;
   
+  const numeroPedido = venta.numero_pedido || venta.numero_venta || 'N/A';
+  const estadoActual = venta.estado_pedido || venta.estado_venta || 'pendiente';
+  
   document.getElementById('modal_venta_id').value = venta.id;
-  document.getElementById('modal_numero_venta').value = venta.numero_venta;
+  document.getElementById('modal_numero_venta').value = numeroPedido;
   document.getElementById('modal_cliente').value = venta.cliente_nombre || 'N/A';
-  document.getElementById('modal_estado_actual').value = venta.estado_venta;
-  document.getElementById('modal_nuevo_estado').value = venta.estado_venta;
+  document.getElementById('modal_estado_actual').value = estadoActual;
+  document.getElementById('modal_nuevo_estado').value = estadoActual;
   
   $('#modalCambiarEstado').modal('show');
 }
@@ -403,7 +428,8 @@ async function guardarCambioEstado() {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        venta_id: ventaId,
+        pedido_id: ventaId,
+        venta_id: ventaId, // Mantener para compatibilidad
         nuevo_estado: nuevoEstado
       })
     });
@@ -412,7 +438,7 @@ async function guardarCambioEstado() {
     
     if (result.success) {
       $('#modalCambiarEstado').modal('hide');
-      alert('Estado de venta actualizado correctamente');
+      alert('Estado de pedido actualizado correctamente');
       cargarVentasPendientes(); // Recargar la lista
     } else {
       alert('Error al actualizar el estado: ' + (result.message || 'Error desconocido'));
@@ -434,22 +460,29 @@ function verDetalleVenta(ventaId) {
     productos = [];
   }
   
+  const numeroPedido = venta.numero_pedido || venta.numero_venta || 'N/A';
+  const estadoPedido = venta.estado_pedido || venta.estado_venta || 'pendiente';
+  const fechaProgramada = venta.fecha_programada ? new Date(venta.fecha_programada).toLocaleDateString('es-ES') : 'No programada';
+  const metodoPago = venta.metodo_pago ? venta.metodo_pago.replace('_', ' ') : 'N/A';
+  
   let html = `
     <div class="card">
       <div class="card-header">
-        <h4>Detalle de Venta: ${venta.numero_venta}</h4>
+        <h4>Detalle de Pedido: ${numeroPedido}</h4>
       </div>
       <div class="card-body">
         <div class="row">
           <div class="col-md-6">
             <p><strong>Cliente:</strong> ${venta.cliente_nombre || 'N/A'}</p>
-            <p><strong>Fecha:</strong> ${new Date(venta.fecha_registro).toLocaleString('es-ES')}</p>
+            <p><strong>Fecha Registro:</strong> ${new Date(venta.fecha_registro).toLocaleString('es-ES')}</p>
+            <p><strong>Fecha Programada:</strong> ${fechaProgramada}</p>
             <p><strong>Vendedor:</strong> ${venta.vendedor_nombre || 'N/A'}</p>
           </div>
           <div class="col-md-6">
-            <p><strong>Estado:</strong> ${venta.estado_venta}</p>
-            <p><strong>Método de Pago:</strong> ${venta.metodo_pago.replace('_', ' ')}</p>
+            <p><strong>Estado:</strong> ${estadoPedido}</p>
+            <p><strong>Método de Pago:</strong> ${metodoPago}</p>
             <p><strong>Dirección:</strong> ${venta.direccion || 'N/A'}</p>
+            <p><strong>Zona:</strong> ${venta.zona || 'N/A'}</p>
           </div>
         </div>
         <hr>

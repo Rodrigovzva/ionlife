@@ -71,8 +71,12 @@ function logout() {
     session_destroy();
 }
 
-// Headers para JSON (solo si no se ha enviado output)
-if (!headers_sent()) {
+// Headers para JSON (solo si no se ha enviado output y es una petición API)
+// No enviar headers automáticamente para endpoints que ya los manejan
+$scriptName = basename($_SERVER['PHP_SELF'] ?? '');
+$skipAutoHeaders = ['get_clientes.php', 'get_productos.php', 'get_vendedores.php', 'get_ventas.php', 'get_ventas_pendientes.php'];
+
+if (!headers_sent() && !in_array($scriptName, $skipAutoHeaders)) {
     header('Content-Type: application/json; charset=utf-8');
     header('Access-Control-Allow-Origin: *');
     header('Access-Control-Allow-Methods: POST, GET, OPTIONS');

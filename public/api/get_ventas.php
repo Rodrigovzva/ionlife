@@ -37,20 +37,20 @@ if (!empty($_GET['vendedor_id'])) {
 
 // Filtro de estado
 if (!empty($_GET['estado'])) {
-    $where[] = "v.estado_venta = :estado";
+    $where[] = "v.estado_pedido = :estado";
     $filtros[':estado'] = $_GET['estado'];
 }
 
 // Filtro de tipo
-if (!empty($_GET['tipo_venta'])) {
-    $where[] = "v.tipo_venta = :tipo_venta";
-    $filtros[':tipo_venta'] = $_GET['tipo_venta'];
+if (!empty($_GET['tipo_pedido'])) {
+    $where[] = "v.tipo_pedido = :tipo_pedido";
+    $filtros[':tipo_pedido'] = $_GET['tipo_pedido'];
 }
 
-// Filtro de número de venta
-if (!empty($_GET['numero_venta'])) {
-    $where[] = "v.numero_venta LIKE :numero_venta";
-    $filtros[':numero_venta'] = '%' . $_GET['numero_venta'] . '%';
+// Filtro de número de pedido
+if (!empty($_GET['numero_pedido'])) {
+    $where[] = "v.numero_pedido LIKE :numero_pedido";
+    $filtros[':numero_pedido'] = '%' . $_GET['numero_pedido'] . '%';
 }
 
 // Construir WHERE clause
@@ -60,10 +60,10 @@ $whereClause = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
 $sql = "
     SELECT 
         v.*,
-        c.nombre_completo as cliente_nombre,
+        CONCAT(c.nombre, ' ', c.apellido) as cliente_nombre,
         u.nombre as vendedor_nombre,
         u.username as vendedor_username
-    FROM ventas v
+    FROM pedidos v
     LEFT JOIN clientes c ON v.cliente_id = c.id
     LEFT JOIN usuarios u ON v.vendedor_id = u.id
     $whereClause
@@ -80,26 +80,27 @@ try {
     $stmt = $pdo->prepare($sql);
     $stmt->execute($filtros);
     
-    $ventas = $stmt->fetchAll();
+    $pedidos = $stmt->fetchAll();
     
     // Si no hay vendedor_nombre, usar username
-    foreach ($ventas as &$venta) {
-        if (empty($venta['vendedor_nombre'])) {
-            $venta['vendedor_nombre'] = $venta['vendedor_username'];
+    foreach ($pedidos as &$pedido) {
+        if (empty($pedido['vendedor_nombre'])) {
+            $pedido['vendedor_nombre'] = $pedido['vendedor_username'];
         }
     }
     
     echo json_encode([
         'success' => true,
-        'ventas' => $ventas,
-        'total' => count($ventas)
+        'ventas' => $pedidos, // Mantener 'ventas' para compatibilidad con frontend
+        'pedidos' => $pedidos,
+        'total' => count($pedidos)
     ]);
     
 } catch (Exception $e) {
-    error_log("Error al obtener ventas: " . $e->getMessage());
+    error_log("Error al obtener pedidos: " . $e->getMessage());
     echo json_encode([
         'success' => false,
-        'message' => 'Error al obtener ventas: ' . $e->getMessage()
+        'message' => 'Error al obtener pedidos: ' . $e->getMessage()
     ]);
 }
 ?>

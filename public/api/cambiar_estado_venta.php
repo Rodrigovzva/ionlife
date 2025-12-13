@@ -22,8 +22,9 @@ if (!$input) {
     $input = $_POST;
 }
 
-// Validar campos requeridos
-if (empty($input['venta_id']) || empty($input['nuevo_estado'])) {
+// Validar campos requeridos (aceptar tanto venta_id como pedido_id para compatibilidad)
+$pedidoId = $input['pedido_id'] ?? $input['venta_id'] ?? null;
+if (empty($pedidoId) || empty($input['nuevo_estado'])) {
     echo json_encode([
         'success' => false,
         'message' => 'Faltan datos requeridos'
@@ -48,33 +49,33 @@ try {
         throw new Exception('Error de conexión a la base de datos');
     }
     
-    // Actualizar estado de la venta
+    // Actualizar estado del pedido
     $stmt = $pdo->prepare("
-        UPDATE ventas 
-        SET estado_venta = :nuevo_estado,
+        UPDATE pedidos 
+        SET estado_pedido = :nuevo_estado,
             updated_at = NOW()
-        WHERE id = :venta_id
+        WHERE id = :pedido_id
     ");
     
     $stmt->execute([
         ':nuevo_estado' => $input['nuevo_estado'],
-        ':venta_id' => intval($input['venta_id'])
+        ':pedido_id' => intval($input['venta_id'] ?? $input['pedido_id'] ?? 0)
     ]);
     
     if ($stmt->rowCount() > 0) {
         echo json_encode([
             'success' => true,
-            'message' => 'Estado de venta actualizado correctamente'
+            'message' => 'Estado del pedido actualizado correctamente'
         ]);
     } else {
         echo json_encode([
             'success' => false,
-            'message' => 'No se encontró la venta o no hubo cambios'
+            'message' => 'No se encontró el pedido o no hubo cambios'
         ]);
     }
     
 } catch (Exception $e) {
-    error_log("Error al cambiar estado de venta: " . $e->getMessage());
+    error_log("Error al cambiar estado de pedido: " . $e->getMessage());
     echo json_encode([
         'success' => false,
         'message' => 'Error al actualizar el estado: ' . $e->getMessage()

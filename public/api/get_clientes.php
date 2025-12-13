@@ -16,10 +16,11 @@ if (!$pdo) {
 try {
     // Obtener clientes activos
     $stmt = $pdo->query("
-        SELECT id, nombre_completo, numero_ci, telefono_principal, correo, tipo_cliente
+        SELECT id, nombre, apellido, CONCAT(nombre, ' ', apellido) as nombre_completo, 
+               telefono_principal, telefono_secundario, correo, tipo_cliente, zona
         FROM clientes 
         WHERE estado = 'activo' 
-        ORDER BY nombre_completo
+        ORDER BY nombre, apellido
     ");
     
     $clientes = $stmt->fetchAll();

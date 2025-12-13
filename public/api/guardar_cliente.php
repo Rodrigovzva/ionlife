@@ -16,15 +16,34 @@ if (!$input) {
 }
 
 // Validar campos requeridos
-$required = ['nombre_completo', 'numero_ci', 'tipo_cliente', 'estado'];
-foreach ($required as $field) {
+$required = [
+    'nombre' => 'Nombre',
+    'apellido' => 'Apellido',
+    'telefono_principal' => 'Teléfono Principal',
+    'direccion' => 'Dirección',
+    'zona' => 'Zona',
+    'tipo_cliente' => 'Tipo de Cliente',
+    'estado' => 'Estado',
+    'vendedor_asignado' => 'Vendedor Asignado'
+];
+
+foreach ($required as $field => $label) {
     if (empty($input[$field])) {
         echo json_encode([
             'success' => false,
-            'message' => "El campo " . str_replace('_', ' ', $field) . " es requerido"
+            'message' => "El campo {$label} es requerido"
         ]);
         exit();
     }
+}
+
+// Validar ubicación GPS (latitud y longitud)
+if (empty($input['latitud']) || empty($input['longitud'])) {
+    echo json_encode([
+        'success' => false,
+        'message' => 'La ubicación GPS es requerida. Por favor, obtenga la ubicación automática o selecciónela en el mapa.'
+    ]);
+    exit();
 }
 
 // Conectar a la base de datos
@@ -39,36 +58,40 @@ if (!$pdo) {
 }
 
 try {
-    // Verificar si el CI ya existe
-    $stmt = $pdo->prepare("SELECT id FROM clientes WHERE numero_ci = :ci");
-    $stmt->execute([':ci' => $input['numero_ci']]);
-    if ($stmt->fetch()) {
-        echo json_encode([
-            'success' => false,
-            'message' => 'El número de CI ya está registrado'
-        ]);
-        exit();
+    // Validar que el teléfono principal no esté duplicado (si se proporciona)
+    if (!empty($input['telefono_principal'])) {
+        $telefono = trim($input['telefono_principal']);
+        $stmt = $pdo->prepare("SELECT id FROM clientes WHERE telefono_principal = :telefono");
+        $stmt->execute([':telefono' => $telefono]);
+        if ($stmt->fetch()) {
+            echo json_encode([
+                'success' => false,
+                'message' => 'El teléfono principal ya está registrado. Por favor, use otro teléfono o verifique si el cliente ya existe.'
+            ]);
+            exit();
+        }
     }
 
     // Insertar cliente
     $stmt = $pdo->prepare("
         INSERT INTO clientes (
-            nombre_completo, numero_ci, telefono_principal, ciudad, direccion,
+            nombre, apellido, telefono_principal, telefono_secundario, direccion, zona,
             correo, latitud, longitud, tipo_cliente, negocio_razon_social,
             nit, notas, estado, vendedor_asignado
         ) VALUES (
-            :nombre_completo, :numero_ci, :telefono_principal, :ciudad, :direccion,
+            :nombre, :apellido, :telefono_principal, :telefono_secundario, :direccion, :zona,
             :correo, :latitud, :longitud, :tipo_cliente, :negocio_razon_social,
             :nit, :notas, :estado, :vendedor_asignado
         )
     ");
 
     $stmt->execute([
-        ':nombre_completo' => trim($input['nombre_completo']),
-        ':numero_ci' => trim($input['numero_ci']),
+        ':nombre' => trim($input['nombre']),
+        ':apellido' => trim($input['apellido']),
         ':telefono_principal' => !empty($input['telefono_principal']) ? trim($input['telefono_principal']) : null,
-        ':ciudad' => !empty($input['ciudad']) ? trim($input['ciudad']) : null,
+        ':telefono_secundario' => !empty($input['telefono_secundario']) ? trim($input['telefono_secundario']) : null,
         ':direccion' => !empty($input['direccion']) ? trim($input['direccion']) : null,
+        ':zona' => !empty($input['zona']) ? trim($input['zona']) : null,
         ':correo' => !empty($input['correo']) ? trim($input['correo']) : null,
         ':latitud' => !empty($input['latitud']) ? floatval($input['latitud']) : null,
         ':longitud' => !empty($input['longitud']) ? floatval($input['longitud']) : null,
@@ -88,10 +111,19 @@ try {
 
 } catch (PDOException $e) {
     error_log("Error al guardar cliente: " . $e->getMessage());
-    echo json_encode([
-        'success' => false,
-        'message' => 'Error al guardar el cliente: ' . $e->getMessage()
-    ]);
+    
+    // Detectar error de teléfono duplicado
+    if ($e->getCode() == 23000 || strpos($e->getMessage(), 'Duplicate entry') !== false || strpos($e->getMessage(), 'telefono_principal') !== false) {
+        echo json_encode([
+            'success' => false,
+            'message' => 'El teléfono principal ya está registrado. Por favor, use otro teléfono o verifique si el cliente ya existe.'
+        ]);
+    } else {
+        echo json_encode([
+            'success' => false,
+            'message' => 'Error al guardar el cliente: ' . $e->getMessage()
+        ]);
+    }
 }
 ?>
 

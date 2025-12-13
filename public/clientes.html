@@ -11,6 +11,9 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <!-- AdminLTE -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+  <!-- Select2 -->
+  <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap4-theme@1.3.0/dist/select2-bootstrap4.min.css" rel="stylesheet" />
   <!-- Leaflet CSS para el mapa -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
@@ -64,24 +67,35 @@
     </a>
     <div class="sidebar">
       <nav class="mt-2">
-        <ul class="nav nav-pills nav-sidebar flex-column">
+        <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
           <li class="nav-item">
             <a href="dashboard.html" class="nav-link">
               <i class="nav-icon fas fa-tachometer-alt"></i>
               <p>Dashboard</p>
             </a>
           </li>
-          <li class="nav-item">
-            <a href="ventas.html" class="nav-link">
+          <li class="nav-item has-treeview">
+            <a href="#" class="nav-link">
               <i class="nav-icon fas fa-shopping-cart"></i>
-              <p>Ventas</p>
+              <p>
+                Pedidos
+                <i class="right fas fa-angle-left"></i>
+              </p>
             </a>
-          </li>
-          <li class="nav-item">
-            <a href="ventas-pendientes.html" class="nav-link">
-              <i class="nav-icon fas fa-clock"></i>
-              <p>Ventas Pendientes</p>
-            </a>
+            <ul class="nav nav-treeview">
+              <li class="nav-item">
+                <a href="ventas.html" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Registrar Pedido</p>
+                </a>
+              </li>
+              <li class="nav-item">
+                <a href="ventas-pendientes.html" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Pedidos Pendientes</p>
+                </a>
+              </li>
+            </ul>
           </li>
           <li class="nav-item">
             <a href="productos.html" class="nav-link">
@@ -145,14 +159,14 @@
                   <div class="row">
                     <div class="col-md-6">
                       <div class="form-group">
-                        <label for="nombre_completo">Nombre Completo <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" id="nombre_completo" name="nombre_completo" required>
+                        <label for="nombre">Nombre <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="nombre" name="nombre" required>
                       </div>
                     </div>
                     <div class="col-md-6">
                       <div class="form-group">
-                        <label for="numero_ci">Número de CI <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" id="numero_ci" name="numero_ci" required>
+                        <label for="apellido">Apellido <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="apellido" name="apellido" required>
                       </div>
                     </div>
                   </div>
@@ -160,10 +174,19 @@
                   <div class="row">
                     <div class="col-md-6">
                       <div class="form-group">
-                        <label for="telefono_principal">Teléfono Principal</label>
-                        <input type="tel" class="form-control" id="telefono_principal" name="telefono_principal">
+                        <label for="telefono_principal">Teléfono Principal <span class="text-danger">*</span></label>
+                        <input type="tel" class="form-control" id="telefono_principal" name="telefono_principal" required>
                       </div>
                     </div>
+                    <div class="col-md-6">
+                      <div class="form-group">
+                        <label for="telefono_secundario">Teléfono Secundario</label>
+                        <input type="tel" class="form-control" id="telefono_secundario" name="telefono_secundario">
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="row">
                     <div class="col-md-6">
                       <div class="form-group">
                         <label for="correo">Correo Electrónico</label>
@@ -176,21 +199,23 @@
                   <div class="row">
                     <div class="col-md-6">
                       <div class="form-group">
-                        <label for="ciudad">Ciudad</label>
-                        <input type="text" class="form-control" id="ciudad" name="ciudad">
+                        <label for="direccion">Dirección <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="direccion" name="direccion" required>
                       </div>
                     </div>
                     <div class="col-md-6">
                       <div class="form-group">
-                        <label for="direccion">Dirección</label>
-                        <input type="text" class="form-control" id="direccion" name="direccion">
+                        <label for="zona">Zona <span class="text-danger">*</span></label>
+                        <select class="form-control select2" id="zona" name="zona" style="width: 100%;" data-placeholder="Buscar o escribir zona..." required>
+                          <option value=""></option>
+                        </select>
                       </div>
                     </div>
                   </div>
 
                   <!-- GPS -->
                   <div class="form-group">
-                    <label>Ubicación GPS</label>
+                    <label>Ubicación GPS <span class="text-danger">*</span></label>
                     <div class="d-flex gap-2 mb-2">
                       <button type="button" class="btn btn-info btn-sm" id="btnObtenerGPS">
                         <i class="fas fa-map-marker-alt"></i> Obtener GPS Automático
@@ -235,8 +260,8 @@
                   <div class="row">
                     <div class="col-md-6">
                       <div class="form-group">
-                        <label for="vendedor_asignado">Vendedor Asignado</label>
-                        <select class="form-control" id="vendedor_asignado" name="vendedor_asignado">
+                        <label for="vendedor_asignado">Vendedor Asignado <span class="text-danger">*</span></label>
+                        <select class="form-control" id="vendedor_asignado" name="vendedor_asignado" required>
                           <option value="">Seleccionar vendedor</option>
                         </select>
                       </div>
@@ -282,8 +307,11 @@
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <!-- Bootstrap 4 -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+<!-- Select2 -->
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 <!-- AdminLTE App -->
 <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+<script src="js/menu-fix.js"></script>
 <!-- Leaflet JS para el mapa -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
@@ -292,6 +320,32 @@ let map = null;
 let marker = null;
 
 document.addEventListener('DOMContentLoaded', function() {
+  // Inicializar Select2 para zona
+  $('#zona').select2({
+    theme: 'bootstrap4',
+    placeholder: 'Buscar o escribir zona...',
+    allowClear: true,
+    tags: true, // Permite agregar nuevas opciones
+    minimumInputLength: 0,
+    ajax: {
+      url: 'api/get_zonas.php',
+      dataType: 'json',
+      delay: 250,
+      data: function (params) {
+        return {
+          q: params.term, // término de búsqueda
+          page: params.page || 1
+        };
+      },
+      processResults: function (data) {
+        return {
+          results: data.results || []
+        };
+      },
+      cache: true
+    }
+  });
+
   // Cargar vendedores
   loadVendedores();
 
@@ -440,6 +494,37 @@ async function guardarCliente(e) {
   e.preventDefault();
   
   const form = e.target;
+  
+  // Validar campos requeridos antes de enviar
+  const telefonoPrincipal = document.getElementById('telefono_principal').value.trim();
+  const direccion = document.getElementById('direccion').value.trim();
+  const zona = document.getElementById('zona').value;
+  const latitud = document.getElementById('latitud').value;
+  const longitud = document.getElementById('longitud').value;
+  const vendedorAsignado = document.getElementById('vendedor_asignado').value;
+  
+  // Validaciones
+  if (!telefonoPrincipal) {
+    mostrarError('El teléfono principal es requerido');
+    return;
+  }
+  if (!direccion) {
+    mostrarError('La dirección es requerida');
+    return;
+  }
+  if (!zona) {
+    mostrarError('La zona es requerida');
+    return;
+  }
+  if (!latitud || !longitud) {
+    mostrarError('La ubicación GPS es requerida. Por favor, obtenga la ubicación automática o selecciónela en el mapa.');
+    return;
+  }
+  if (!vendedorAsignado) {
+    mostrarError('El vendedor asignado es requerido');
+    return;
+  }
+  
   const formData = new FormData(form);
   const data = Object.fromEntries(formData);
   
@@ -474,17 +559,22 @@ async function guardarCliente(e) {
         marker = null;
       }
     } else {
-      document.getElementById('errorMessage').textContent = result.message || 'Error al guardar el cliente';
-      document.getElementById('errorAlert').classList.remove('d-none');
+      mostrarError(result.message || 'Error al guardar el cliente');
     }
   } catch (error) {
     console.error('Error:', error);
-    document.getElementById('errorMessage').textContent = 'Error de conexión. Por favor, intenta nuevamente.';
-    document.getElementById('errorAlert').classList.remove('d-none');
+    mostrarError('Error de conexión. Por favor, intenta nuevamente.');
   } finally {
     submitBtn.disabled = false;
     submitBtn.innerHTML = originalText;
   }
+}
+
+function mostrarError(mensaje) {
+  document.getElementById('errorMessage').textContent = mensaje;
+  document.getElementById('errorAlert').classList.remove('d-none');
+  // Scroll al error
+  document.getElementById('errorAlert').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 </script>
 </body>

@@ -1,5 +1,14 @@
 <?php
+// Asegurar que no haya output antes del JSON
+ob_start();
+
 require_once 'config.php';
+
+// Limpiar cualquier output previo
+ob_clean();
+
+// Establecer headers JSON
+header('Content-Type: application/json; charset=utf-8');
 
 // Solo permitir método POST
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -23,7 +32,7 @@ if (!$input) {
 }
 
 // Validar campos requeridos
-$required = ['fecha_registro', 'cliente_id', 'vendedor_id', 'tipo_venta', 'estado_venta', 'subtotal', 'total', 'metodo_pago'];
+$required = ['fecha_registro', 'cliente_id', 'vendedor_id', 'tipo_pedido', 'estado_pedido', 'subtotal', 'total', 'metodo_pago'];
 foreach ($required as $field) {
     if (!isset($input[$field]) || $input[$field] === '') {
         echo json_encode([
@@ -38,7 +47,7 @@ foreach ($required as $field) {
 if (empty($input['productos']) || !is_array($input['productos']) || count($input['productos']) === 0) {
     echo json_encode([
         'success' => false,
-        'message' => 'Debe agregar al menos un producto a la venta'
+        'message' => 'Debe agregar al menos un producto al pedido'
     ]);
     exit();
 }
@@ -55,35 +64,30 @@ if (!$pdo) {
 }
 
 try {
-    // Generar número de venta único
-    $stmt = $pdo->query("SELECT COALESCE(MAX(CAST(SUBSTRING(numero_venta, 6) AS UNSIGNED)), 0) as max_num FROM ventas WHERE numero_venta LIKE 'VENT-%'");
+    // Generar número de pedido único (formato: 001, 002, 003, etc.)
+    $stmt = $pdo->query("SELECT COALESCE(MAX(CAST(numero_pedido AS UNSIGNED)), 0) as max_num FROM pedidos");
     $result = $stmt->fetch();
     $nextNum = intval($result['max_num']) + 1;
-    $numeroVenta = 'VENT-' . str_pad($nextNum, 6, '0', STR_PAD_LEFT);
+    $numeroPedido = str_pad($nextNum, 3, '0', STR_PAD_LEFT); // Formato: 001, 002, 003, etc.
     
     // Convertir productos a JSON
     $productosJson = json_encode($input['productos'], JSON_UNESCAPED_UNICODE);
     
-    // Insertar venta
-    $stmt = $pdo->prepare("
-        INSERT INTO ventas (
-            numero_venta, fecha_registro, cliente_id, vendedor_id, tipo_venta, estado_venta,
+    // Insertar pedido (con fecha_programada si existe)
+    $campos = "numero_pedido, fecha_registro, cliente_id, vendedor_id, tipo_pedido, estado_pedido,
             subtotal, descuento_porcentaje, descuento_monto, total,
-            metodo_pago, monto_recibido, cambio, notas_venta, productos_json
-        ) VALUES (
-            :numero_venta, :fecha_registro, :cliente_id, :vendedor_id, :tipo_venta, :estado_venta,
+            metodo_pago, monto_recibido, cambio, notas_pedido, productos_json";
+    $valores = ":numero_pedido, :fecha_registro, :cliente_id, :vendedor_id, :tipo_pedido, :estado_pedido,
             :subtotal, :descuento_porcentaje, :descuento_monto, :total,
-            :metodo_pago, :monto_recibido, :cambio, :notas_venta, :productos_json
-        )
-    ");
-
-    $stmt->execute([
-        ':numero_venta' => $numeroVenta,
+            :metodo_pago, :monto_recibido, :cambio, :notas_pedido, :productos_json";
+    
+    $params = [
+        ':numero_pedido' => $numeroPedido,
         ':fecha_registro' => $input['fecha_registro'],
         ':cliente_id' => intval($input['cliente_id']),
         ':vendedor_id' => intval($input['vendedor_id']),
-        ':tipo_venta' => $input['tipo_venta'],
-        ':estado_venta' => $input['estado_venta'],
+        ':tipo_pedido' => $input['tipo_pedido'],
+        ':estado_pedido' => $input['estado_pedido'],
         ':subtotal' => floatval($input['subtotal']),
         ':descuento_porcentaje' => isset($input['descuento_porcentaje']) ? floatval($input['descuento_porcentaje']) : 0,
         ':descuento_monto' => isset($input['descuento_monto']) ? floatval($input['descuento_monto']) : 0,
@@ -91,23 +95,47 @@ try {
         ':metodo_pago' => $input['metodo_pago'],
         ':monto_recibido' => isset($input['monto_recibido']) ? floatval($input['monto_recibido']) : 0,
         ':cambio' => isset($input['cambio']) ? floatval($input['cambio']) : 0,
-        ':notas_venta' => !empty($input['notas_venta']) ? trim($input['notas_venta']) : null,
+        ':notas_pedido' => !empty($input['notas_pedido']) ? trim($input['notas_pedido']) : null,
         ':productos_json' => $productosJson
-    ]);
+    ];
+    
+    // Agregar fecha_programada si existe y no está vacía
+    if (!empty($input['fecha_programada'])) {
+        $campos .= ", fecha_programada";
+        $valores .= ", :fecha_programada";
+        $params[':fecha_programada'] = $input['fecha_programada'];
+    }
+    
+    $stmt = $pdo->prepare("
+        INSERT INTO pedidos ($campos) VALUES ($valores)
+    ");
 
+    $stmt->execute($params);
+
+    // Limpiar cualquier output antes de enviar JSON
+    ob_clean();
+    
     echo json_encode([
         'success' => true,
-        'message' => 'Venta registrada correctamente',
+        'message' => 'Pedido registrado correctamente',
         'id' => $pdo->lastInsertId(),
-        'numero_venta' => $numeroVenta
+        'numero_venta' => $numeroPedido,
+        'numero_pedido' => $numeroPedido
     ]);
+    exit();
 
 } catch (PDOException $e) {
-    error_log("Error al guardar venta: " . $e->getMessage());
+    error_log("Error al guardar pedido: " . $e->getMessage());
+    
+    // Limpiar cualquier output antes de enviar JSON
+    ob_clean();
+    
+    http_response_code(500);
     echo json_encode([
         'success' => false,
-        'message' => 'Error al guardar la venta: ' . $e->getMessage()
+        'message' => 'Error al guardar el pedido: ' . $e->getMessage()
     ]);
+    exit();
 }
 ?>
 
