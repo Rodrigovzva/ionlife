@@ -7,7 +7,7 @@ services:
       dockerfile: Dockerfile
     container_name: sistema-ventas-web-prod
     ports:
-      - "4000:80"  # Mapea el puerto 4000 del host al 80 del contenedor
+      - "4000:4000"  # Mapea el puerto 4000 del host al 4000 del contenedor (Apache escucha en 4000)
     volumes:
       - ./public:/var/www/html
       # Comentar la línea anterior y usar la siguiente si no quieres volúmenes persistentes

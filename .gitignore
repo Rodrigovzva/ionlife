@@ -21,9 +21,14 @@ public/api/config.local.php
 # Docker
 docker-compose.override.yml
 
-# Archivos de documentación temporal
-*.md
-!README.md
+# Archivos de documentación temporal (solo archivos específicos, no todos los .md)
+# Mantener README.md, SETUP.md y otros archivos de documentación esenciales
+DEPLOY_*.md
+*_PORTAINER.md
+*_RED_LOCAL.md
+*_CREDENCIALES.md
+*_BASE_DATOS.md
+*_SUGERIDOS.md
 
 # Logs
 *.log
