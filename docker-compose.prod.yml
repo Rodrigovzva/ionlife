@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  web:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: sistema-ventas-web-prod
+    ports:
+      - "4000:80"  # Mapea el puerto 4000 del host al 80 del contenedor
+    volumes:
+      - ./public:/var/www/html
+      # Comentar la línea anterior y usar la siguiente si no quieres volúmenes persistentes
+      # - ./public/api/config.local.php:/var/www/html/api/config.local.php:ro
+    environment:
+      - APACHE_DOCUMENT_ROOT=/var/www/html
+      # Variables de entorno para base de datos (ajusta según tu configuración)
+      - DB_HOST=${DB_HOST:-10.0.0.3}
+      - DB_NAME=${DB_NAME:-ionica}
+      - DB_USER=${DB_USER:-root}
+      - DB_PASS=${DB_PASS:-}
+    restart: unless-stopped
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
+

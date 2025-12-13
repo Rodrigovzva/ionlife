@@ -18,6 +18,13 @@ public/api/config.local.php
 .env.local
 .env.*.local
 
+# Docker
+docker-compose.override.yml
+
+# Archivos de documentación temporal
+*.md
+!README.md
+
 # Logs
 *.log
 logs/

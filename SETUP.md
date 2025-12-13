@@ -131,3 +131,4 @@ npm run lint           # Verificar errores
 - Los archivos SQL de inicialización están en `api/` y `public/api/`
 - Revisa los archivos `init_*.sql` para crear las tablas necesarias
 
+
