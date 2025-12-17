@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>IONLIFE - Reportes</title>
+  <title>IONLIFE - Histórico de Pedidos</title>
 
   <!-- Google Font: Source Sans 3 -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Sans+3:300,400,400i,700&display=fallback">
@@ -62,8 +62,8 @@
               <p>Dashboard</p>
             </a>
           </li>
-          <li class="nav-item has-treeview">
-            <a href="#" class="nav-link">
+          <li class="nav-item has-treeview menu-open">
+            <a href="#" class="nav-link active">
               <i class="nav-icon fas fa-shopping-cart"></i>
               <p>
                 Pedidos
@@ -84,7 +84,7 @@
                 </a>
               </li>
               <li class="nav-item">
-                <a href="historico-pedidos.html" class="nav-link">
+                <a href="historico-pedidos.html" class="nav-link active">
                   <i class="far fa-circle nav-icon"></i>
                   <p>Histórico de Pedidos</p>
                 </a>
@@ -156,7 +156,7 @@
             </a>
           </li>
           <li class="nav-item">
-            <a href="reportes.html" class="nav-link active">
+            <a href="reportes.html" class="nav-link">
               <i class="nav-icon fas fa-chart-bar"></i>
               <p>Reportes</p>
             </a>
@@ -180,7 +180,7 @@
       <div class="container-fluid">
         <div class="row mb-2">
           <div class="col-sm-6">
-            <h1 class="m-0">Reportes</h1>
+            <h1 class="m-0">Histórico de Pedidos</h1>
           </div>
         </div>
       </div>
@@ -188,7 +188,53 @@
 
     <section class="content">
       <div class="container-fluid">
-        <!-- Filtros -->
+        <!-- Filtros Rápidos -->
+        <div class="card card-info">
+          <div class="card-header">
+            <h3 class="card-title"><i class="fas fa-clock"></i> Filtros Rápidos</h3>
+            <div class="card-tools">
+              <button type="button" class="btn btn-tool" data-card-widget="collapse">
+                <i class="fas fa-minus"></i>
+              </button>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="row">
+              <div class="col-md-2">
+                <button type="button" class="btn btn-outline-primary btn-block" onclick="aplicarFiltroRapido('hoy')">
+                  <i class="fas fa-calendar-day"></i> Hoy
+                </button>
+              </div>
+              <div class="col-md-2">
+                <button type="button" class="btn btn-outline-primary btn-block" onclick="aplicarFiltroRapido('7dias')">
+                  <i class="fas fa-calendar-week"></i> Últimos 7 días
+                </button>
+              </div>
+              <div class="col-md-2">
+                <button type="button" class="btn btn-outline-primary btn-block" onclick="aplicarFiltroRapido('30dias')">
+                  <i class="fas fa-calendar-alt"></i> Último mes
+                </button>
+              </div>
+              <div class="col-md-2">
+                <button type="button" class="btn btn-outline-primary btn-block" onclick="aplicarFiltroRapido('mes_actual')">
+                  <i class="fas fa-calendar"></i> Mes actual
+                </button>
+              </div>
+              <div class="col-md-2">
+                <button type="button" class="btn btn-outline-primary btn-block" onclick="aplicarFiltroRapido('anio_actual')">
+                  <i class="fas fa-calendar-check"></i> Año actual
+                </button>
+              </div>
+              <div class="col-md-2">
+                <button type="button" class="btn btn-outline-secondary btn-block" onclick="limpiarFiltros()">
+                  <i class="fas fa-eraser"></i> Limpiar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Filtros Avanzados -->
         <div class="card card-primary">
           <div class="card-header">
             <h3 class="card-title"><i class="fas fa-filter"></i> Filtros de Búsqueda</h3>
@@ -243,7 +289,7 @@
               </div>
               <div class="col-md-3">
                 <div class="form-group">
-                  <label>Tipo de Venta</label>
+                  <label>Tipo de Pedido</label>
                   <select class="form-control" id="filtro_tipo">
                     <option value="">Todos</option>
                     <option value="normal">Normal</option>
@@ -277,8 +323,8 @@
           <div class="col-lg-3 col-6">
             <div class="small-box bg-info">
               <div class="inner">
-                <h3 id="totalVentas">0</h3>
-                <p>Total Ventas</p>
+                <h3 id="totalPedidos">0</h3>
+                <p>Total Pedidos</p>
               </div>
               <div class="icon">
                 <i class="fas fa-shopping-cart"></i>
@@ -299,8 +345,8 @@
           <div class="col-lg-3 col-6">
             <div class="small-box bg-warning">
               <div class="inner">
-                <h3 id="promedioVenta">Bs. 0.00</h3>
-                <p>Promedio por Venta</p>
+                <h3 id="promedioPedido">Bs. 0.00</h3>
+                <p>Promedio por Pedido</p>
               </div>
               <div class="icon">
                 <i class="fas fa-chart-line"></i>
@@ -320,10 +366,10 @@
           </div>
         </div>
 
-        <!-- Tabla de Ventas -->
+        <!-- Tabla de Pedidos -->
         <div class="card">
           <div class="card-header">
-            <h3 class="card-title"><i class="fas fa-list"></i> Reporte de Ventas</h3>
+            <h3 class="card-title"><i class="fas fa-history"></i> Histórico de Pedidos</h3>
             <div class="card-tools">
               <button type="button" class="btn btn-sm btn-success" id="btnExportar">
                 <i class="fas fa-file-excel"></i> Exportar
@@ -332,11 +378,12 @@
           </div>
           <div class="card-body">
             <div class="table-responsive">
-              <table id="tablaVentas" class="table table-bordered table-striped table-hover">
+              <table id="tablaPedidos" class="table table-bordered table-striped table-hover">
                 <thead>
                   <tr>
                     <th>N° Pedido</th>
-                    <th>Fecha</th>
+                    <th>Fecha Registro</th>
+                    <th>Fecha Programada</th>
                     <th>Cliente</th>
                     <th>Vendedor</th>
                     <th>Tipo</th>
@@ -358,17 +405,17 @@
     </section>
   </div>
 
-  <!-- Modal Detalle Venta -->
+  <!-- Modal Detalle Pedido -->
   <div class="modal fade" id="modalDetalle" tabindex="-1" role="dialog">
     <div class="modal-dialog modal-lg" role="document">
       <div class="modal-content">
         <div class="modal-header">
-          <h4 class="modal-title">Detalle de Venta</h4>
+          <h4 class="modal-title">Detalle de Pedido</h4>
           <button type="button" class="close" data-dismiss="modal">
             <span>&times;</span>
           </button>
         </div>
-        <div class="modal-body" id="detalleVenta">
+        <div class="modal-body" id="detallePedido">
           <!-- Contenido del detalle -->
         </div>
         <div class="modal-footer">
@@ -396,8 +443,8 @@
 <script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap4.min.js"></script>
 
 <script>
-let tablaVentas;
-let ventasData = [];
+let tablaPedidos;
+let pedidosData = [];
 
 document.addEventListener('DOMContentLoaded', function() {
   checkSession();
@@ -406,24 +453,64 @@ document.addEventListener('DOMContentLoaded', function() {
   cargarVendedores();
   inicializarTabla();
   
-  document.getElementById('btnBuscar').addEventListener('click', buscarVentas);
-  document.getElementById('btnExportar').addEventListener('click', exportarVentas);
+  document.getElementById('btnBuscar').addEventListener('click', buscarPedidos);
+  document.getElementById('btnExportar').addEventListener('click', exportarPedidos);
   
   document.getElementById('logoutBtn').addEventListener('click', function(e) {
     e.preventDefault();
     logout();
   });
   
-  // Buscar al cargar
-  buscarVentas();
+  // Buscar al cargar (último mes por defecto)
+  aplicarFiltroRapido('30dias');
 });
 
-function inicializarFechas() {
+function aplicarFiltroRapido(tipo) {
   const hoy = new Date();
-  const primerDiaMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+  let fechaDesde, fechaHasta;
   
-  document.getElementById('fecha_desde').value = primerDiaMes.toISOString().split('T')[0];
-  document.getElementById('fecha_hasta').value = hoy.toISOString().split('T')[0];
+  switch(tipo) {
+    case 'hoy':
+      fechaDesde = fechaHasta = hoy.toISOString().split('T')[0];
+      break;
+    case '7dias':
+      fechaDesde = new Date(hoy.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      fechaHasta = hoy.toISOString().split('T')[0];
+      break;
+    case '30dias':
+      fechaDesde = new Date(hoy.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      fechaHasta = hoy.toISOString().split('T')[0];
+      break;
+    case 'mes_actual':
+      fechaDesde = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().split('T')[0];
+      fechaHasta = hoy.toISOString().split('T')[0];
+      break;
+    case 'anio_actual':
+      fechaDesde = new Date(hoy.getFullYear(), 0, 1).toISOString().split('T')[0];
+      fechaHasta = hoy.toISOString().split('T')[0];
+      break;
+    default:
+      return;
+  }
+  
+  document.getElementById('fecha_desde').value = fechaDesde;
+  document.getElementById('fecha_hasta').value = fechaHasta;
+  buscarPedidos();
+}
+
+function limpiarFiltros() {
+  document.getElementById('fecha_desde').value = '';
+  document.getElementById('fecha_hasta').value = '';
+  document.getElementById('filtro_cliente').value = '';
+  document.getElementById('filtro_vendedor').value = '';
+  document.getElementById('filtro_estado').value = '';
+  document.getElementById('filtro_tipo').value = '';
+  document.getElementById('filtro_numero').value = '';
+  buscarPedidos();
+}
+
+function inicializarFechas() {
+  // No inicializar fechas por defecto, se usarán los filtros rápidos
 }
 
 async function cargarClientes() {
@@ -435,7 +522,7 @@ async function cargarClientes() {
       data.clientes.forEach(cliente => {
         const option = document.createElement('option');
         option.value = cliente.id;
-        option.textContent = cliente.nombre_completo;
+        option.textContent = cliente.nombre_completo || `${cliente.nombre} ${cliente.apellido}`;
         select.appendChild(option);
       });
     }
@@ -463,7 +550,7 @@ async function cargarVendedores() {
 }
 
 function inicializarTabla() {
-  tablaVentas = $('#tablaVentas').DataTable({
+  tablaPedidos = $('#tablaPedidos').DataTable({
     language: {
       url: 'https://cdn.datatables.net/plug-ins/1.13.7/i18n/es-ES.json'
     },
@@ -471,12 +558,12 @@ function inicializarTabla() {
     pageLength: 25,
     responsive: true,
     columnDefs: [
-      { orderable: false, targets: [10] }
+      { orderable: false, targets: [11] }
     ]
   });
 }
 
-async function buscarVentas() {
+async function buscarPedidos() {
   const filtros = {
     fecha_desde: document.getElementById('fecha_desde').value,
     fecha_hasta: document.getElementById('fecha_hasta').value,
@@ -499,94 +586,98 @@ async function buscarVentas() {
     const data = await response.json();
     
     if (data.success) {
-      ventasData = data.ventas || [];
+      pedidosData = data.pedidos || data.ventas || [];
       actualizarTabla();
       actualizarResumen();
     } else {
-      alert('Error al cargar ventas: ' + (data.message || 'Error desconocido'));
+      alert('Error al cargar pedidos: ' + (data.message || 'Error desconocido'));
     }
   } catch (error) {
     console.error('Error:', error);
-    alert('Error de conexión al buscar ventas');
+    alert('Error de conexión al buscar pedidos');
   }
 }
 
 function actualizarTabla() {
-  tablaVentas.clear();
+  tablaPedidos.clear();
   
-  ventasData.forEach(venta => {
-    const fecha = new Date(venta.fecha_registro).toLocaleString('es-ES');
-    const estadoPedido = venta.estado_pedido || venta.estado_venta || 'pendiente';
+  pedidosData.forEach(pedido => {
+    const fechaRegistro = pedido.fecha_registro ? new Date(pedido.fecha_registro).toLocaleString('es-ES') : 'N/A';
+    const fechaProgramada = pedido.fecha_programada ? new Date(pedido.fecha_programada).toLocaleDateString('es-ES') : '-';
+    const estadoPedido = pedido.estado_pedido || pedido.estado_venta || 'pendiente';
     const estadoBadge = {
       'completada': '<span class="badge badge-success">Completada</span>',
       'pendiente': '<span class="badge badge-warning">Pendiente</span>',
       'cancelada': '<span class="badge badge-danger">Cancelada</span>'
     }[estadoPedido] || estadoPedido;
     
-    const tipoPedido = venta.tipo_pedido || venta.tipo_venta || 'normal';
+    const tipoPedido = pedido.tipo_pedido || pedido.tipo_venta || 'normal';
     const tipoBadge = {
       'normal': '<span class="badge badge-info">Normal</span>',
       'mayorista': '<span class="badge badge-primary">Mayorista</span>',
       'distribuidor': '<span class="badge badge-secondary">Distribuidor</span>'
     }[tipoPedido] || tipoPedido;
     
-    const numeroPedido = venta.numero_pedido || venta.numero_venta || 'N/A';
-    const metodoPago = venta.metodo_pago ? venta.metodo_pago.replace('_', ' ').toUpperCase() : 'N/A';
+    const numeroPedido = pedido.numero_pedido || pedido.numero_venta || 'N/A';
+    const metodoPago = pedido.metodo_pago ? pedido.metodo_pago.replace('_', ' ').toUpperCase() : 'N/A';
     
-    tablaVentas.row.add([
+    tablaPedidos.row.add([
       numeroPedido,
-      fecha,
-      venta.cliente_nombre || 'N/A',
-      venta.vendedor_nombre || 'N/A',
+      fechaRegistro,
+      fechaProgramada,
+      pedido.cliente_nombre || 'N/A',
+      pedido.vendedor_nombre || 'N/A',
       tipoBadge,
       estadoBadge,
-      'Bs. ' + parseFloat(venta.subtotal || 0).toFixed(2),
-      'Bs. ' + parseFloat(venta.descuento_monto || 0).toFixed(2),
-      '<strong>Bs. ' + parseFloat(venta.total || 0).toFixed(2) + '</strong>',
+      'Bs. ' + parseFloat(pedido.subtotal || 0).toFixed(2),
+      'Bs. ' + parseFloat(pedido.descuento_monto || 0).toFixed(2),
+      '<strong>Bs. ' + parseFloat(pedido.total || 0).toFixed(2) + '</strong>',
       metodoPago,
-      '<button class="btn btn-sm btn-info" onclick="verDetalle(' + venta.id + ')"><i class="fas fa-eye"></i></button>'
+      '<button class="btn btn-sm btn-info" onclick="verDetalle(' + pedido.id + ')"><i class="fas fa-eye"></i></button>'
     ]);
   });
   
-  tablaVentas.draw();
+  tablaPedidos.draw();
 }
 
 function actualizarResumen() {
-  const totalVentas = ventasData.length;
-  const totalMonto = ventasData.reduce((sum, v) => sum + parseFloat(v.total), 0);
-  const promedioVenta = totalVentas > 0 ? totalMonto / totalVentas : 0;
-  const totalDescuentos = ventasData.reduce((sum, v) => sum + parseFloat(v.descuento_monto || 0), 0);
+  const totalPedidos = pedidosData.length;
+  const totalMonto = pedidosData.reduce((sum, p) => sum + parseFloat(p.total || 0), 0);
+  const promedioPedido = totalPedidos > 0 ? totalMonto / totalPedidos : 0;
+  const totalDescuentos = pedidosData.reduce((sum, p) => sum + parseFloat(p.descuento_monto || 0), 0);
   
-  document.getElementById('totalVentas').textContent = totalVentas;
+  document.getElementById('totalPedidos').textContent = totalPedidos;
   document.getElementById('totalMonto').textContent = 'Bs. ' + totalMonto.toFixed(2);
-  document.getElementById('promedioVenta').textContent = 'Bs. ' + promedioVenta.toFixed(2);
+  document.getElementById('promedioPedido').textContent = 'Bs. ' + promedioPedido.toFixed(2);
   document.getElementById('totalDescuentos').textContent = 'Bs. ' + totalDescuentos.toFixed(2);
 }
 
-function verDetalle(ventaId) {
-  const venta = ventasData.find(v => v.id == ventaId);
-  if (!venta) return;
+function verDetalle(pedidoId) {
+  const pedido = pedidosData.find(p => p.id == pedidoId);
+  if (!pedido) return;
   
   let productos = [];
   try {
-    productos = JSON.parse(venta.productos_json || '[]');
+    productos = JSON.parse(pedido.productos_json || '[]');
   } catch (e) {
     productos = [];
   }
   
-  const numeroPedido = venta.numero_pedido || venta.numero_venta || 'N/A';
-  const tipoPedido = venta.tipo_pedido || venta.tipo_venta || 'normal';
-  const estadoPedido = venta.estado_pedido || venta.estado_venta || 'pendiente';
-  const notasPedido = venta.notas_pedido || venta.notas_venta || '';
-  const metodoPago = venta.metodo_pago ? venta.metodo_pago.replace('_', ' ') : 'N/A';
+  const numeroPedido = pedido.numero_pedido || pedido.numero_venta || 'N/A';
+  const tipoPedido = pedido.tipo_pedido || pedido.tipo_venta || 'normal';
+  const estadoPedido = pedido.estado_pedido || pedido.estado_venta || 'pendiente';
+  const notasPedido = pedido.notas_pedido || pedido.notas_venta || '';
+  const fechaProgramada = pedido.fecha_programada ? new Date(pedido.fecha_programada).toLocaleDateString('es-ES') : 'No programada';
+  const metodoPago = pedido.metodo_pago ? pedido.metodo_pago.replace('_', ' ') : 'N/A';
   
   let html = `
     <div class="row">
       <div class="col-md-6">
         <strong>Número de Pedido:</strong> ${numeroPedido}<br>
-        <strong>Fecha:</strong> ${new Date(venta.fecha_registro).toLocaleString('es-ES')}<br>
-        <strong>Cliente:</strong> ${venta.cliente_nombre || 'N/A'}<br>
-        <strong>Vendedor:</strong> ${venta.vendedor_nombre || 'N/A'}<br>
+        <strong>Fecha Registro:</strong> ${new Date(pedido.fecha_registro).toLocaleString('es-ES')}<br>
+        <strong>Fecha Programada:</strong> ${fechaProgramada}<br>
+        <strong>Cliente:</strong> ${pedido.cliente_nombre || 'N/A'}<br>
+        <strong>Vendedor:</strong> ${pedido.vendedor_nombre || 'N/A'}<br>
       </div>
       <div class="col-md-6">
         <strong>Tipo:</strong> ${tipoPedido}<br>
@@ -614,8 +705,8 @@ function verDetalle(ventaId) {
       <tr>
         <td>${p.nombre || 'N/A'}</td>
         <td>${p.cantidad}</td>
-        <td>Bs. ${parseFloat(p.precio_unitario).toFixed(2)}</td>
-        <td>Bs. ${parseFloat(p.subtotal).toFixed(2)}</td>
+        <td>Bs. ${parseFloat(p.precio_unitario || 0).toFixed(2)}</td>
+        <td>Bs. ${parseFloat(p.subtotal || 0).toFixed(2)}</td>
       </tr>
     `;
   });
@@ -625,41 +716,42 @@ function verDetalle(ventaId) {
       <tfoot>
         <tr>
           <th colspan="3">Subtotal:</th>
-          <th>Bs. ${parseFloat(venta.subtotal).toFixed(2)}</th>
+          <th>Bs. ${parseFloat(pedido.subtotal || 0).toFixed(2)}</th>
         </tr>
         <tr>
           <th colspan="3">Descuento:</th>
-          <th>Bs. ${parseFloat(venta.descuento_monto || 0).toFixed(2)}</th>
+          <th>Bs. ${parseFloat(pedido.descuento_monto || 0).toFixed(2)}</th>
         </tr>
         <tr>
           <th colspan="3">Total:</th>
-          <th>Bs. ${parseFloat(venta.total).toFixed(2)}</th>
+          <th>Bs. ${parseFloat(pedido.total || 0).toFixed(2)}</th>
         </tr>
       </tfoot>
     </table>
   `;
   
-  document.getElementById('detalleVenta').innerHTML = html;
+  document.getElementById('detallePedido').innerHTML = html;
   $('#modalDetalle').modal('show');
 }
 
-function exportarVentas() {
+function exportarPedidos() {
   // Crear CSV
-  let csv = 'N° Pedido,Fecha,Cliente,Vendedor,Tipo,Estado,Subtotal,Descuento,Total,Método Pago\n';
+  let csv = 'N° Pedido,Fecha Registro,Fecha Programada,Cliente,Vendedor,Tipo,Estado,Subtotal,Descuento,Total,Método Pago\n';
   
-  ventasData.forEach(venta => {
-    const fecha = new Date(venta.fecha_registro).toLocaleString('es-ES');
-    const numeroPedido = venta.numero_pedido || venta.numero_venta || 'N/A';
-    const tipoPedido = venta.tipo_pedido || venta.tipo_venta || 'normal';
-    const estadoPedido = venta.estado_pedido || venta.estado_venta || 'pendiente';
-    csv += `"${numeroPedido}","${fecha}","${venta.cliente_nombre || 'N/A'}","${venta.vendedor_nombre || 'N/A'}","${tipoPedido}","${estadoPedido}","${venta.subtotal || 0}","${venta.descuento_monto || 0}","${venta.total || 0}","${venta.metodo_pago || 'N/A'}"\n`;
+  pedidosData.forEach(pedido => {
+    const fechaRegistro = pedido.fecha_registro ? new Date(pedido.fecha_registro).toLocaleString('es-ES') : 'N/A';
+    const fechaProgramada = pedido.fecha_programada ? new Date(pedido.fecha_programada).toLocaleDateString('es-ES') : 'No programada';
+    const numeroPedido = pedido.numero_pedido || pedido.numero_venta || 'N/A';
+    const tipoPedido = pedido.tipo_pedido || pedido.tipo_venta || 'normal';
+    const estadoPedido = pedido.estado_pedido || pedido.estado_venta || 'pendiente';
+    csv += `"${numeroPedido}","${fechaRegistro}","${fechaProgramada}","${pedido.cliente_nombre || 'N/A'}","${pedido.vendedor_nombre || 'N/A'}","${tipoPedido}","${estadoPedido}","${pedido.subtotal || 0}","${pedido.descuento_monto || 0}","${pedido.total || 0}","${pedido.metodo_pago || 'N/A'}"\n`;
   });
   
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const link = document.createElement('a');
   const url = URL.createObjectURL(blob);
   link.setAttribute('href', url);
-  link.setAttribute('download', 'reporte_ventas_' + new Date().toISOString().split('T')[0] + '.csv');
+  link.setAttribute('download', 'historico_pedidos_' + new Date().toISOString().split('T')[0] + '.csv');
   link.style.visibility = 'hidden';
   document.body.appendChild(link);
   link.click();
@@ -697,4 +789,5 @@ async function logout() {
 </script>
 </body>
 </html>
+
 

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Sistema de Ventas - Dashboard</title>
+  <title>IONLIFE - Dashboard</title>
 
   <!-- Google Font: Source Sans 3 -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Sans+3:300,400,400i,700&display=fallback">
@@ -39,7 +39,7 @@
   <aside class="main-sidebar sidebar-dark-primary elevation-4">
     <!-- Brand Logo -->
     <a href="dashboard.html" class="brand-link">
-      <span class="brand-text font-weight-light"><b>Sistema</b> Ventas</span>
+      <span class="brand-text font-weight-light"><b>IONLIFE</b></span>
     </a>
 
     <!-- Sidebar -->
@@ -81,6 +81,12 @@
                   <p>Pedidos Pendientes</p>
                 </a>
               </li>
+              <li class="nav-item">
+                <a href="historico-pedidos.html" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Histórico de Pedidos</p>
+                </a>
+              </li>
             </ul>
           </li>
           <li class="nav-item">
@@ -89,17 +95,57 @@
               <p>Productos</p>
             </a>
           </li>
-          <li class="nav-item">
-            <a href="almacenes.html" class="nav-link">
+          <li class="nav-item has-treeview">
+            <a href="#" class="nav-link">
               <i class="nav-icon fas fa-warehouse"></i>
-              <p>Almacenes</p>
+              <p>
+                Almacenes
+                <i class="right fas fa-angle-left"></i>
+              </p>
             </a>
+            <ul class="nav nav-treeview">
+              <li class="nav-item">
+                <a href="almacen-produccion.html" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Almacén de Producción</p>
+                </a>
+              </li>
+              <li class="nav-item">
+                <a href="almacen-despachos.html" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Almacén de Despachos</p>
+                </a>
+              </li>
+              <li class="nav-item">
+                <a href="almacen-movil.html" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Almacén Móvil</p>
+                </a>
+              </li>
+            </ul>
           </li>
-          <li class="nav-item">
-            <a href="clientes.html" class="nav-link">
+          <li class="nav-item has-treeview">
+            <a href="#" class="nav-link">
               <i class="nav-icon fas fa-users"></i>
-              <p>Clientes</p>
+              <p>
+                Clientes
+                <i class="right fas fa-angle-left"></i>
+              </p>
             </a>
+            <ul class="nav nav-treeview">
+              <li class="nav-item">
+                <a href="registro-clientes.html" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Registro de Clientes</p>
+                </a>
+              </li>
+              <li class="nav-item">
+                <a href="actualizacion-clientes.html" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Actualización de Clientes</p>
+                </a>
+              </li>
+            </ul>
           </li>
           <li class="nav-item">
             <a href="registro-usuario.html" class="nav-link">
@@ -111,6 +157,12 @@
             <a href="reportes.html" class="nav-link">
               <i class="nav-icon fas fa-chart-bar"></i>
               <p>Reportes</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="control-produccion.html" class="nav-link">
+              <i class="nav-icon fas fa-industry"></i>
+              <p>Control de Producción</p>
             </a>
           </li>
         </ul>
@@ -193,7 +245,7 @@
               <div class="card-header">
                 <h3 class="card-title">
                   <i class="fas fa-chart-line mr-1"></i>
-                  Bienvenido al Sistema de Ventas
+                  Bienvenido a IONLIFE
                 </h3>
               </div>
               <div class="card-body">
@@ -210,7 +262,7 @@
   </div>
   <!-- /.content-wrapper -->
   <footer class="main-footer">
-    <strong>Copyright &copy; 2025 <a href="#">Sistema de Ventas</a>.</strong>
+    <strong>Copyright &copy; 2025 <a href="#">IONLIFE</a>.</strong>
     Todos los derechos reservados.
   </footer>
 </div>

@@ -11,7 +11,7 @@ if (file_exists(__DIR__ . '/config.local.php')) {
 // Configuración de base de datos
 // Prioridad: config.local.php > Variables de entorno > Valores por defecto
 $dbHost = defined('DB_HOST_LOCAL') ? DB_HOST_LOCAL : (getenv('DB_HOST') !== false ? getenv('DB_HOST') : '10.0.0.3');
-$dbName = defined('DB_NAME_LOCAL') ? DB_NAME_LOCAL : (getenv('DB_NAME') !== false ? getenv('DB_NAME') : 'ionica');
+$dbName = defined('DB_NAME_LOCAL') ? DB_NAME_LOCAL : (getenv('DB_NAME') !== false ? getenv('DB_NAME') : 'ionlife');
 $dbUser = defined('DB_USER_LOCAL') ? DB_USER_LOCAL : (getenv('DB_USER') !== false ? getenv('DB_USER') : 'root');
 $dbPass = defined('DB_PASS_LOCAL') ? DB_PASS_LOCAL : (getenv('DB_PASS') !== false ? getenv('DB_PASS') : '');
 

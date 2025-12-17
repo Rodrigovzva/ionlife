@@ -1,13 +1,8 @@
 # Dependencias
 node_modules/
 vendor/
-IONICA/node_modules/
 
 # Archivos compilados y de build
-IONICA/dist/
-IONICA/.astro/
-IONICA/.cache/
-IONICA/.sass-cache/
 *.map
 
 # Archivos de configuración local y sensibles
@@ -20,6 +15,7 @@ public/api/config.local.php
 
 # Docker
 docker-compose.override.yml
+docker-compose.prod.yml
 
 # Archivos de documentación temporal (solo archivos específicos, no todos los .md)
 # Mantener README.md, SETUP.md y otros archivos de documentación esenciales
@@ -29,11 +25,12 @@ DEPLOY_*.md
 *_CREDENCIALES.md
 *_BASE_DATOS.md
 *_SUGERIDOS.md
+ACCESO_RED.md
+INSTRUCCIONES_*.md
 
 # Logs
 *.log
 logs/
-IONICA/*.log
 
 # Archivos del sistema
 .DS_Store
@@ -43,6 +40,7 @@ desktop.ini
 # IDE
 .vscode/
 .idea/
+.cursor/commands/*.md
 *.swp
 *.swo
 *~
@@ -62,10 +60,4 @@ sessions/
 # Archivos de compilación
 *.min.js
 *.min.css
-!IONICA/dist/**/*.min.js
-!IONICA/dist/**/*.min.css
-
-# Package locks (opcional - descomenta si quieres ignorarlos)
-# package-lock.json
-# IONICA/package-lock.json
 

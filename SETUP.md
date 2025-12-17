@@ -132,3 +132,5 @@ npm run lint           # Verificar errores
 - Revisa los archivos `init_*.sql` para crear las tablas necesarias
 
 
+
+

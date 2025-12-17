@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>IONICA - Registro de Clientes</title>
+  <title>IONLIFE - Actualización de Clientes</title>
 
   <!-- Google Font: Source Sans 3 -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Sans+3:300,400,400i,700&display=fallback">
@@ -63,7 +63,7 @@
   <!-- Main Sidebar -->
   <aside class="main-sidebar sidebar-dark-primary elevation-4">
     <a href="dashboard.html" class="brand-link">
-      <span class="brand-text font-weight-light"><b>IONICA</b></span>
+      <span class="brand-text font-weight-light"><b>IONLIFE</b></span>
     </a>
     <div class="sidebar">
       <nav class="mt-2">
@@ -95,6 +95,12 @@
                   <p>Pedidos Pendientes</p>
                 </a>
               </li>
+              <li class="nav-item">
+                <a href="historico-pedidos.html" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Histórico de Pedidos</p>
+                </a>
+              </li>
             </ul>
           </li>
           <li class="nav-item">
@@ -103,22 +109,68 @@
               <p>Productos</p>
             </a>
           </li>
-          <li class="nav-item">
-            <a href="almacenes.html" class="nav-link">
+          <li class="nav-item has-treeview">
+            <a href="#" class="nav-link">
               <i class="nav-icon fas fa-warehouse"></i>
-              <p>Almacenes</p>
+              <p>
+                Almacenes
+                <i class="right fas fa-angle-left"></i>
+              </p>
             </a>
+            <ul class="nav nav-treeview">
+              <li class="nav-item">
+                <a href="almacen-produccion.html" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Almacén de Producción</p>
+                </a>
+              </li>
+              <li class="nav-item">
+                <a href="almacen-despachos.html" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Almacén de Despachos</p>
+                </a>
+              </li>
+              <li class="nav-item">
+                <a href="almacen-movil.html" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Almacén Móvil</p>
+                </a>
+              </li>
+            </ul>
           </li>
-          <li class="nav-item">
-            <a href="clientes.html" class="nav-link active">
+          <li class="nav-item has-treeview menu-open">
+            <a href="#" class="nav-link active">
               <i class="nav-icon fas fa-users"></i>
-              <p>Clientes</p>
+              <p>
+                Clientes
+                <i class="right fas fa-angle-left"></i>
+              </p>
             </a>
+            <ul class="nav nav-treeview">
+              <li class="nav-item">
+                <a href="registro-clientes.html" class="nav-link active">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Registro de Clientes</p>
+                </a>
+              </li>
+              <li class="nav-item">
+                <a href="actualizacion-clientes.html" class="nav-link active">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Actualización de Clientes</p>
+                </a>
+              </li>
+            </ul>
           </li>
           <li class="nav-item">
             <a href="reportes.html" class="nav-link">
               <i class="nav-icon fas fa-chart-bar"></i>
               <p>Reportes</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="control-produccion.html" class="nav-link">
+              <i class="nav-icon fas fa-industry"></i>
+              <p>Control de Producción</p>
             </a>
           </li>
         </ul>
@@ -132,7 +184,7 @@
       <div class="container-fluid">
         <div class="row mb-2">
           <div class="col-sm-6">
-            <h1 class="m-0">Registro de Clientes</h1>
+            <h1 class="m-0">Actualización de Clientes</h1>
           </div>
         </div>
       </div>
@@ -142,17 +194,37 @@
       <div class="container-fluid">
         <div class="row">
           <div class="col-12">
-            <div class="card card-primary">
+            <!-- Buscador de Clientes -->
+            <div class="card card-info">
               <div class="card-header">
-                <h3 class="card-title"><i class="fas fa-user-plus"></i> Nuevo Cliente</h3>
+                <h3 class="card-title"><i class="fas fa-search"></i> Buscar Cliente</h3>
+              </div>
+              <div class="card-body">
+                <div class="form-group">
+                  <label>Seleccionar Cliente <span class="text-danger">*</span></label>
+                  <select class="form-control select2" id="buscadorCliente" style="width: 100%;" data-placeholder="Buscar por teléfono o nombre...">
+                    <option value=""></option>
+                  </select>
+                  <small class="form-text text-muted">Busque el cliente por teléfono principal o nombre para editarlo</small>
+                </div>
+              </div>
+            </div>
+
+            <div class="card card-primary" id="cardFormulario" style="display: none;">
+              <div class="card-header">
+                <h3 class="card-title"><i class="fas fa-user-edit"></i> Editar Cliente</h3>
               </div>
               <form id="formCliente">
+                <input type="hidden" id="cliente_id" name="id">
                 <div class="card-body">
                   <div class="alert alert-success d-none" id="successAlert">
-                    <i class="icon fas fa-check"></i> Cliente registrado correctamente.
+                    <i class="icon fas fa-check"></i> Cliente actualizado correctamente.
                   </div>
                   <div class="alert alert-danger d-none" id="errorAlert">
                     <i class="icon fas fa-ban"></i> <span id="errorMessage"></span>
+                  </div>
+                  <div class="alert alert-info">
+                    <i class="icon fas fa-info-circle"></i> <strong>ID del Cliente:</strong> <span id="clienteIdDisplay">-</span>
                   </div>
 
                   <!-- Información Personal -->
@@ -284,9 +356,9 @@
                 </div>
                 <div class="card-footer">
                   <button type="submit" class="btn btn-primary">
-                    <i class="fas fa-save"></i> Guardar Cliente
+                    <i class="fas fa-save"></i> Actualizar Cliente
                   </button>
-                  <button type="reset" class="btn btn-secondary">
+                  <button type="button" class="btn btn-secondary" id="btnLimpiar">
                     <i class="fas fa-redo"></i> Limpiar Formulario
                   </button>
                 </div>
@@ -299,7 +371,7 @@
   </div>
 
   <footer class="main-footer">
-    <strong>Copyright &copy; 2025 <a href="#">IONICA</a>.</strong>
+    <strong>Copyright &copy; 2025 <a href="#">IONLIFE</a>.</strong>
   </footer>
 </div>
 
@@ -320,12 +392,63 @@ let map = null;
 let marker = null;
 
 document.addEventListener('DOMContentLoaded', function() {
+  // Inicializar Select2 para buscador de clientes
+  $('#buscadorCliente').select2({
+    theme: 'bootstrap4',
+    placeholder: 'Buscar por teléfono o nombre...',
+    allowClear: true,
+    minimumInputLength: 1,
+    width: '100%',
+    ajax: {
+      url: 'api/buscar_cliente_telefono.php',
+      dataType: 'json',
+      delay: 250,
+      data: function (params) {
+        return {
+          q: params.term || ''
+        };
+      },
+      processResults: function (data) {
+        console.log('Respuesta del servidor:', data);
+        if (data && data.success && data.results) {
+          console.log('Resultados encontrados:', data.results.length);
+          return {
+            results: data.results
+          };
+        } else {
+          console.error('Error en búsqueda:', data ? (data.message || 'Error desconocido') : 'Sin respuesta del servidor');
+          return {
+            results: []
+          };
+        }
+      },
+      cache: false,
+      error: function(xhr, status, error) {
+        console.error('Error AJAX al buscar clientes:', error);
+        console.error('Status:', status);
+        console.error('Respuesta:', xhr.responseText);
+        console.error('Status Code:', xhr.status);
+      }
+    }
+  });
+
+  // Cuando se selecciona un cliente
+  $('#buscadorCliente').on('select2:select', function (e) {
+    const clienteId = e.params.data.id;
+    cargarCliente(clienteId);
+  });
+
+  // Cuando se limpia la selección
+  $('#buscadorCliente').on('select2:clear', function () {
+    limpiarFormulario();
+  });
+
   // Inicializar Select2 para zona
   $('#zona').select2({
     theme: 'bootstrap4',
     placeholder: 'Buscar o escribir zona...',
     allowClear: true,
-    tags: true, // Permite agregar nuevas opciones
+    tags: true,
     minimumInputLength: 0,
     ajax: {
       url: 'api/get_zonas.php',
@@ -333,7 +456,7 @@ document.addEventListener('DOMContentLoaded', function() {
       delay: 250,
       data: function (params) {
         return {
-          q: params.term, // término de búsqueda
+          q: params.term,
           page: params.page || 1
         };
       },
@@ -355,8 +478,11 @@ document.addEventListener('DOMContentLoaded', function() {
   // Botón seleccionar en mapa
   document.getElementById('btnSeleccionarMapa').addEventListener('click', mostrarMapa);
 
+  // Botón limpiar
+  document.getElementById('btnLimpiar').addEventListener('click', limpiarFormulario);
+
   // Enviar formulario
-  document.getElementById('formCliente').addEventListener('submit', guardarCliente);
+  document.getElementById('formCliente').addEventListener('submit', actualizarCliente);
 });
 
 function obtenerGPS() {
@@ -490,12 +616,90 @@ async function loadVendedores() {
   }
 }
 
-async function guardarCliente(e) {
+async function cargarCliente(clienteId) {
+  try {
+    const response = await fetch(`api/get_cliente.php?id=${clienteId}`);
+    const data = await response.json();
+    
+    if (data.success && data.cliente) {
+      const cliente = data.cliente;
+      
+      // Llenar formulario
+      document.getElementById('cliente_id').value = cliente.id;
+      document.getElementById('clienteIdDisplay').textContent = cliente.id;
+      document.getElementById('nombre').value = cliente.nombre || '';
+      document.getElementById('apellido').value = cliente.apellido || '';
+      document.getElementById('telefono_principal').value = cliente.telefono_principal || '';
+      document.getElementById('telefono_secundario').value = cliente.telefono_secundario || '';
+      document.getElementById('correo').value = cliente.correo || '';
+      document.getElementById('direccion').value = cliente.direccion || '';
+      document.getElementById('latitud').value = cliente.latitud || '';
+      document.getElementById('longitud').value = cliente.longitud || '';
+      document.getElementById('tipo_cliente').value = cliente.tipo_cliente || 'normal';
+      document.getElementById('negocio_razon_social').value = cliente.negocio_razon_social || '';
+      document.getElementById('nit').value = cliente.nit || '';
+      document.getElementById('notas').value = cliente.notas || '';
+      document.getElementById('estado').value = cliente.estado || 'activo';
+      document.getElementById('vendedor_asignado').value = cliente.vendedor_asignado || '';
+      
+      // Zona (Select2)
+      if (cliente.zona) {
+        const zonaOption = new Option(cliente.zona, cliente.zona, true, true);
+        $('#zona').append(zonaOption).trigger('change');
+      }
+      
+      // Actualizar mapa si hay coordenadas
+      if (cliente.latitud && cliente.longitud) {
+        const status = document.getElementById('gpsStatus');
+        status.className = 'gps-status gps-success';
+        status.innerHTML = `<i class="fas fa-check-circle"></i> Ubicación: ${parseFloat(cliente.latitud).toFixed(6)}, ${parseFloat(cliente.longitud).toFixed(6)}`;
+        status.style.display = 'block';
+      }
+      
+      // Mostrar formulario
+      document.getElementById('cardFormulario').style.display = 'block';
+      
+      // Ocultar alertas
+      document.getElementById('successAlert').classList.add('d-none');
+      document.getElementById('errorAlert').classList.add('d-none');
+    } else {
+      mostrarError(data.message || 'Error al cargar el cliente');
+    }
+  } catch (error) {
+    console.error('Error:', error);
+    mostrarError('Error de conexión al cargar el cliente');
+  }
+}
+
+function limpiarFormulario() {
+  document.getElementById('formCliente').reset();
+  document.getElementById('cliente_id').value = '';
+  document.getElementById('clienteIdDisplay').textContent = '-';
+  document.getElementById('cardFormulario').style.display = 'none';
+  document.getElementById('gpsStatus').style.display = 'none';
+  document.getElementById('map').style.display = 'none';
+  if (marker && map) {
+    map.removeLayer(marker);
+    marker = null;
+  }
+  $('#zona').val(null).trigger('change');
+  $('#buscadorCliente').val(null).trigger('change');
+  document.getElementById('successAlert').classList.add('d-none');
+  document.getElementById('errorAlert').classList.add('d-none');
+}
+
+async function actualizarCliente(e) {
   e.preventDefault();
+  
+  const clienteId = document.getElementById('cliente_id').value;
+  if (!clienteId) {
+    mostrarError('Por favor, seleccione un cliente primero');
+    return;
+  }
   
   const form = e.target;
   
-  // Validar campos requeridos antes de enviar
+  // Validar campos requeridos
   const telefonoPrincipal = document.getElementById('telefono_principal').value.trim();
   const direccion = document.getElementById('direccion').value.trim();
   const zona = document.getElementById('zona').value;
@@ -503,7 +707,6 @@ async function guardarCliente(e) {
   const longitud = document.getElementById('longitud').value;
   const vendedorAsignado = document.getElementById('vendedor_asignado').value;
   
-  // Validaciones
   if (!telefonoPrincipal) {
     mostrarError('El teléfono principal es requerido');
     return;
@@ -532,14 +735,14 @@ async function guardarCliente(e) {
   const submitBtn = form.querySelector('button[type="submit"]');
   const originalText = submitBtn.innerHTML;
   submitBtn.disabled = true;
-  submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando...';
+  submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Actualizando...';
   
   // Ocultar alertas
   document.getElementById('successAlert').classList.add('d-none');
   document.getElementById('errorAlert').classList.add('d-none');
   
   try {
-    const response = await fetch('api/guardar_cliente.php', {
+    const response = await fetch('api/actualizar_cliente.php', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -551,15 +754,10 @@ async function guardarCliente(e) {
     
     if (result.success) {
       document.getElementById('successAlert').classList.remove('d-none');
-      form.reset();
-      document.getElementById('gpsStatus').style.display = 'none';
-      document.getElementById('map').style.display = 'none';
-      if (marker) {
-        map.removeLayer(marker);
-        marker = null;
-      }
+      // Recargar datos del cliente actualizado
+      setTimeout(() => cargarCliente(clienteId), 1000);
     } else {
-      mostrarError(result.message || 'Error al guardar el cliente');
+      mostrarError(result.message || 'Error al actualizar el cliente');
     }
   } catch (error) {
     console.error('Error:', error);

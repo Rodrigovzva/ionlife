@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>IONICA - Registro de Productos</title>
+  <title>IONLIFE - Registro de Productos</title>
 
   <!-- Google Font: Source Sans 3 -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Sans+3:300,400,400i,700&display=fallback">
@@ -11,6 +11,8 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <!-- AdminLTE -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+  <!-- DataTables -->
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap4.min.css">
   <style>
     .preview-image {
       max-width: 200px;
@@ -49,7 +51,7 @@
   <!-- Main Sidebar -->
   <aside class="main-sidebar sidebar-dark-primary elevation-4">
     <a href="dashboard.html" class="brand-link">
-      <span class="brand-text font-weight-light"><b>IONICA</b></span>
+      <span class="brand-text font-weight-light"><b>IONLIFE</b></span>
     </a>
     <div class="sidebar">
       <nav class="mt-2">
@@ -81,6 +83,12 @@
                   <p>Pedidos Pendientes</p>
                 </a>
               </li>
+              <li class="nav-item">
+                <a href="historico-pedidos.html" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Histórico de Pedidos</p>
+                </a>
+              </li>
             </ul>
           </li>
           <li class="nav-item">
@@ -89,17 +97,57 @@
               <p>Productos</p>
             </a>
           </li>
-          <li class="nav-item">
-            <a href="almacenes.html" class="nav-link">
+          <li class="nav-item has-treeview">
+            <a href="#" class="nav-link">
               <i class="nav-icon fas fa-warehouse"></i>
-              <p>Almacenes</p>
+              <p>
+                Almacenes
+                <i class="right fas fa-angle-left"></i>
+              </p>
             </a>
+            <ul class="nav nav-treeview">
+              <li class="nav-item">
+                <a href="almacen-produccion.html" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Almacén de Producción</p>
+                </a>
+              </li>
+              <li class="nav-item">
+                <a href="almacen-despachos.html" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Almacén de Despachos</p>
+                </a>
+              </li>
+              <li class="nav-item">
+                <a href="almacen-movil.html" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Almacén Móvil</p>
+                </a>
+              </li>
+            </ul>
           </li>
-          <li class="nav-item">
-            <a href="clientes.html" class="nav-link">
+          <li class="nav-item has-treeview">
+            <a href="#" class="nav-link">
               <i class="nav-icon fas fa-users"></i>
-              <p>Clientes</p>
+              <p>
+                Clientes
+                <i class="right fas fa-angle-left"></i>
+              </p>
             </a>
+            <ul class="nav nav-treeview">
+              <li class="nav-item">
+                <a href="registro-clientes.html" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Registro de Clientes</p>
+                </a>
+              </li>
+              <li class="nav-item">
+                <a href="actualizacion-clientes.html" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Actualización de Clientes</p>
+                </a>
+              </li>
+            </ul>
           </li>
           <li class="nav-item">
             <a href="registro-usuario.html" class="nav-link">
@@ -111,6 +159,12 @@
             <a href="reportes.html" class="nav-link">
               <i class="nav-icon fas fa-chart-bar"></i>
               <p>Reportes</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="control-produccion.html" class="nav-link">
+              <i class="nav-icon fas fa-industry"></i>
+              <p>Control de Producción</p>
             </a>
           </li>
         </ul>
@@ -169,8 +223,14 @@
                     <div class="col-md-4">
                       <div class="form-group">
                         <label for="tamano">Tamaño</label>
-                        <input type="number" class="form-control" id="tamano" name="tamano" step="0.01" min="0" placeholder="Ej: 500">
-                        <small class="form-text text-muted">Tamaño en ml o litros</small>
+                        <select class="form-control" id="tamano" name="tamano">
+                          <option value="">Seleccionar tamaño...</option>
+                          <option value="20000">20000</option>
+                          <option value="5000">5000</option>
+                          <option value="2000">2000</option>
+                          <option value="1000">1000</option>
+                          <option value="600">600</option>
+                        </select>
                       </div>
                     </div>
                   </div>
@@ -183,7 +243,7 @@
                         <label for="precio_compra">Precio de Compra <span class="text-danger">*</span></label>
                         <div class="input-group">
                           <div class="input-group-prepend">
-                            <span class="input-group-text">Bs.</span>
+                            <span class="input-group-text">Costo EXW</span>
                           </div>
                           <input type="number" class="form-control" id="precio_compra" name="precio_compra" required step="0.01" min="0" placeholder="0.00">
                         </div>
@@ -218,23 +278,13 @@
                   <!-- Información Adicional -->
                   <h5 class="mb-3 mt-4"><i class="fas fa-info"></i> Información Adicional</h5>
                   <div class="row">
-                    <div class="col-md-6">
+                    <div class="col-md-4">
                       <div class="form-group">
                         <label for="proveedor">Proveedor</label>
                         <input type="text" class="form-control" id="proveedor" name="proveedor" placeholder="Nombre del proveedor">
                       </div>
                     </div>
-                    <div class="col-md-6">
-                      <div class="form-group">
-                        <label for="fecha_vencimiento">Fecha de Vencimiento</label>
-                        <input type="date" class="form-control" id="fecha_vencimiento" name="fecha_vencimiento">
-                        <small class="form-text text-muted">Si el producto tiene fecha de vencimiento</small>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div class="row">
-                    <div class="col-md-6">
+                    <div class="col-md-4">
                       <div class="form-group">
                         <label for="imagen_producto">Imagen del Producto</label>
                         <div class="custom-file">
@@ -245,7 +295,7 @@
                         <small class="form-text text-muted">Formatos: JPG, PNG, GIF (máx. 2MB)</small>
                       </div>
                     </div>
-                    <div class="col-md-6">
+                    <div class="col-md-4">
                       <div class="form-group">
                         <label for="estado">Estado del Producto <span class="text-danger">*</span></label>
                         <select class="form-control" id="estado" name="estado" required>
@@ -275,12 +325,43 @@
             </div>
           </div>
         </div>
+
+        <!-- Tabla de Productos Registrados -->
+        <div class="row">
+          <div class="col-12">
+            <div class="card card-info">
+              <div class="card-header">
+                <h3 class="card-title"><i class="fas fa-list"></i> Productos Registrados</h3>
+              </div>
+              <div class="card-body">
+                <table id="tablaProductos" class="table table-bordered table-striped table-hover">
+                  <thead>
+                    <tr>
+                      <th>Imagen</th>
+                      <th>Código</th>
+                      <th>Nombre</th>
+                      <th>Tamaño</th>
+                      <th>Costo EXW</th>
+                      <th>Precio Venta</th>
+                      <th>Precio Mayorista</th>
+                      <th>Proveedor</th>
+                      <th>Estado</th>
+                      <th>Fecha Registro</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
   </div>
 
   <footer class="main-footer">
-    <strong>Copyright &copy; 2025 <a href="#">IONICA</a>.</strong>
+    <strong>Copyright &copy; 2025 <a href="#">IONLIFE</a>.</strong>
   </footer>
 </div>
 
@@ -291,8 +372,13 @@
 <!-- AdminLTE App -->
 <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
 <script src="js/menu-fix.js"></script>
+<!-- DataTables -->
+<script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap4.min.js"></script>
 
 <script>
+let tablaProductos;
+
 document.addEventListener('DOMContentLoaded', function() {
   const form = document.getElementById('formProducto');
   const imagenInput = document.getElementById('imagen_producto');
@@ -303,6 +389,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Generar código automático al cargar la página
   generarCodigoAutomatico();
+  
+  // Inicializar tabla de productos
+  inicializarTablaProductos();
 
   // Vista previa de imagen
   imagenInput.addEventListener('change', function(e) {
@@ -403,6 +492,10 @@ document.addEventListener('DOMContentLoaded', function() {
         $('.custom-file-label').html('Seleccionar imagen');
         // Regenerar código automático para el siguiente producto
         generarCodigoAutomatico();
+        // Recargar tabla de productos
+        if (tablaProductos) {
+          tablaProductos.ajax.reload(null, false);
+        }
       } else {
         document.getElementById('errorMessage').textContent = result.message || 'Error al guardar el producto';
         document.getElementById('errorAlert').classList.remove('d-none');
@@ -418,6 +511,161 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
 });
+
+// Función para inicializar la tabla de productos
+function inicializarTablaProductos() {
+  tablaProductos = $('#tablaProductos').DataTable({
+    language: {
+      url: 'https://cdn.datatables.net/plug-ins/1.13.7/i18n/es-ES.json'
+    },
+    processing: true,
+    serverSide: false,
+    ajax: {
+      url: 'api/get_productos.php',
+      dataType: 'json',
+      error: function(xhr, error, thrown) {
+        console.error('Error en AJAX:', error);
+        console.error('Respuesta del servidor:', xhr.responseText);
+        alert('Error al cargar los productos. Por favor, recarga la página.');
+      },
+      dataSrc: function(json) {
+        console.log('Respuesta del servidor:', json);
+        if (json.success) {
+          console.log('Productos cargados:', json.productos.length);
+          return json.productos;
+        } else {
+          console.error('Error al cargar productos:', json.message);
+          alert('Error: ' + (json.message || 'Error desconocido'));
+          return [];
+        }
+      }
+    },
+    columns: [
+      {
+        data: 'imagen_producto',
+        render: function(data, type, row) {
+          if (data) {
+            return '<img src="' + data + '" alt="Imagen" style="max-width: 50px; max-height: 50px; border-radius: 4px;">';
+          }
+          return '<i class="fas fa-image text-muted" style="font-size: 24px;"></i>';
+        },
+        orderable: false,
+        searchable: false
+      },
+      { data: 'codigo_producto' },
+      { data: 'nombre_producto' },
+      { data: 'tamano' },
+      { 
+        data: 'precio_compra',
+        render: function(data) {
+          return 'Bs. ' + data;
+        }
+      },
+      { 
+        data: 'precio_venta',
+        render: function(data) {
+          return 'Bs. ' + data;
+        }
+      },
+      { 
+        data: 'precio_mayorista',
+        render: function(data) {
+          return data !== '-' ? 'Bs. ' + data : '-';
+        }
+      },
+      { 
+        data: 'proveedor',
+        render: function(data) {
+          return data || '-';
+        }
+      },
+      {
+        data: 'estado',
+        render: function(data, type, row) {
+          if (type === 'display') {
+            let badgeClass = 'badge-secondary';
+            let estadoText = data;
+            if (data === 'activo') {
+              badgeClass = 'badge-success';
+              estadoText = 'Activo';
+            } else if (data === 'inactivo') {
+              badgeClass = 'badge-warning';
+              estadoText = 'Inactivo';
+            } else if (data === 'descontinuado') {
+              badgeClass = 'badge-danger';
+              estadoText = 'Descontinuado';
+            }
+            return '<select class="form-control form-control-sm estado-producto" data-id="' + row.id + '" style="min-width: 120px;">' +
+                   '<option value="activo" ' + (data === 'activo' ? 'selected' : '') + '>Activo</option>' +
+                   '<option value="inactivo" ' + (data === 'inactivo' ? 'selected' : '') + '>Inactivo</option>' +
+                   '<option value="descontinuado" ' + (data === 'descontinuado' ? 'selected' : '') + '>Descontinuado</option>' +
+                   '</select>';
+          }
+          return data;
+        }
+      },
+      { data: 'fecha_registro' }
+    ],
+    order: [[1, 'desc']], // Ordenar por código (o ID) descendente
+    pageLength: 10,
+    responsive: true,
+    columnDefs: [
+      { orderable: false, targets: [0] }, // Imagen no ordenable
+      { orderable: false, targets: [9] }  // Estado no ordenable (tiene dropdown)
+    ],
+    drawCallback: function() {
+      // Agregar evento a los dropdowns de estado después de cada dibujado de la tabla
+      $('.estado-producto').off('change').on('change', function() {
+        const productoId = $(this).data('id');
+        const nuevoEstado = $(this).val();
+        const selectElement = $(this);
+        
+        // Deshabilitar el select mientras se actualiza
+        selectElement.prop('disabled', true);
+        
+        // Actualizar estado
+        fetch('api/actualizar_estado_producto.php', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            id: productoId,
+            estado: nuevoEstado
+          })
+        })
+        .then(response => response.json())
+        .then(result => {
+          if (result.success) {
+            // Mostrar mensaje de éxito
+            const alertDiv = $('<div class="alert alert-success alert-dismissible fade show" role="alert" style="position: fixed; top: 20px; right: 20px; z-index: 9999;">' +
+                              '<i class="fas fa-check-circle"></i> Estado actualizado correctamente' +
+                              '<button type="button" class="close" data-dismiss="alert" aria-label="Close">' +
+                              '<span aria-hidden="true">&times;</span>' +
+                              '</button>' +
+                              '</div>');
+            $('body').append(alertDiv);
+            setTimeout(() => alertDiv.fadeOut(() => alertDiv.remove()), 3000);
+          } else {
+            // Mostrar mensaje de error
+            alert('Error al actualizar el estado: ' + (result.message || 'Error desconocido'));
+            // Revertir el cambio
+            tablaProductos.ajax.reload(null, false);
+          }
+        })
+        .catch(error => {
+          console.error('Error:', error);
+          alert('Error de conexión al actualizar el estado');
+          // Revertir el cambio
+          tablaProductos.ajax.reload(null, false);
+        })
+        .finally(() => {
+          selectElement.prop('disabled', false);
+        });
+      });
+    }
+  });
+}
 </script>
 </body>
 </html>

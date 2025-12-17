@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>IONLIFE - Almacén de Despachos</title>
+
+  <!-- Google Font: Source Sans 3 -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Sans+3:300,400,400i,700&display=fallback">
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- AdminLTE -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+  <!-- DataTables -->
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap4.min.css">
+  <style>
+    .stock-bajo {
+      background-color: #f8d7da !important;
+      color: #721c24;
+    }
+    .stock-medio {
+      background-color: #fff3cd !important;
+      color: #856404;
+    }
+    .stock-ok {
+      background-color: #d4edda !important;
+      color: #155724;
+    }
+    .badge-stock {
+      font-size: 0.9em;
+      padding: 5px 10px;
+    }
+  </style>
+</head>
+<body class="hold-transition sidebar-mini layout-fixed">
+<div class="wrapper">
+
+  <!-- Navbar -->
+  <nav class="main-header navbar navbar-expand navbar-white navbar-light">
+    <ul class="navbar-nav">
+      <li class="nav-item">
+        <a class="nav-link" data-widget="pushmenu" href="#" role="button"><i class="fas fa-bars"></i></a>
+      </li>
+    </ul>
+    <ul class="navbar-nav ml-auto">
+      <li class="nav-item">
+        <a class="nav-link" href="dashboard.html">
+          <i class="fas fa-arrow-left"></i> Volver
+        </a>
+      </li>
+    </ul>
+  </nav>
+
+  <!-- Main Sidebar -->
+  <aside class="main-sidebar sidebar-dark-primary elevation-4">
+    <a href="dashboard.html" class="brand-link">
+      <span class="brand-text font-weight-light"><b>IONLIFE</b></span>
+    </a>
+    <div class="sidebar">
+      <nav class="mt-2">
+        <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
+          <li class="nav-item">
+            <a href="dashboard.html" class="nav-link">
+              <i class="nav-icon fas fa-tachometer-alt"></i>
+              <p>Dashboard</p>
+            </a>
+          </li>
+          <li class="nav-item has-treeview">
+            <a href="#" class="nav-link">
+              <i class="nav-icon fas fa-shopping-cart"></i>
+              <p>
+                Pedidos
+                <i class="right fas fa-angle-left"></i>
+              </p>
+            </a>
+            <ul class="nav nav-treeview">
+              <li class="nav-item">
+                <a href="ventas.html" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Registrar Pedido</p>
+                </a>
+              </li>
+              <li class="nav-item">
+                <a href="ventas-pendientes.html" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Pedidos Pendientes</p>
+                </a>
+              </li>
+              <li class="nav-item">
+                <a href="historico-pedidos.html" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Histórico de Pedidos</p>
+                </a>
+              </li>
+            </ul>
+          </li>
+          <li class="nav-item">
+            <a href="productos.html" class="nav-link">
+              <i class="nav-icon fas fa-box"></i>
+              <p>Productos</p>
+            </a>
+          </li>
+          <li class="nav-item has-treeview menu-open">
+            <a href="#" class="nav-link active">
+              <i class="nav-icon fas fa-warehouse"></i>
+              <p>
+                Almacenes
+                <i class="right fas fa-angle-left"></i>
+              </p>
+            </a>
+            <ul class="nav nav-treeview">
+              <li class="nav-item">
+                <a href="almacen-produccion.html" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Almacén de Producción</p>
+                </a>
+              </li>
+              <li class="nav-item">
+                <a href="almacen-despachos.html" class="nav-link active">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Almacén de Despachos</p>
+                </a>
+              </li>
+              <li class="nav-item">
+                <a href="almacen-movil.html" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Almacén Móvil</p>
+                </a>
+              </li>
+            </ul>
+          </li>
+          <li class="nav-item has-treeview">
+            <a href="#" class="nav-link">
+              <i class="nav-icon fas fa-users"></i>
+              <p>
+                Clientes
+                <i class="right fas fa-angle-left"></i>
+              </p>
+            </a>
+            <ul class="nav nav-treeview">
+              <li class="nav-item">
+                <a href="registro-clientes.html" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Registro de Clientes</p>
+                </a>
+              </li>
+              <li class="nav-item">
+                <a href="actualizacion-clientes.html" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Actualización de Clientes</p>
+                </a>
+              </li>
+            </ul>
+          </li>
+          <li class="nav-item">
+            <a href="registro-usuario.html" class="nav-link">
+              <i class="nav-icon fas fa-user-plus"></i>
+              <p>Registro Usuario</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="reportes.html" class="nav-link">
+              <i class="nav-icon fas fa-chart-bar"></i>
+              <p>Reportes</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="control-produccion.html" class="nav-link">
+              <i class="nav-icon fas fa-industry"></i>
+              <p>Control de Producción</p>
+            </a>
+          </li>
+        </ul>
+      </nav>
+    </div>
+  </aside>
+
+  <!-- Content Wrapper -->
+  <div class="content-wrapper">
+    <div class="content-header">
+      <div class="container-fluid">
+        <div class="row mb-2">
+          <div class="col-sm-6">
+            <h1 class="m-0">Almacén de Despachos</h1>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <section class="content">
+      <div class="container-fluid">
+        <!-- Resumen -->
+        <div class="row">
+          <div class="col-lg-3 col-6">
+            <div class="small-box bg-info">
+              <div class="inner">
+                <h3 id="totalTransferencias">0</h3>
+                <p>Total Transferencias</p>
+              </div>
+              <div class="icon">
+                <i class="fas fa-truck"></i>
+              </div>
+            </div>
+          </div>
+          <div class="col-lg-3 col-6">
+            <div class="small-box bg-success">
+              <div class="inner">
+                <h3 id="totalDisponible">0</h3>
+                <p>Stock Disponible</p>
+              </div>
+              <div class="icon">
+                <i class="fas fa-cubes"></i>
+              </div>
+            </div>
+          </div>
+          <div class="col-lg-3 col-6">
+            <div class="small-box bg-warning">
+              <div class="inner">
+                <h3 id="totalLitros">0</h3>
+                <p>Total Litros</p>
+              </div>
+              <div class="icon">
+                <i class="fas fa-flask"></i>
+              </div>
+            </div>
+          </div>
+          <div class="col-lg-3 col-6">
+            <div class="small-box bg-primary">
+              <div class="inner">
+                <h3 id="totalEnviado">0</h3>
+                <p>Enviado a Móvil</p>
+              </div>
+              <div class="icon">
+                <i class="fas fa-mobile-alt"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Stock Disponible -->
+        <div class="card card-success">
+          <div class="card-header">
+            <h3 class="card-title"><i class="fas fa-boxes"></i> Stock Disponible para Transferir</h3>
+          </div>
+          <div class="card-body">
+            <div class="table-responsive">
+              <table id="tablaStockDisponible" class="table table-bordered table-striped">
+                <thead>
+                  <tr>
+                    <th>Tamaño (ml)</th>
+                    <th>Cantidad Disponible</th>
+                    <th>Litros Disponibles</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="tbodyStockDisponible">
+                  <tr>
+                    <td colspan="4" class="text-center">
+                      <i class="fas fa-spinner fa-spin"></i> Cargando stock disponible...
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Filtros -->
+        <div class="card card-primary">
+          <div class="card-header">
+            <h3 class="card-title"><i class="fas fa-filter"></i> Filtros</h3>
+            <div class="card-tools">
+              <button type="button" class="btn btn-tool" data-card-widget="collapse">
+                <i class="fas fa-minus"></i>
+              </button>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="row">
+              <div class="col-md-3">
+                <div class="form-group">
+                  <label>Fecha Desde</label>
+                  <input type="date" class="form-control" id="filtro_fecha_desde">
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="form-group">
+                  <label>Fecha Hasta</label>
+                  <input type="date" class="form-control" id="filtro_fecha_hasta">
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="form-group">
+                  <label>Tamaño</label>
+                  <select class="form-control" id="filtro_tamano">
+                    <option value="">Todos</option>
+                    <option value="20000">20000 ml</option>
+                    <option value="5000">5000 ml</option>
+                    <option value="2000">2000 ml</option>
+                    <option value="1000">1000 ml</option>
+                    <option value="600">600 ml</option>
+                  </select>
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="form-group">
+                  <label>&nbsp;</label>
+                  <div>
+                    <button type="button" class="btn btn-primary btn-block" id="btnBuscar">
+                      <i class="fas fa-search"></i> Buscar
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tabla de Transferencias -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title"><i class="fas fa-list"></i> Historial de Transferencias Recibidas</h3>
+            <div class="card-tools">
+              <button type="button" class="btn btn-sm btn-success" id="btnExportar">
+                <i class="fas fa-file-excel"></i> Exportar
+              </button>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="table-responsive">
+              <table id="tablaTransferencias" class="table table-bordered table-striped table-hover">
+                <thead>
+                  <tr>
+                    <th>Fecha Transferencia</th>
+                    <th>Fecha Producción</th>
+                    <th>Línea</th>
+                    <th>Tamaño (ml)</th>
+                    <th>Cantidad</th>
+                    <th>Litros</th>
+                    <th>Operador</th>
+                    <th>Observaciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Modal Transferir a Almacén Móvil -->
+  <div class="modal fade" id="modalTransferirMovil" tabindex="-1" role="dialog">
+    <div class="modal-dialog" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h4 class="modal-title">Transferir a Almacén Móvil</h4>
+          <button type="button" class="close" data-dismiss="modal">
+            <span>&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="alert alert-info">
+            <i class="fas fa-info-circle"></i> <strong>Información de Transferencia</strong>
+          </div>
+          <div class="form-group">
+            <label>Tamaño:</label>
+            <input type="text" class="form-control" id="modal_tamano_movil" readonly>
+          </div>
+          <div class="form-group">
+            <label>Stock Disponible:</label>
+            <input type="text" class="form-control" id="modal_stock_disponible_movil" readonly>
+          </div>
+          <hr>
+          <div class="form-group">
+            <label>Cantidad a Transferir <span class="text-danger">*</span></label>
+            <input type="number" class="form-control" id="modal_cantidad_transferir_movil" min="1" required>
+            <small class="form-text text-muted">Máximo disponible: <span id="modal_max_disponible_movil">0</span></small>
+          </div>
+          <div class="form-group">
+            <label>Almacén Destino</label>
+            <select class="form-control" id="modal_almacen_destino_movil" required>
+              <option value="movil">Almacén Móvil</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Observaciones</label>
+            <textarea class="form-control" id="modal_observaciones_movil" rows="3" placeholder="Notas sobre la transferencia..."></textarea>
+          </div>
+          <input type="hidden" id="modal_tamano_id_movil">
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+          <button type="button" class="btn btn-primary" id="btnGuardarTransferenciaMovil">
+            <i class="fas fa-truck"></i> Transferir
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="main-footer">
+    <strong>Copyright &copy; 2025 <a href="#">IONLIFE</a>.</strong>
+    Todos los derechos reservados.
+  </footer>
+</div>
+
+<!-- jQuery -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<!-- Bootstrap 4 -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+<!-- AdminLTE App -->
+<script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+<script src="js/menu-fix.js"></script>
+<!-- DataTables -->
+<script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap4.min.js"></script>
+
+<script>
+let tablaTransferencias;
+let transferenciasData = [];
+let stockDisponibleData = [];
+
+document.addEventListener('DOMContentLoaded', function() {
+  checkSession();
+  inicializarTabla();
+  cargarTransferencias();
+  cargarStockDisponible();
+  
+  document.getElementById('btnBuscar').addEventListener('click', aplicarFiltros);
+  document.getElementById('btnExportar').addEventListener('click', exportarTransferencias);
+  document.getElementById('btnGuardarTransferenciaMovil').addEventListener('click', guardarTransferenciaMovil);
+  
+  // Validar cantidad al escribir
+  document.getElementById('modal_cantidad_transferir_movil').addEventListener('input', validarCantidadTransferirMovil);
+  
+  document.getElementById('logoutBtn')?.addEventListener('click', function(e) {
+    e.preventDefault();
+    logout();
+  });
+});
+
+function inicializarTabla() {
+  tablaTransferencias = $('#tablaTransferencias').DataTable({
+    language: {
+      url: 'https://cdn.datatables.net/plug-ins/1.13.7/i18n/es-ES.json'
+    },
+    order: [[0, 'desc']],
+    pageLength: 25,
+    responsive: true
+  });
+}
+
+async function cargarTransferencias() {
+  try {
+    const params = new URLSearchParams();
+    params.append('almacen_destino', 'despachos');
+    
+    const fechaDesde = document.getElementById('filtro_fecha_desde').value;
+    const fechaHasta = document.getElementById('filtro_fecha_hasta').value;
+    const tamano = document.getElementById('filtro_tamano').value;
+    
+    // Los filtros de fecha y tamaño se aplicarán en el frontend por ahora
+    // (podrías agregarlos al endpoint si lo prefieres)
+    
+    const response = await fetch('api/get_transferencias.php?' + params.toString());
+    const data = await response.json();
+    
+    if (data.success) {
+      transferenciasData = data.transferencias || [];
+      aplicarFiltros();
+      // actualizarResumen se llama desde cargarStockDisponible
+    } else {
+      alert('Error al cargar transferencias: ' + (data.message || 'Error desconocido'));
+    }
+  } catch (error) {
+    console.error('Error:', error);
+    alert('Error de conexión al cargar transferencias');
+  }
+}
+
+function aplicarFiltros() {
+  const fechaDesde = document.getElementById('filtro_fecha_desde').value;
+  const fechaHasta = document.getElementById('filtro_fecha_hasta').value;
+  const tamano = document.getElementById('filtro_tamano').value;
+  
+  let transferenciasFiltradas = transferenciasData;
+  
+  // Filtro por fecha
+  if (fechaDesde) {
+    transferenciasFiltradas = transferenciasFiltradas.filter(t => {
+      const fechaTransf = new Date(t.fecha_transferencia);
+      const fechaDesdeObj = new Date(fechaDesde);
+      return fechaTransf >= fechaDesdeObj;
+    });
+  }
+  
+  if (fechaHasta) {
+    transferenciasFiltradas = transferenciasFiltradas.filter(t => {
+      const fechaTransf = new Date(t.fecha_transferencia);
+      const fechaHastaObj = new Date(fechaHasta);
+      fechaHastaObj.setHours(23, 59, 59, 999); // Incluir todo el día
+      return fechaTransf <= fechaHastaObj;
+    });
+  }
+  
+  // Filtro por tamaño
+  if (tamano) {
+    transferenciasFiltradas = transferenciasFiltradas.filter(t => t.tamano == tamano);
+  }
+  
+  actualizarTabla(transferenciasFiltradas);
+}
+
+function actualizarTabla(transferencias = transferenciasData) {
+  tablaTransferencias.clear();
+  
+  transferencias.forEach(transf => {
+    const fechaTransferencia = new Date(transf.fecha_transferencia).toLocaleString('es-ES');
+    const fechaProduccion = new Date(transf.fecha_produccion + 'T00:00:00').toLocaleDateString('es-ES');
+    const litros = parseFloat(transf.litros || 0);
+    
+    tablaTransferencias.row.add([
+      fechaTransferencia,
+      fechaProduccion,
+      transf.linea || '-',
+      transf.tamano.toLocaleString() + ' ml',
+      '<strong>' + transf.cantidad + '</strong>',
+      litros.toFixed(2) + ' L',
+      transf.operador || '-',
+      transf.observaciones || '<span class="text-muted">Sin observaciones</span>'
+    ]);
+  });
+  
+  tablaTransferencias.draw();
+}
+
+async function cargarStockDisponible() {
+  try {
+    const response = await fetch('api/get_stock_despachos.php');
+    const data = await response.json();
+    
+    if (data.success) {
+      stockDisponibleData = data.stock || [];
+      actualizarTablaStockDisponible();
+      actualizarResumen(data.resumen);
+    } else {
+      console.error('Error al cargar stock:', data.message);
+    }
+  } catch (error) {
+    console.error('Error:', error);
+  }
+}
+
+function actualizarTablaStockDisponible() {
+  const tbody = document.getElementById('tbodyStockDisponible');
+  tbody.innerHTML = '';
+  
+  if (stockDisponibleData.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No hay stock disponible</td></tr>';
+    return;
+  }
+  
+  stockDisponibleData.forEach(stock => {
+    const botonTransferir = stock.cantidad_disponible > 0
+      ? `<button class="btn btn-sm btn-primary" onclick="abrirModalTransferirMovil(${stock.tamano}, ${stock.cantidad_disponible})" title="Transferir a Almacén Móvil">
+          <i class="fas fa-truck"></i> Transferir
+        </button>`
+      : '<span class="text-muted">Sin stock</span>';
+    
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td><strong>${stock.tamano.toLocaleString()} ml</strong></td>
+      <td><strong class="text-success">${stock.cantidad_disponible}</strong></td>
+      <td>${stock.litros_disponible.toFixed(2)} L</td>
+      <td>${botonTransferir}</td>
+    `;
+    tbody.appendChild(row);
+  });
+}
+
+function abrirModalTransferirMovil(tamano, stockDisponible) {
+  document.getElementById('modal_tamano_id_movil').value = tamano;
+  document.getElementById('modal_tamano_movil').value = tamano.toLocaleString() + ' ml';
+  document.getElementById('modal_stock_disponible_movil').value = stockDisponible;
+  document.getElementById('modal_max_disponible_movil').textContent = stockDisponible;
+  document.getElementById('modal_cantidad_transferir_movil').value = '';
+  document.getElementById('modal_cantidad_transferir_movil').max = stockDisponible;
+  document.getElementById('modal_observaciones_movil').value = '';
+  
+  $('#modalTransferirMovil').modal('show');
+}
+
+function validarCantidadTransferirMovil() {
+  const cantidad = parseInt(document.getElementById('modal_cantidad_transferir_movil').value);
+  const maxDisponible = parseInt(document.getElementById('modal_max_disponible_movil').textContent);
+  
+  if (cantidad > maxDisponible) {
+    document.getElementById('modal_cantidad_transferir_movil').value = maxDisponible;
+    alert('La cantidad no puede exceder la disponible: ' + maxDisponible);
+  }
+}
+
+async function guardarTransferenciaMovil() {
+  const tamano = parseInt(document.getElementById('modal_tamano_id_movil').value);
+  const cantidadTransferir = parseInt(document.getElementById('modal_cantidad_transferir_movil').value);
+  const almacenDestino = document.getElementById('modal_almacen_destino_movil').value;
+  const observaciones = document.getElementById('modal_observaciones_movil').value.trim();
+  
+  if (isNaN(cantidadTransferir) || cantidadTransferir <= 0) {
+    alert('Por favor ingresa una cantidad válida');
+    return;
+  }
+  
+  try {
+    const response = await fetch('api/transferir_almacen.php', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        almacen_origen: 'despachos',
+        almacen_destino: almacenDestino,
+        cantidad_transferir: cantidadTransferir,
+        tamano: tamano,
+        observaciones: observaciones
+      })
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      $('#modalTransferirMovil').modal('hide');
+      alert('Transferencia realizada correctamente. Cantidad transferida: ' + cantidadTransferir);
+      cargarStockDisponible(); // Recargar stock disponible
+      cargarTransferencias(); // Recargar historial
+    } else {
+      alert('Error al realizar transferencia: ' + (result.message || 'Error desconocido'));
+    }
+  } catch (error) {
+    console.error('Error:', error);
+    alert('Error de conexión al realizar transferencia');
+  }
+}
+
+function actualizarResumen(resumen) {
+  if (!resumen) return;
+  
+  const totalTransferencias = transferenciasData.length;
+  const totalLitros = transferenciasData.reduce((sum, t) => sum + parseFloat(t.litros || 0), 0);
+  
+  document.getElementById('totalTransferencias').textContent = totalTransferencias;
+  document.getElementById('totalDisponible').textContent = resumen.total_disponible || 0;
+  document.getElementById('totalLitros').textContent = resumen.total_litros_disponible || totalLitros.toFixed(2);
+  document.getElementById('totalEnviado').textContent = resumen.total_enviado || 0;
+}
+
+function exportarTransferencias() {
+  let csv = 'Fecha Transferencia,Fecha Producción,Línea,Tamaño (ml),Cantidad,Litros,Operador,Observaciones\n';
+  
+  transferenciasData.forEach(transf => {
+    const fechaTransferencia = new Date(transf.fecha_transferencia).toLocaleString('es-ES');
+    const fechaProduccion = new Date(transf.fecha_produccion + 'T00:00:00').toLocaleDateString('es-ES');
+    csv += `"${fechaTransferencia}","${fechaProduccion}","${transf.linea || ''}",${transf.tamano},${transf.cantidad},${transf.litros},"${transf.operador || ''}","${transf.observaciones || ''}"\n`;
+  });
+  
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  link.setAttribute('href', url);
+  link.setAttribute('download', 'transferencias_despachos_' + new Date().toISOString().split('T')[0] + '.csv');
+  link.style.visibility = 'hidden';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+async function checkSession() {
+  try {
+    const response = await fetch('api/check_session.php');
+    const data = await response.json();
+    
+    if (!data.success || !data.logged_in) {
+      window.location.href = 'index.html';
+    }
+  } catch (error) {
+    console.error('Error al verificar sesión:', error);
+    window.location.href = 'index.html';
+  }
+}
+
+async function logout() {
+  if (confirm('¿Estás seguro de que deseas salir?')) {
+    try {
+      await fetch('api/logout.php', { method: 'POST' });
+    } catch (error) {
+      console.error('Error al cerrar sesión:', error);
+    }
+    sessionStorage.clear();
+    window.location.href = 'index.html';
+  }
+}
+</script>
+</body>
+</html>
+
