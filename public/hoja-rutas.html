@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>IONLIFE - Hoja de Rutas</title>
+
+  <!-- Google Font: Source Sans 3 -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Sans+3:300,400,400i,700&display=fallback">
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- AdminLTE -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+  <!-- DataTables -->
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap4.min.css">
+  <style>
+    .selected-pedido {
+      background-color: #d4edda !important;
+    }
+    .pedido-details {
+      max-height: 300px;
+      overflow-y: auto;
+    }
+  </style>
+</head>
+<body class="hold-transition sidebar-mini layout-fixed">
+<div class="wrapper">
+
+  <!-- Navbar -->
+  <nav class="main-header navbar navbar-expand navbar-white navbar-light">
+    <ul class="navbar-nav">
+      <li class="nav-item">
+        <a class="nav-link" data-widget="pushmenu" href="#" role="button"><i class="fas fa-bars"></i></a>
+      </li>
+    </ul>
+    <ul class="navbar-nav ml-auto">
+      <li class="nav-item">
+        <a class="nav-link" href="dashboard.html">
+          <i class="fas fa-arrow-left"></i> Volver
+        </a>
+      </li>
+    </ul>
+  </nav>
+
+  <!-- Main Sidebar -->
+  <aside class="main-sidebar sidebar-dark-primary elevation-4">
+    <a href="dashboard.html" class="brand-link">
+      <span class="brand-text font-weight-light"><b>IONLIFE</b></span>
+    </a>
+    <div class="sidebar">
+      <nav class="mt-2">
+        <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
+          <li class="nav-item">
+            <a href="dashboard.html" class="nav-link">
+              <i class="nav-icon fas fa-tachometer-alt"></i>
+              <p>Dashboard</p>
+            </a>
+          </li>
+          <li class="nav-item has-treeview menu-open">
+            <a href="#" class="nav-link active">
+              <i class="nav-icon fas fa-shopping-cart"></i>
+              <p>
+                Pedidos
+                <i class="right fas fa-angle-left"></i>
+              </p>
+            </a>
+            <ul class="nav nav-treeview">
+              <li class="nav-item">
+                <a href="ventas.html" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Registrar Pedido</p>
+                </a>
+              </li>
+              <li class="nav-item">
+                <a href="ventas-pendientes.html" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Pedidos Pendientes</p>
+                </a>
+              </li>
+              <li class="nav-item">
+                <a href="historico-pedidos.html" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Histórico de Pedidos</p>
+                </a>
+              </li>
+              <li class="nav-item">
+                <a href="hoja-rutas.html" class="nav-link active">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Hoja de Rutas</p>
+                </a>
+              </li>
+            </ul>
+          </li>
+          <li class="nav-item">
+            <a href="productos.html" class="nav-link">
+              <i class="nav-icon fas fa-box"></i>
+              <p>Productos</p>
+            </a>
+          </li>
+          <li class="nav-item has-treeview">
+            <a href="#" class="nav-link">
+              <i class="nav-icon fas fa-warehouse"></i>
+              <p>
+                Almacenes
+                <i class="right fas fa-angle-left"></i>
+              </p>
+            </a>
+            <ul class="nav nav-treeview">
+              <li class="nav-item">
+                <a href="almacen-produccion.html" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Almacén de Producción</p>
+                </a>
+              </li>
+              <li class="nav-item">
+                <a href="almacen-despachos.html" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Almacén de Despachos</p>
+                </a>
+              </li>
+              <li class="nav-item">
+                <a href="almacen-movil.html" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Almacén Móvil</p>
+                </a>
+              </li>
+            </ul>
+          </li>
+          <li class="nav-item has-treeview">
+            <a href="#" class="nav-link">
+              <i class="nav-icon fas fa-users"></i>
+              <p>
+                Clientes
+                <i class="right fas fa-angle-left"></i>
+              </p>
+            </a>
+            <ul class="nav nav-treeview">
+              <li class="nav-item">
+                <a href="registro-clientes.html" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Registro de Clientes</p>
+                </a>
+              </li>
+              <li class="nav-item">
+                <a href="actualizacion-clientes.html" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Actualización de Clientes</p>
+                </a>
+              </li>
+            </ul>
+          </li>
+          <li class="nav-item">
+            <a href="reportes.html" class="nav-link">
+              <i class="nav-icon fas fa-chart-bar"></i>
+              <p>Reportes</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="control-produccion.html" class="nav-link">
+              <i class="nav-icon fas fa-industry"></i>
+              <p>Control de Producción</p>
+            </a>
+          </li>
+        </ul>
+      </nav>
+    </div>
+  </aside>
+
+  <!-- Content Wrapper -->
+  <div class="content-wrapper">
+    <div class="content-header">
+      <div class="container-fluid">
+        <div class="row mb-2">
+          <div class="col-sm-6">
+            <h1 class="m-0"><i class="fas fa-route"></i> Hoja de Rutas</h1>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <section class="content">
+      <div class="container-fluid">
+        <!-- Tabla de pedidos pendientes -->
+        <div class="row">
+          <div class="col-12">
+            <div class="card">
+              <div class="card-header">
+                <h3 class="card-title"><i class="fas fa-list"></i> Pedidos Pendientes</h3>
+                <div class="card-tools">
+                  <button type="button" class="btn btn-primary btn-sm" id="btnCargarPedidos">
+                    <i class="fas fa-sync"></i> Cargar Pedidos Pendientes
+                  </button>
+                </div>
+              </div>
+              <div class="card-body">
+                <div class="alert alert-success d-none" id="successAlert">
+                  <i class="icon fas fa-check"></i> Pedidos asociados al camión correctamente.
+                </div>
+                <div class="alert alert-danger d-none" id="errorAlert">
+                  <i class="icon fas fa-ban"></i> <span id="errorMessage"></span>
+                </div>
+                
+                <!-- Selector de camión -->
+                <div class="row mb-3">
+                  <div class="col-md-4">
+                    <div class="form-group">
+                      <label for="selectCamion">Asociar al Camión <span class="text-danger">*</span></label>
+                      <select class="form-control" id="selectCamion" name="camion_id">
+                        <option value="">Seleccionar camión...</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="col-md-4">
+                    <div class="form-group">
+                      <label>&nbsp;</label>
+                      <div>
+                        <button type="button" class="btn btn-success" id="btnAsociarCamion" disabled>
+                          <i class="fas fa-truck"></i> Asociar Pedidos al Camión (<span id="contadorPedidos">0</span> pedidos seleccionados)
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <div class="table-responsive">
+                  <table id="tablaPedidos" class="table table-bordered table-striped table-hover">
+                    <thead>
+                      <tr>
+                        <th width="50">
+                          <input type="checkbox" id="selectAll" title="Seleccionar todos">
+                        </th>
+                        <th>N° Pedido</th>
+                        <th>Fecha</th>
+                        <th>Cliente</th>
+                        <th>Dirección</th>
+                        <th>Zona</th>
+                        <th>Teléfono</th>
+                        <th>Total</th>
+                        <th>Vendedor</th>
+                        <th>Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sección de Camiones con Pedidos -->
+        <div class="row">
+          <div class="col-12">
+            <div class="card card-success">
+              <div class="card-header">
+                <h3 class="card-title"><i class="fas fa-truck"></i> Camiones con Pedidos Asociados</h3>
+                <div class="card-tools">
+                  <button type="button" class="btn btn-success btn-sm" id="btnCargarCamiones">
+                    <i class="fas fa-sync"></i> Cargar Camiones
+                  </button>
+                </div>
+              </div>
+              <div class="card-body">
+                <div id="camionesContainer">
+                  <p class="text-muted text-center">Haga clic en "Cargar Camiones" para ver los camiones con pedidos asociados</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <footer class="main-footer">
+    <strong>Copyright &copy; 2025 <a href="#">IONLIFE</a>.</strong>
+  </footer>
+</div>
+
+<!-- jQuery -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<!-- Bootstrap 4 -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+<!-- AdminLTE App -->
+<script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+<script src="js/menu-fix.js"></script>
+<!-- DataTables -->
+<script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap4.min.js"></script>
+
+<!-- Modal para ver detalles del cliente -->
+<div class="modal fade" id="modalDetallesCliente" tabindex="-1" role="dialog">
+  <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h4 class="modal-title"><i class="fas fa-user"></i> Detalles del Cliente</h4>
+        <button type="button" class="close" data-dismiss="modal">
+          <span>&times;</span>
+        </button>
+      </div>
+      <div class="modal-body pedido-details" id="modalClienteContent">
+        <!-- Contenido dinámico -->
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let tablaPedidos = null;
+let pedidosData = [];
+let pedidosSeleccionados = new Set();
+
+document.addEventListener('DOMContentLoaded', function() {
+  // Cargar camiones
+  loadCamiones();
+  
+  // Eventos
+  document.getElementById('btnCargarPedidos').addEventListener('click', cargarPedidos);
+  document.getElementById('btnAsociarCamion').addEventListener('click', asociarCamion);
+  document.getElementById('selectAll').addEventListener('change', toggleSelectAll);
+  document.getElementById('selectCamion').addEventListener('change', validarAsociar);
+  document.getElementById('btnCargarCamiones').addEventListener('click', cargarCamionesConPedidos);
+  
+  // Inicializar tabla
+  inicializarTabla();
+});
+
+function inicializarTabla() {
+  // Limpiar el tbody antes de inicializar DataTables
+  $('#tablaPedidos tbody').empty();
+  
+  if ($.fn.DataTable.isDataTable('#tablaPedidos')) {
+    $('#tablaPedidos').DataTable().destroy();
+  }
+  
+  tablaPedidos = $('#tablaPedidos').DataTable({
+    language: {
+      url: 'https://cdn.datatables.net/plug-ins/1.13.7/i18n/es-ES.json',
+      emptyTable: 'Haga clic en "Cargar Pedidos Pendientes" para ver los pedidos',
+      processing: 'Cargando pedidos...',
+      zeroRecords: 'No se encontraron pedidos pendientes'
+    },
+    processing: true,
+    serverSide: false,
+    order: [[2, 'desc']],
+    pageLength: 25,
+    columnDefs: [
+      { orderable: false, targets: [0, 9] }
+    ]
+  });
+  
+  console.log('Tabla inicializada correctamente');
+}
+
+async function loadCamiones() {
+  try {
+    const response = await fetch('api/get_camiones.php');
+    const data = await response.json();
+    if (data.success && data.camiones) {
+      const select = document.getElementById('selectCamion');
+      select.innerHTML = '<option value="">Seleccionar camión...</option>';
+      data.camiones.forEach(camion => {
+        const option = document.createElement('option');
+        option.value = camion.id;
+        option.textContent = `${camion.placa}${camion.descripcion ? ' - ' + camion.descripcion : ''}`;
+        select.appendChild(option);
+      });
+    }
+  } catch (error) {
+    console.error('Error al cargar camiones:', error);
+    mostrarError('Error al cargar los camiones disponibles');
+  }
+}
+
+async function cargarPedidos() {
+  const btn = document.getElementById('btnCargarPedidos');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Cargando...';
+
+  // Ocultar alertas anteriores
+  document.getElementById('successAlert').classList.add('d-none');
+  document.getElementById('errorAlert').classList.add('d-none');
+
+  try {
+    const response = await fetch('api/get_pedidos_para_hoja_ruta.php');
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    console.log('Respuesta del servidor:', result);
+
+    if (result.success) {
+      pedidosData = result.pedidos || [];
+      console.log('Pedidos cargados:', pedidosData.length);
+      mostrarPedidos(pedidosData);
+      if (pedidosData.length === 0) {
+        mostrarError('No hay pedidos pendientes disponibles');
+      }
+    } else {
+      mostrarError(result.message || 'Error al cargar los pedidos');
+      // Limpiar tabla si hay error
+      if (tablaPedidos) {
+        tablaPedidos.clear().draw();
+      }
+    }
+  } catch (error) {
+    console.error('Error al cargar pedidos:', error);
+    mostrarError('Error de conexión al cargar los pedidos: ' + error.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-sync"></i> Cargar Pedidos Pendientes';
+  }
+}
+
+function mostrarPedidos(pedidos) {
+  if (!tablaPedidos) {
+    console.error('Tabla de pedidos no inicializada');
+    return;
+  }
+  
+  console.log('Mostrando pedidos:', pedidos ? pedidos.length : 0);
+  
+  // Limpiar tabla
+  tablaPedidos.clear();
+  
+  if (!pedidos || pedidos.length === 0) {
+    // Si no hay pedidos, solo dibujar la tabla vacía (DataTables mostrará el mensaje de emptyTable)
+    tablaPedidos.draw();
+    return;
+  }
+  
+  // Agregar cada pedido a la tabla
+  pedidos.forEach((pedido, index) => {
+    try {
+      const fechaRegistro = pedido.fecha_registro ? new Date(pedido.fecha_registro).toLocaleDateString('es-ES') : '-';
+      const total = parseFloat(pedido.total || 0).toFixed(2);
+      
+      const rowData = [
+        `<input type="checkbox" class="pedido-checkbox" data-pedido-id="${pedido.id}" data-cliente-id="${pedido.cliente_id || ''}">`,
+        pedido.numero_pedido || '-',
+        fechaRegistro,
+        pedido.cliente_nombre || '-',
+        pedido.direccion || '-',
+        pedido.zona || '-',
+        pedido.telefono_principal || '-',
+        'Bs. ' + total,
+        pedido.vendedor_nombre || '-',
+        `<button class="btn btn-sm btn-info btn-detalles" data-pedido-id="${pedido.id}">
+          <i class="fas fa-info-circle"></i> Detalles
+        </button>`
+      ];
+      
+      tablaPedidos.row.add(rowData);
+      
+    } catch (error) {
+      console.error('Error al agregar pedido a la tabla:', error, pedido);
+    }
+  });
+  
+  // Dibujar la tabla con los nuevos datos
+  tablaPedidos.draw();
+  
+  // Agregar eventos después de que DataTables redibuje
+  setTimeout(function() {
+    // Agregar eventos a los checkboxes
+    $('#tablaPedidos').off('change', '.pedido-checkbox').on('change', '.pedido-checkbox', function() {
+      const pedidoId = parseInt($(this).data('pedido-id'));
+      if ($(this).is(':checked')) {
+        pedidosSeleccionados.add(pedidoId);
+        $(this).closest('tr').addClass('selected-pedido');
+      } else {
+        pedidosSeleccionados.delete(pedidoId);
+        $(this).closest('tr').removeClass('selected-pedido');
+      }
+      actualizarContador();
+    });
+    
+    // Agregar eventos a los botones de detalles
+    $('#tablaPedidos').off('click', '.btn-detalles').on('click', '.btn-detalles', function() {
+      const pedidoId = parseInt($(this).data('pedido-id'));
+      mostrarDetallesCliente(pedidoId);
+    });
+    
+    // Restaurar estado de checkboxes seleccionados
+    pedidosSeleccionados.forEach(pedidoId => {
+      const checkbox = $(`.pedido-checkbox[data-pedido-id="${pedidoId}"]`);
+      if (checkbox.length) {
+        checkbox.prop('checked', true);
+        checkbox.closest('tr').addClass('selected-pedido');
+      }
+    });
+  }, 100);
+}
+
+function toggleSelectAll() {
+  const selectAll = document.getElementById('selectAll');
+  
+  // Usar jQuery para manejar checkboxes en DataTables
+  $('#tablaPedidos .pedido-checkbox').each(function() {
+    $(this).prop('checked', selectAll.checked);
+    const pedidoId = parseInt($(this).data('pedido-id'));
+    
+    if (selectAll.checked) {
+      pedidosSeleccionados.add(pedidoId);
+      $(this).closest('tr').addClass('selected-pedido');
+    } else {
+      pedidosSeleccionados.delete(pedidoId);
+      $(this).closest('tr').removeClass('selected-pedido');
+    }
+  });
+  
+  actualizarContador();
+}
+
+function actualizarContador() {
+  const btnAsociar = document.getElementById('btnAsociarCamion');
+  const cantidad = pedidosSeleccionados.size;
+  
+  if (btnAsociar) {
+    // Actualizar el texto del botón directamente
+    const btnText = `<i class="fas fa-truck"></i> Asociar Pedidos al Camión (<span id="contadorPedidos">${cantidad}</span> pedidos seleccionados)`;
+    btnAsociar.innerHTML = btnText;
+  }
+  
+  validarAsociar();
+}
+
+function validarAsociar() {
+  const btnAsociar = document.getElementById('btnAsociarCamion');
+  const selectCamion = document.getElementById('selectCamion');
+  const cantidad = pedidosSeleccionados.size;
+  
+  if (cantidad > 0 && selectCamion.value) {
+    btnAsociar.disabled = false;
+  } else {
+    btnAsociar.disabled = true;
+  }
+}
+
+function mostrarDetallesCliente(pedidoId) {
+  const pedido = pedidosData.find(p => p.id === pedidoId);
+  if (!pedido) return;
+  
+  const content = document.getElementById('modalClienteContent');
+  content.innerHTML = `
+    <div class="row">
+      <div class="col-md-6">
+        <h5><i class="fas fa-user"></i> Información del Cliente</h5>
+        <table class="table table-sm">
+          <tr>
+            <th>Nombre:</th>
+            <td>${pedido.cliente_nombre || '-'}</td>
+          </tr>
+          <tr>
+            <th>Dirección:</th>
+            <td>${pedido.direccion || '-'}</td>
+          </tr>
+          <tr>
+            <th>Zona:</th>
+            <td>${pedido.zona || '-'}</td>
+          </tr>
+          <tr>
+            <th>Teléfono Principal:</th>
+            <td>${pedido.telefono_principal || '-'}</td>
+          </tr>
+          <tr>
+            <th>Teléfono Secundario:</th>
+            <td>${pedido.telefono_secundario || '-'}</td>
+          </tr>
+          <tr>
+            <th>Correo:</th>
+            <td>${pedido.correo || '-'}</td>
+          </tr>
+          ${pedido.cliente_notas ? `
+          <tr>
+            <th>Notas:</th>
+            <td>${pedido.cliente_notas}</td>
+          </tr>
+          ` : ''}
+        </table>
+      </div>
+      <div class="col-md-6">
+        <h5><i class="fas fa-shopping-cart"></i> Información del Pedido</h5>
+        <table class="table table-sm">
+          <tr>
+            <th>N° Pedido:</th>
+            <td>${pedido.numero_pedido || '-'}</td>
+          </tr>
+          <tr>
+            <th>Fecha:</th>
+            <td>${pedido.fecha_registro ? new Date(pedido.fecha_registro).toLocaleString('es-ES') : '-'}</td>
+          </tr>
+          <tr>
+            <th>Total:</th>
+            <td><strong>Bs. ${parseFloat(pedido.total || 0).toFixed(2)}</strong></td>
+          </tr>
+          <tr>
+            <th>Vendedor:</th>
+            <td>${pedido.vendedor_nombre || '-'}</td>
+          </tr>
+          ${pedido.notas_pedido ? `
+          <tr>
+            <th>Notas del Pedido:</th>
+            <td>${pedido.notas_pedido}</td>
+          </tr>
+          ` : ''}
+        </table>
+        ${pedido.latitud && pedido.longitud ? `
+        <div class="mt-3">
+          <strong>Coordenadas GPS:</strong><br>
+          <small>Lat: ${pedido.latitud}, Lng: ${pedido.longitud}</small>
+        </div>
+        ` : ''}
+      </div>
+    </div>
+    ${pedido.productos && pedido.productos.length > 0 ? `
+    <div class="row mt-3">
+      <div class="col-md-12">
+        <h5><i class="fas fa-box"></i> Productos del Pedido</h5>
+        <table class="table table-sm table-bordered">
+          <thead>
+            <tr>
+              <th>Producto</th>
+              <th>Cantidad</th>
+              <th>Precio Unit.</th>
+              <th>Subtotal</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${pedido.productos.map(prod => `
+            <tr>
+              <td>${prod.nombre || '-'}</td>
+              <td>${prod.cantidad || 0}</td>
+              <td>Bs. ${parseFloat(prod.precio || 0).toFixed(2)}</td>
+              <td>Bs. ${parseFloat((prod.cantidad || 0) * (prod.precio || 0)).toFixed(2)}</td>
+            </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    ` : ''}
+  `;
+  
+  $('#modalDetallesCliente').modal('show');
+}
+
+async function asociarCamion() {
+  if (pedidosSeleccionados.size === 0) {
+    mostrarError('Por favor, seleccione al menos un pedido');
+    return;
+  }
+  
+  const camionId = document.getElementById('selectCamion').value;
+  if (!camionId) {
+    mostrarError('Por favor, seleccione un camión');
+    return;
+  }
+  
+  // Obtener la placa del camión seleccionado
+  const selectCamion = document.getElementById('selectCamion');
+  const camionText = selectCamion.options[selectCamion.selectedIndex].text;
+  const placa = camionText.split(' - ')[0];
+  
+  // Obtener datos de los pedidos seleccionados
+  const pedidosIds = Array.from(pedidosSeleccionados);
+  
+  const datos = {
+    camion_id: camionId,
+    placa_camion: placa,
+    pedidos: pedidosIds
+  };
+  
+  const btn = document.getElementById('btnAsociarCamion');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Asociando...';
+  
+  // Ocultar alertas
+  document.getElementById('successAlert').classList.add('d-none');
+  document.getElementById('errorAlert').classList.add('d-none');
+  
+  try {
+    const response = await fetch('api/asociar_pedidos_camion.php', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(datos)
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    const text = await response.text();
+    let result;
+    try {
+      result = JSON.parse(text);
+    } catch (e) {
+      console.error('Error al parsear JSON:', text);
+      throw new Error('Respuesta del servidor no válida: ' + text.substring(0, 100));
+    }
+    
+    if (result.success) {
+      document.getElementById('successAlert').classList.remove('d-none');
+      // Limpiar selección
+      pedidosSeleccionados.clear();
+      document.getElementById('selectAll').checked = false;
+      $('.pedido-checkbox').prop('checked', false).closest('tr').removeClass('selected-pedido');
+      actualizarContador();
+      // Recargar pedidos
+      cargarPedidos();
+    } else {
+      mostrarError(result.message || 'Error al asociar los pedidos al camión');
+    }
+  } catch (error) {
+    console.error('Error al asociar pedidos:', error);
+    const errorMessage = error.message || 'Error de conexión al asociar los pedidos al camión';
+    mostrarError(errorMessage);
+  } finally {
+    btn.disabled = false;
+    actualizarContador(); // Esto actualizará el botón con el contador correcto
+  }
+}
+
+function mostrarError(mensaje) {
+  document.getElementById('errorMessage').textContent = mensaje;
+  document.getElementById('errorAlert').classList.remove('d-none');
+  document.getElementById('errorAlert').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+async function cargarCamionesConPedidos() {
+  const btn = document.getElementById('btnCargarCamiones');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Cargando...';
+
+  const container = document.getElementById('camionesContainer');
+  
+  try {
+    const response = await fetch('api/get_camiones_con_pedidos.php');
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      mostrarCamionesConPedidos(result.camiones || []);
+    } else {
+      container.innerHTML = `<div class="alert alert-warning">${result.message || 'No se pudieron cargar los camiones'}</div>`;
+    }
+  } catch (error) {
+    console.error('Error al cargar camiones con pedidos:', error);
+    container.innerHTML = `<div class="alert alert-danger">Error al cargar los camiones: ${error.message}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-sync"></i> Cargar Camiones';
+  }
+}
+
+function mostrarCamionesConPedidos(camiones) {
+  const container = document.getElementById('camionesContainer');
+  
+  if (!camiones || camiones.length === 0) {
+    container.innerHTML = '<div class="alert alert-info"><i class="fas fa-info-circle"></i> No hay camiones con pedidos asociados</div>';
+    return;
+  }
+  
+  let html = '';
+  
+  camiones.forEach((item, index) => {
+    const camion = item.camion;
+    const pedidos = item.pedidos;
+    const totalMonto = parseFloat(item.total_monto || 0).toFixed(2);
+    
+    html += `
+      <div class="card card-outline card-success mb-3">
+        <div class="card-header">
+          <h3 class="card-title">
+            <i class="fas fa-truck"></i> <strong>${camion.placa}</strong>
+            ${camion.descripcion ? ` - ${camion.descripcion}` : ''}
+          </h3>
+          <div class="card-tools">
+            <span class="badge badge-success badge-lg">${item.total_pedidos} Pedido(s)</span>
+            <span class="badge badge-info badge-lg ml-2">Total: Bs. ${totalMonto}</span>
+            <button type="button" class="btn btn-sm btn-primary ml-2" onclick="imprimirHojaRuta('${camion.placa}', ${camion.id})">
+              <i class="fas fa-print"></i> Imprimir Hoja de Ruta
+            </button>
+            <button type="button" class="btn btn-sm btn-secondary" data-toggle="collapse" data-target="#collapseCamion${camion.id}">
+              <i class="fas fa-chevron-down"></i>
+            </button>
+          </div>
+        </div>
+        <div class="collapse show" id="collapseCamion${camion.id}">
+          <div class="card-body">
+            <div class="table-responsive">
+              <table class="table table-bordered table-sm table-hover">
+                <thead class="thead-light">
+                  <tr>
+                    <th>N° Pedido</th>
+                    <th>Fecha</th>
+                    <th>Cliente</th>
+                    <th>Dirección</th>
+                    <th>Zona</th>
+                    <th>Teléfono</th>
+                    <th>Total</th>
+                    <th>Vendedor</th>
+                    <th>Estado</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${pedidos.map(pedido => {
+                    const fechaRegistro = pedido.fecha_registro ? new Date(pedido.fecha_registro).toLocaleDateString('es-ES') : '-';
+                    const total = parseFloat(pedido.total || 0).toFixed(2);
+                    const estadoClass = pedido.estado_pedido === 'pendiente' ? 'warning' : 'info';
+                    return `
+                      <tr>
+                        <td><strong>${pedido.numero_pedido || '-'}</strong></td>
+                        <td>${fechaRegistro}</td>
+                        <td>${pedido.cliente_nombre || '-'}</td>
+                        <td>${pedido.direccion || '-'}</td>
+                        <td>${pedido.zona || '-'}</td>
+                        <td>${pedido.telefono_principal || '-'}</td>
+                        <td><strong>Bs. ${total}</strong></td>
+                        <td>${pedido.vendedor_nombre || '-'}</td>
+                        <td><span class="badge badge-${estadoClass}">${pedido.estado_pedido || '-'}</span></td>
+                        <td>
+                          <button class="btn btn-sm btn-info btn-detalles-camion" data-pedido-id="${pedido.id}">
+                            <i class="fas fa-info-circle"></i> Detalles
+                          </button>
+                        </td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  });
+  
+  container.innerHTML = html;
+  
+  // Agregar eventos a los botones de detalles
+  setTimeout(function() {
+    $('.btn-detalles-camion').off('click').on('click', function() {
+      const pedidoId = parseInt($(this).data('pedido-id'));
+      mostrarDetallesClienteDesdeLista(pedidoId);
+    });
+  }, 100);
+}
+
+async function mostrarDetallesClienteDesdeLista(pedidoId) {
+  // Cargar los detalles del pedido desde el servidor
+  try {
+    const response = await fetch('api/get_pedidos_para_hoja_ruta.php');
+    const result = await response.json();
+    
+    if (result.success && result.pedidos) {
+      const pedido = result.pedidos.find(p => p.id === pedidoId);
+      if (pedido) {
+        // Actualizar pedidosData temporalmente para usar mostrarDetallesCliente
+        const pedidosDataAnterior = pedidosData;
+        pedidosData = result.pedidos;
+        mostrarDetallesCliente(pedidoId);
+        // Restaurar pedidosData original si tenía datos
+        if (pedidosDataAnterior.length > 0) {
+          pedidosData = pedidosDataAnterior;
+        }
+      } else {
+        mostrarError('No se encontró el pedido solicitado');
+      }
+    }
+  } catch (error) {
+    console.error('Error al cargar detalles del pedido:', error);
+    mostrarError('Error al cargar los detalles del pedido');
+  }
+}
+
+function imprimirHojaRuta(placa, camionId) {
+  // Abrir ventana de impresión con la hoja de ruta del camión
+  window.open(`imprimir-hoja-ruta.html?camion_id=${camionId}&placa=${encodeURIComponent(placa)}`, '_blank');
+}
+</script>
+</body>
+</html>
+

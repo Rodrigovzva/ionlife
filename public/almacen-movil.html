@@ -92,6 +92,12 @@
                   <p>Histórico de Pedidos</p>
                 </a>
               </li>
+              <li class="nav-item">
+                <a href="hoja-rutas.html" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Hoja de Rutas</p>
+                </a>
+              </li>
             </ul>
           </li>
           <li class="nav-item">
@@ -237,28 +243,29 @@
           </div>
         </div>
 
-        <!-- Stock Disponible -->
-        <div class="card card-success">
+        <!-- Gestión de Camiones -->
+        <div class="card card-warning">
           <div class="card-header">
-            <h3 class="card-title"><i class="fas fa-boxes"></i> Stock Disponible para Transferir</h3>
+            <h3 class="card-title"><i class="fas fa-truck"></i> Gestión de Camiones</h3>
+            <div class="card-tools">
+              <button type="button" class="btn btn-sm btn-success" data-toggle="modal" data-target="#modalAgregarCamion">
+                <i class="fas fa-plus"></i> Agregar Camión
+              </button>
+            </div>
           </div>
           <div class="card-body">
             <div class="table-responsive">
-              <table id="tablaStockDisponible" class="table table-bordered table-striped">
+              <table id="tablaCamiones" class="table table-bordered table-striped table-hover">
                 <thead>
                   <tr>
-                    <th>Tamaño (ml)</th>
-                    <th>Cantidad Disponible</th>
-                    <th>Litros Disponibles</th>
-                    <th>Acciones</th>
+                    <th>ID</th>
+                    <th>Placa</th>
+                    <th>Descripción</th>
+                    <th>Estado</th>
+                    <th>Fecha Registro</th>
                   </tr>
                 </thead>
-                <tbody id="tbodyStockDisponible">
-                  <tr>
-                    <td colspan="4" class="text-center">
-                      <i class="fas fa-spinner fa-spin"></i> Cargando stock disponible...
-                    </td>
-                  </tr>
+                <tbody>
                 </tbody>
               </table>
             </div>
@@ -332,6 +339,7 @@
                 <thead>
                   <tr>
                     <th>Fecha Transferencia</th>
+                    <th>Placa Camión</th>
                     <th>Tamaño (ml)</th>
                     <th>Cantidad</th>
                     <th>Litros</th>
@@ -356,6 +364,45 @@
   </footer>
 </div>
 
+<!-- Modal Agregar Camión -->
+<div class="modal fade" id="modalAgregarCamion" tabindex="-1" role="dialog">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h4 class="modal-title"><i class="fas fa-truck"></i> Agregar Camión</h4>
+        <button type="button" class="close" data-dismiss="modal">
+          <span>&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-success d-none" id="successAlertCamion">
+          <i class="icon fas fa-check"></i> Camión agregado correctamente.
+        </div>
+        <div class="alert alert-danger d-none" id="errorAlertCamion">
+          <i class="icon fas fa-ban"></i> <span id="errorMessageCamion"></span>
+        </div>
+        <form id="formCamion">
+          <div class="form-group">
+            <label for="placaCamion">Placa <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="placaCamion" name="placa" required placeholder="Ej: ABC-123">
+            <small class="form-text text-muted">Ingrese la placa del camión</small>
+          </div>
+          <div class="form-group">
+            <label for="descripcionCamion">Descripción</label>
+            <textarea class="form-control" id="descripcionCamion" name="descripcion" rows="2" placeholder="Descripción del camión (opcional)"></textarea>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="btnGuardarCamion">
+          <i class="fas fa-save"></i> Guardar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- jQuery -->
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <!-- Bootstrap 4 -->
@@ -369,15 +416,27 @@
 
 <script>
 let tablaTransferencias;
+let tablaCamiones;
 let transferenciasData = [];
+let camionesData = [];
 
 document.addEventListener('DOMContentLoaded', function() {
   checkSession();
   inicializarTabla();
+  inicializarTablaCamiones();
+  cargarCamiones();
   cargarTransferencias();
   
   document.getElementById('btnBuscar').addEventListener('click', aplicarFiltros);
   document.getElementById('btnExportar').addEventListener('click', exportarTransferencias);
+  document.getElementById('btnGuardarCamion').addEventListener('click', guardarCamion);
+  
+  // Limpiar formulario cuando se cierra el modal
+  $('#modalAgregarCamion').on('hidden.bs.modal', function () {
+    document.getElementById('formCamion').reset();
+    document.getElementById('successAlertCamion').classList.add('d-none');
+    document.getElementById('errorAlertCamion').classList.add('d-none');
+  });
   
   document.getElementById('logoutBtn')?.addEventListener('click', function(e) {
     e.preventDefault();
@@ -394,6 +453,112 @@ function inicializarTabla() {
     pageLength: 25,
     responsive: true
   });
+}
+
+function inicializarTablaCamiones() {
+  tablaCamiones = $('#tablaCamiones').DataTable({
+    language: {
+      url: 'https://cdn.datatables.net/plug-ins/1.13.7/i18n/es-ES.json'
+    },
+    order: [[1, 'asc']],
+    pageLength: 10,
+    responsive: true
+  });
+}
+
+async function cargarCamiones() {
+  try {
+    const response = await fetch('api/get_camiones.php');
+    const data = await response.json();
+    
+    if (data.success) {
+      camionesData = data.camiones || [];
+      actualizarTablaCamiones();
+    } else {
+      console.error('Error al cargar camiones:', data.message);
+    }
+  } catch (error) {
+    console.error('Error:', error);
+  }
+}
+
+function actualizarTablaCamiones() {
+  if (!tablaCamiones) return;
+  
+  tablaCamiones.clear();
+  
+  camionesData.forEach(camion => {
+    const fechaRegistro = new Date(camion.fecha_registro).toLocaleDateString('es-ES');
+    const estado = camion.activo == 1 
+      ? '<span class="badge badge-success">Activo</span>' 
+      : '<span class="badge badge-secondary">Inactivo</span>';
+    
+    tablaCamiones.row.add([
+      camion.id,
+      '<strong>' + camion.placa + '</strong>',
+      camion.descripcion || '<span class="text-muted">-</span>',
+      estado,
+      fechaRegistro
+    ]);
+  });
+  
+  tablaCamiones.draw();
+}
+
+async function guardarCamion() {
+  const placa = document.getElementById('placaCamion').value.trim();
+  const descripcion = document.getElementById('descripcionCamion').value.trim();
+  
+  if (!placa) {
+    mostrarErrorCamion('La placa del camión es requerida');
+    return;
+  }
+  
+  // Ocultar alertas
+  document.getElementById('successAlertCamion').classList.add('d-none');
+  document.getElementById('errorAlertCamion').classList.add('d-none');
+  
+  const btn = document.getElementById('btnGuardarCamion');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando...';
+  
+  try {
+    const response = await fetch('api/guardar_camion.php', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        placa: placa,
+        descripcion: descripcion
+      })
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      document.getElementById('successAlertCamion').classList.remove('d-none');
+      document.getElementById('formCamion').reset();
+      // Cerrar modal después de un momento
+      setTimeout(() => {
+        $('#modalAgregarCamion').modal('hide');
+        cargarCamiones();
+      }, 1000);
+    } else {
+      mostrarErrorCamion(result.message || 'Error al guardar el camión');
+    }
+  } catch (error) {
+    console.error('Error:', error);
+    mostrarErrorCamion('Error de conexión al guardar el camión');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-save"></i> Guardar';
+  }
+}
+
+function mostrarErrorCamion(mensaje) {
+  document.getElementById('errorMessageCamion').textContent = mensaje;
+  document.getElementById('errorAlertCamion').classList.remove('d-none');
 }
 
 async function cargarTransferencias() {
@@ -416,6 +581,7 @@ async function cargarTransferencias() {
     alert('Error de conexión al cargar transferencias');
   }
 }
+
 
 function aplicarFiltros() {
   const fechaDesde = document.getElementById('filtro_fecha_desde').value;
@@ -456,9 +622,11 @@ function actualizarTabla(transferencias = transferenciasData) {
   transferencias.forEach(transf => {
     const fechaTransferencia = new Date(transf.fecha_transferencia).toLocaleString('es-ES');
     const litros = parseFloat(transf.litros || 0);
+    const placaCamion = transf.placa_camion || '<span class="text-muted">-</span>';
     
     tablaTransferencias.row.add([
       fechaTransferencia,
+      placaCamion,
       transf.tamano.toLocaleString() + ' ml',
       '<strong>' + transf.cantidad + '</strong>',
       litros.toFixed(2) + ' L',
@@ -488,11 +656,11 @@ function actualizarResumen() {
 }
 
 function exportarTransferencias() {
-  let csv = 'Fecha Transferencia,Tamaño (ml),Cantidad,Litros,Operador,Observaciones\n';
+  let csv = 'Fecha Transferencia,Placa Camión,Tamaño (ml),Cantidad,Litros,Operador,Observaciones\n';
   
   transferenciasData.forEach(transf => {
     const fechaTransferencia = new Date(transf.fecha_transferencia).toLocaleString('es-ES');
-    csv += `"${fechaTransferencia}",${transf.tamano},${transf.cantidad},${transf.litros},"${transf.operador || ''}","${transf.observaciones || ''}"\n`;
+    csv += `"${fechaTransferencia}","${transf.placa_camion || ''}",${transf.tamano},${transf.cantidad},${transf.litros},"${transf.operador || ''}","${transf.observaciones || ''}"\n`;
   });
   
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });

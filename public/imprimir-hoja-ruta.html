@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>IONLIFE - Hoja de Ruta</title>
+  
+  <!-- Bootstrap 4 -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <style>
+    @media print {
+      .no-print {
+        display: none !important;
+      }
+      @page {
+        margin: 1cm;
+      }
+      body {
+        font-size: 12pt;
+      }
+    }
+    
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+    }
+    
+    .header-print {
+      border-bottom: 3px solid #000;
+      padding-bottom: 15px;
+      margin-bottom: 20px;
+    }
+    
+    .camion-info {
+      background-color: #f8f9fa;
+      padding: 15px;
+      border-radius: 5px;
+      margin-bottom: 20px;
+    }
+    
+    .pedido-item {
+      border: 1px solid #dee2e6;
+      border-radius: 5px;
+      padding: 15px;
+      margin-bottom: 15px;
+      page-break-inside: avoid;
+    }
+    
+    .pedido-header {
+      background-color: #007bff;
+      color: white;
+      padding: 10px;
+      border-radius: 5px 5px 0 0;
+      margin: -15px -15px 15px -15px;
+    }
+    
+    .productos-table {
+      margin-top: 10px;
+    }
+    
+    .total-section {
+      background-color: #28a745;
+      color: white;
+      padding: 15px;
+      border-radius: 5px;
+      margin-top: 20px;
+      text-align: right;
+    }
+    
+    .info-row {
+      margin-bottom: 10px;
+    }
+    
+    .info-label {
+      font-weight: bold;
+      display: inline-block;
+      width: 150px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container-fluid">
+    <!-- Botones de acción -->
+    <div class="row mb-3 no-print">
+      <div class="col-12">
+        <button class="btn btn-primary" onclick="window.print()">
+          <i class="fas fa-print"></i> Imprimir
+        </button>
+        <button class="btn btn-secondary" onclick="window.close()">
+          <i class="fas fa-times"></i> Cerrar
+        </button>
+      </div>
+    </div>
+
+    <!-- Encabezado -->
+    <div class="header-print">
+      <div class="row">
+        <div class="col-6">
+          <h1><strong>IONLIFE</strong></h1>
+          <h3>Hoja de Ruta</h3>
+        </div>
+        <div class="col-6 text-right">
+          <p><strong>Fecha de Impresión:</strong> <span id="fechaImpresion"></span></p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Información del Camión -->
+    <div class="camion-info">
+      <h4><i class="fas fa-truck"></i> Información del Camión</h4>
+      <div class="row">
+        <div class="col-md-6">
+          <div class="info-row">
+            <span class="info-label">Placa:</span>
+            <span id="camionPlaca"></span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Descripción:</span>
+            <span id="camionDescripcion"></span>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="info-row">
+            <span class="info-label">Total Pedidos:</span>
+            <span id="totalPedidos"></span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Monto Total:</span>
+            <span id="montoTotal"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Lista de Pedidos -->
+    <div id="pedidosContainer">
+      <h4><i class="fas fa-list"></i> Pedidos Asociados</h4>
+      <div id="pedidosList">
+        <!-- Se llenará dinámicamente -->
+      </div>
+    </div>
+
+    <!-- Total -->
+    <div class="total-section">
+      <h3>Total: <span id="totalFinal">Bs. 0.00</span></h3>
+    </div>
+
+    <!-- Pie de página -->
+    <div class="mt-5 text-center">
+      <p class="text-muted">Documento generado automáticamente por el Sistema IONLIFE</p>
+    </div>
+  </div>
+
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script>
+    // Obtener parámetros de la URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const camionId = urlParams.get('camion_id');
+    const placa = urlParams.get('placa');
+
+    // Establecer fecha de impresión
+    document.getElementById('fechaImpresion').textContent = new Date().toLocaleString('es-ES');
+
+    // Cargar datos del camión y pedidos
+    async function cargarHojaRuta() {
+      if (!camionId && !placa) {
+        document.getElementById('pedidosList').innerHTML = '<div class="alert alert-danger">No se especificó el camión</div>';
+        return;
+      }
+
+      try {
+        const response = await fetch('api/get_camiones_con_pedidos.php');
+        const result = await response.json();
+
+        if (result.success && result.camiones) {
+          // Buscar el camión específico
+          let camionData = null;
+          if (camionId) {
+            camionData = result.camiones.find(c => c.camion.id == camionId);
+          } else if (placa) {
+            camionData = result.camiones.find(c => c.camion.placa === placa);
+          }
+
+          if (!camionData) {
+            document.getElementById('pedidosList').innerHTML = '<div class="alert alert-warning">No se encontraron datos para este camión</div>';
+            return;
+          }
+
+          // Mostrar información del camión
+          mostrarCamionInfo(camionData);
+          
+          // Mostrar pedidos
+          mostrarPedidos(camionData.pedidos);
+        } else {
+          document.getElementById('pedidosList').innerHTML = '<div class="alert alert-danger">Error al cargar los datos</div>';
+        }
+      } catch (error) {
+        console.error('Error:', error);
+        document.getElementById('pedidosList').innerHTML = '<div class="alert alert-danger">Error de conexión al cargar los datos</div>';
+      }
+    }
+
+    function mostrarCamionInfo(camionData) {
+      const camion = camionData.camion;
+      const totalPedidos = camionData.total_pedidos;
+      const montoTotal = parseFloat(camionData.total_monto || 0).toFixed(2);
+
+      document.getElementById('camionPlaca').textContent = camion.placa || '-';
+      document.getElementById('camionDescripcion').textContent = camion.descripcion || 'Sin descripción';
+      document.getElementById('totalPedidos').textContent = totalPedidos;
+      document.getElementById('montoTotal').textContent = 'Bs. ' + montoTotal;
+      document.getElementById('totalFinal').textContent = 'Bs. ' + montoTotal;
+    }
+
+    function mostrarPedidos(pedidos) {
+      const container = document.getElementById('pedidosList');
+      
+      if (!pedidos || pedidos.length === 0) {
+        container.innerHTML = '<div class="alert alert-info">No hay pedidos asociados</div>';
+        return;
+      }
+
+      let html = '';
+      
+      pedidos.forEach((pedido, index) => {
+        const fechaRegistro = pedido.fecha_registro ? new Date(pedido.fecha_registro).toLocaleDateString('es-ES') : '-';
+        const total = parseFloat(pedido.total || 0).toFixed(2);
+        
+        // Procesar productos
+        let productosHtml = '';
+        if (pedido.productos && pedido.productos.length > 0) {
+          productosHtml = `
+            <table class="table table-sm table-bordered productos-table">
+              <thead>
+                <tr>
+                  <th>Producto</th>
+                  <th>Cantidad</th>
+                  <th>Precio Unit.</th>
+                  <th>Subtotal</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${pedido.productos.map(prod => `
+                  <tr>
+                    <td>${prod.nombre || '-'}</td>
+                    <td>${prod.cantidad || 0}</td>
+                    <td>Bs. ${parseFloat(prod.precio || 0).toFixed(2)}</td>
+                    <td>Bs. ${parseFloat((prod.cantidad || 0) * (prod.precio || 0)).toFixed(2)}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          `;
+        }
+
+        html += `
+          <div class="pedido-item">
+            <div class="pedido-header">
+              <strong>Pedido #${pedido.numero_pedido || index + 1}</strong>
+            </div>
+            
+            <div class="row">
+              <div class="col-md-6">
+                <h5><i class="fas fa-user"></i> Datos del Cliente</h5>
+                <div class="info-row">
+                  <span class="info-label">Nombre:</span>
+                  <span>${pedido.cliente_nombre || '-'}</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">Dirección:</span>
+                  <span>${pedido.direccion || '-'}</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">Zona:</span>
+                  <span>${pedido.zona || '-'}</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">Teléfono:</span>
+                  <span>${pedido.telefono_principal || '-'}</span>
+                </div>
+                ${pedido.telefono_secundario ? `
+                <div class="info-row">
+                  <span class="info-label">Tel. Secundario:</span>
+                  <span>${pedido.telefono_secundario}</span>
+                </div>
+                ` : ''}
+                ${pedido.correo ? `
+                <div class="info-row">
+                  <span class="info-label">Correo:</span>
+                  <span>${pedido.correo}</span>
+                </div>
+                ` : ''}
+                ${pedido.latitud && pedido.longitud ? `
+                <div class="info-row">
+                  <span class="info-label">Coordenadas GPS:</span>
+                  <span>${pedido.latitud}, ${pedido.longitud}</span>
+                </div>
+                ` : ''}
+              </div>
+              
+              <div class="col-md-6">
+                <h5><i class="fas fa-shopping-cart"></i> Información del Pedido</h5>
+                <div class="info-row">
+                  <span class="info-label">Fecha:</span>
+                  <span>${fechaRegistro}</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">Vendedor:</span>
+                  <span>${pedido.vendedor_nombre || '-'}</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">Estado:</span>
+                  <span class="badge badge-${pedido.estado_pedido === 'pendiente' ? 'warning' : 'info'}">${pedido.estado_pedido || '-'}</span>
+                </div>
+                ${pedido.notas_pedido ? `
+                <div class="info-row">
+                  <span class="info-label">Notas:</span>
+                  <span>${pedido.notas_pedido}</span>
+                </div>
+                ` : ''}
+                ${pedido.cliente_notas ? `
+                <div class="info-row">
+                  <span class="info-label">Notas Cliente:</span>
+                  <span>${pedido.cliente_notas}</span>
+                </div>
+                ` : ''}
+              </div>
+            </div>
+            
+            ${productosHtml}
+            
+            <div class="text-right mt-3">
+              <h4><strong>Total: Bs. ${total}</strong></h4>
+            </div>
+          </div>
+        `;
+      });
+
+      container.innerHTML = html;
+    }
+
+    // Cargar datos al cargar la página
+    document.addEventListener('DOMContentLoaded', cargarHojaRuta);
+  </script>
+</body>
+</html>
+

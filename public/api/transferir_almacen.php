@@ -59,6 +59,7 @@ try {
             produccion_id INT NULL,
             almacen_origen VARCHAR(50) NOT NULL DEFAULT 'produccion',
             almacen_destino VARCHAR(50) NOT NULL,
+            placa_camion VARCHAR(20) NULL,
             cantidad INT NOT NULL,
             tamano INT NOT NULL,
             litros DECIMAL(10, 2) NOT NULL,
@@ -68,7 +69,8 @@ try {
             INDEX idx_produccion (produccion_id),
             INDEX idx_fecha (fecha_transferencia),
             INDEX idx_almacen_destino (almacen_destino),
-            INDEX idx_almacen_origen (almacen_origen)
+            INDEX idx_almacen_origen (almacen_origen),
+            INDEX idx_placa_camion (placa_camion)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
     
@@ -77,6 +79,19 @@ try {
     if (!in_array('almacen_origen', $columns)) {
         $pdo->exec("ALTER TABLE transferencias_almacenes ADD COLUMN almacen_origen VARCHAR(50) NOT NULL DEFAULT 'produccion' AFTER produccion_id");
         $pdo->exec("ALTER TABLE transferencias_almacenes ADD INDEX idx_almacen_origen (almacen_origen)");
+    }
+    
+    // Agregar placa_camion si no existe (migración)
+    if (!in_array('placa_camion', $columns)) {
+        try {
+            $pdo->exec("ALTER TABLE transferencias_almacenes ADD COLUMN placa_camion VARCHAR(20) NULL AFTER almacen_destino");
+            $pdo->exec("CREATE INDEX idx_placa_camion ON transferencias_almacenes(placa_camion)");
+        } catch (PDOException $e) {
+            // Si el índice ya existe, ignorar el error
+            if (strpos($e->getMessage(), 'Duplicate key name') === false) {
+                throw $e;
+            }
+        }
     }
     
     // Permitir produccion_id NULL si no es NULL (migración)
@@ -138,15 +153,19 @@ try {
         ");
         $stmt->execute([$nuevaCantidadDisponible, $nuevoEstado, $produccionId]);
 
+        // Obtener placa del camión si está especificada
+        $placaCamion = !empty($input['placa_camion']) ? trim($input['placa_camion']) : null;
+        
         // Registrar transferencia
         $stmt = $pdo->prepare("
             INSERT INTO transferencias_almacenes 
-            (produccion_id, almacen_origen, almacen_destino, cantidad, tamano, litros, operador, observaciones)
-            VALUES (?, 'produccion', ?, ?, ?, ?, ?, ?)
+            (produccion_id, almacen_origen, almacen_destino, placa_camion, cantidad, tamano, litros, operador, observaciones)
+            VALUES (?, 'produccion', ?, ?, ?, ?, ?, ?, ?)
         ");
         $stmt->execute([
             $produccionId,
             $almacenDestino,
+            $placaCamion,
             $cantidadTransferir,
             $tamano,
             $litrosTransferir,
@@ -179,14 +198,18 @@ try {
         // Calcular litros a transferir
         $litrosTransferir = ($cantidadTransferir * $tamano) / 1000;
 
+        // Obtener placa del camión si está especificada
+        $placaCamion = !empty($input['placa_camion']) ? trim($input['placa_camion']) : null;
+        
         // Registrar transferencia (sin produccion_id para transferencias desde despachos)
         $stmt = $pdo->prepare("
             INSERT INTO transferencias_almacenes 
-            (produccion_id, almacen_origen, almacen_destino, cantidad, tamano, litros, operador, observaciones)
-            VALUES (NULL, 'despachos', ?, ?, ?, ?, ?, ?)
+            (produccion_id, almacen_origen, almacen_destino, placa_camion, cantidad, tamano, litros, operador, observaciones)
+            VALUES (NULL, 'despachos', ?, ?, ?, ?, ?, ?, ?)
         ");
         $stmt->execute([
             $almacenDestino,
+            $placaCamion,
             $cantidadTransferir,
             $tamano,
             $litrosTransferir,
