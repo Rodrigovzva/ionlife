@@ -191,11 +191,6 @@ CREATE TABLE IF NOT EXISTS hoja_ruta_pedidos (
     UNIQUE KEY unique_hoja_pedido (hoja_ruta_id, pedido_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Agregar columnas a la tabla pedidos para asociación con camiones
-ALTER TABLE pedidos 
-ADD COLUMN IF NOT EXISTS camion_id INT NULL AFTER vendedor_id,
-ADD COLUMN IF NOT EXISTS placa_camion VARCHAR(20) NULL AFTER camion_id;
-
--- Crear índices para las nuevas columnas en pedidos
-CREATE INDEX IF NOT EXISTS idx_camion ON pedidos(camion_id);
-CREATE INDEX IF NOT EXISTS idx_placa_camion_pedidos ON pedidos(placa_camion);
+-- NOTA: Las columnas camion_id y placa_camion en la tabla pedidos
+-- se agregan automáticamente mediante el script migrar_base_datos.php
+-- o mediante los endpoints de la API cuando se necesitan
