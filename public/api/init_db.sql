@@ -121,6 +121,7 @@ CREATE TABLE IF NOT EXISTS transferencias_almacenes (
     produccion_id INT NULL,
     almacen_origen VARCHAR(50) NOT NULL DEFAULT 'produccion',
     almacen_destino VARCHAR(50) NOT NULL,
+    placa_camion VARCHAR(20) NULL,
     cantidad INT NOT NULL,
     tamano INT NOT NULL,
     litros DECIMAL(10, 2) NOT NULL,
@@ -131,5 +132,70 @@ CREATE TABLE IF NOT EXISTS transferencias_almacenes (
     INDEX idx_fecha (fecha_transferencia),
     INDEX idx_almacen_destino (almacen_destino),
     INDEX idx_almacen_origen (almacen_origen),
+    INDEX idx_placa_camion (placa_camion),
     FOREIGN KEY (produccion_id) REFERENCES control_produccion(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Tabla de camiones para almacén móvil
+CREATE TABLE IF NOT EXISTS camiones_almacen_movil (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    placa VARCHAR(20) NOT NULL UNIQUE,
+    descripcion VARCHAR(255) NULL,
+    activo TINYINT(1) NOT NULL DEFAULT 1,
+    fecha_registro DATETIME DEFAULT CURRENT_TIMESTAMP,
+    fecha_modificacion DATETIME NULL ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_placa (placa),
+    INDEX idx_activo (activo)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Tabla de hojas de rutas
+CREATE TABLE IF NOT EXISTS hojas_de_rutas (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    numero_hoja VARCHAR(20) NOT NULL UNIQUE,
+    fecha DATE NOT NULL,
+    almacen_movil VARCHAR(100) NULL,
+    vendedor_id INT NULL,
+    estado ENUM('borrador', 'asignada', 'en_ruta', 'completada', 'cancelada') NOT NULL DEFAULT 'borrador',
+    total_pedidos INT NOT NULL DEFAULT 0,
+    total_paradas INT NOT NULL DEFAULT 0,
+    observaciones TEXT NULL,
+    fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP,
+    fecha_asignacion DATETIME NULL,
+    fecha_inicio DATETIME NULL,
+    fecha_fin DATETIME NULL,
+    INDEX idx_fecha (fecha),
+    INDEX idx_estado (estado),
+    INDEX idx_numero_hoja (numero_hoja),
+    INDEX idx_vendedor (vendedor_id),
+    FOREIGN KEY (vendedor_id) REFERENCES usuarios(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Tabla de pedidos en hojas de rutas
+CREATE TABLE IF NOT EXISTS hoja_ruta_pedidos (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    hoja_ruta_id INT NOT NULL,
+    pedido_id INT NOT NULL,
+    orden_secuencia INT NOT NULL,
+    cliente_id INT NOT NULL,
+    estado ENUM('pendiente', 'en_ruta', 'entregado', 'no_entregado') NOT NULL DEFAULT 'pendiente',
+    fecha_entrega DATETIME NULL,
+    observaciones TEXT NULL,
+    fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_hoja_ruta (hoja_ruta_id),
+    INDEX idx_pedido (pedido_id),
+    INDEX idx_cliente (cliente_id),
+    INDEX idx_orden (hoja_ruta_id, orden_secuencia),
+    FOREIGN KEY (hoja_ruta_id) REFERENCES hojas_de_rutas(id) ON DELETE CASCADE,
+    FOREIGN KEY (pedido_id) REFERENCES pedidos(id) ON DELETE CASCADE,
+    FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE CASCADE,
+    UNIQUE KEY unique_hoja_pedido (hoja_ruta_id, pedido_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Agregar columnas a la tabla pedidos para asociación con camiones
+ALTER TABLE pedidos 
+ADD COLUMN IF NOT EXISTS camion_id INT NULL AFTER vendedor_id,
+ADD COLUMN IF NOT EXISTS placa_camion VARCHAR(20) NULL AFTER camion_id;
+
+-- Crear índices para las nuevas columnas en pedidos
+CREATE INDEX IF NOT EXISTS idx_camion ON pedidos(camion_id);
+CREATE INDEX IF NOT EXISTS idx_placa_camion_pedidos ON pedidos(placa_camion);
