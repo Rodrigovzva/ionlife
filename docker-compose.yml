@@ -1,0 +1,36 @@
+services:
+  backend:
+    build: ./backend
+    container_name: ionlife_backend
+    environment:
+      PORT: 18081
+      DB_HOST: host.docker.internal
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASSWORD: Rvel8080Ipv6**
+      DB_NAME: ionlifebd
+      JWT_SECRET: super_secret_change_me
+      ADMIN_EMAIL: admin@ionlife.local
+      ADMIN_PASSWORD: Admin123!
+    ports:
+      - "18081:18081"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - ionlife_net
+
+  frontend:
+    build: ./frontend
+    container_name: ionlife_frontend
+    environment:
+      VITE_API_URL: http://10.0.0.3:18081
+    ports:
+      - "18080:18080"
+    depends_on:
+      - backend
+    networks:
+      - ionlife_net
+
+networks:
+  ionlife_net:
+    driver: bridge
