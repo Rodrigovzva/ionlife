@@ -41,6 +41,7 @@ export default function Orders() {
     customer_type: "",
     address_text: "",
     address_id: "",
+    scheduled_date: "",
   });
   const [items, setItems] = useState([
     {
@@ -166,6 +167,7 @@ export default function Orders() {
       await api.post("/api/orders", {
         customer_id: Number(form.customer_id),
         address_id: addressId,
+        scheduled_date: form.scheduled_date || null,
         items: cleanItems,
       });
       setOrderSuccess("Pedido creado correctamente.");
@@ -175,6 +177,7 @@ export default function Orders() {
         customer_type: "",
         address_text: "",
         address_id: "",
+        scheduled_date: "",
       });
       setItems([
         {
@@ -492,6 +495,14 @@ export default function Orders() {
               value={form.address_text}
               readOnly
             />
+            <input
+              type="date"
+              placeholder="Fecha programada"
+              value={form.scheduled_date}
+              onChange={(e) =>
+                setForm({ ...form, scheduled_date: e.target.value })
+              }
+            />
           </div>
           {addressHint && <div className="tag">{addressHint}</div>}
           {orderError && <div className="error">{orderError}</div>}
@@ -622,6 +633,7 @@ export default function Orders() {
               <th>Cliente</th>
               <th>Dirección</th>
               <th>Zona</th>
+              <th>Fecha</th>
               <th>Estado</th>
               <th>Camión</th>
               <th>Actualizar</th>
@@ -634,6 +646,7 @@ export default function Orders() {
                 <td>{o.customer_name}</td>
                 <td>{o.address || "-"}</td>
                 <td>{o.zone || "-"}</td>
+                <td>{o.created_at ? new Date(o.created_at).toLocaleDateString() : "-"}</td>
                 <td><span className={statusClass(o.status)}>{o.status}</span></td>
                 <td>{o.status === "Despachado" ? (o.truck_plate || "-") : "-"}</td>
                 <td>

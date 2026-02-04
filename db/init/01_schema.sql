@@ -127,6 +127,7 @@ CREATE TABLE IF NOT EXISTS pedidos (
   metodo_pago VARCHAR(60),
   prioridad VARCHAR(40) NOT NULL DEFAULT 'Normal',
   notas TEXT,
+  fecha_programada DATE NULL,
   creado_por_usuario_id INT,
   fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE CASCADE,

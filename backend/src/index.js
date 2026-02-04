@@ -107,6 +107,12 @@ async function ensureOrderColumns() {
   if (columns.length === 0) {
     await query("ALTER TABLE pedidos ADD COLUMN creado_por_usuario_id INT NULL");
   }
+  const programada = await query(
+    "SHOW COLUMNS FROM pedidos LIKE 'fecha_programada'"
+  );
+  if (programada.length === 0) {
+    await query("ALTER TABLE pedidos ADD COLUMN fecha_programada DATE NULL");
+  }
   const fk = await query(
     "SELECT CONSTRAINT_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'pedidos' AND COLUMN_NAME = 'creado_por_usuario_id' AND REFERENCED_TABLE_NAME = 'usuarios'"
   );
@@ -616,14 +622,14 @@ app.post(
 
 app.get("/api/orders", requireRole(ACCESS.orders), async (_req, res) => {
   const rows = await query(
-    "SELECT o.id, o.cliente_id as customer_id, o.estado as status, o.metodo_pago as payment_method, o.prioridad as priority, o.notas as notes, o.fecha_creacion as created_at, c.nombre_completo as customer_name, c.direccion as address, c.zona as zone, cam.placa as truck_plate FROM pedidos o JOIN clientes c ON c.id = o.cliente_id LEFT JOIN entregas e ON e.pedido_id = o.id LEFT JOIN camiones cam ON cam.id = e.camion_id ORDER BY o.id DESC"
+    "SELECT o.id, o.cliente_id as customer_id, o.estado as status, o.metodo_pago as payment_method, o.prioridad as priority, o.notas as notes, o.fecha_programada as scheduled_date, o.fecha_creacion as created_at, c.nombre_completo as customer_name, c.direccion as address, c.zona as zone, cam.placa as truck_plate FROM pedidos o JOIN clientes c ON c.id = o.cliente_id LEFT JOIN entregas e ON e.pedido_id = o.id LEFT JOIN camiones cam ON cam.id = e.camion_id ORDER BY o.id DESC"
   );
   res.json(rows);
 });
 
 app.get("/api/orders/:id", requireRole(ACCESS.orders), async (req, res) => {
   const [order] = await query(
-    "SELECT id, cliente_id, direccion_id, estado as status, metodo_pago as payment_method, prioridad as priority, notas as notes, fecha_creacion as created_at FROM pedidos WHERE id = ?",
+    "SELECT id, cliente_id, direccion_id, estado as status, metodo_pago as payment_method, prioridad as priority, notas as notes, fecha_programada as scheduled_date, fecha_creacion as created_at FROM pedidos WHERE id = ?",
     [req.params.id]
   );
   if (!order) {
@@ -647,6 +653,7 @@ app.post("/api/orders", requireRole(ACCESS.orders), async (req, res) => {
     payment_method,
     priority,
     notes,
+    scheduled_date,
     items,
   } = req.body || {};
   if (!customer_id || !address_id || !items || items.length === 0) {
@@ -745,7 +752,7 @@ app.post("/api/orders", requireRole(ACCESS.orders), async (req, res) => {
     });
   }
   const result = await query(
-    "INSERT INTO pedidos (cliente_id, direccion_id, estado, metodo_pago, prioridad, notas, creado_por_usuario_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    "INSERT INTO pedidos (cliente_id, direccion_id, estado, metodo_pago, prioridad, notas, fecha_programada, creado_por_usuario_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
     [
       customer_id,
       address_id,
@@ -753,6 +760,7 @@ app.post("/api/orders", requireRole(ACCESS.orders), async (req, res) => {
       payment_method || null,
       priority || "Normal",
       notes || null,
+      scheduled_date || null,
       req.user?.id || null,
     ]
   );
