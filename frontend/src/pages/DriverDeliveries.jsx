@@ -3,7 +3,12 @@ import api from "../api";
 
 function statusClass(status) {
   if (!status) return "tag";
-  return `tag status-${status.toLowerCase().replace(/\s+/g, "_")}`;
+  const normalized = status
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, "_");
+  return `tag status-${normalized}`;
 }
 
 export default function DriverDeliveries() {
@@ -98,7 +103,6 @@ export default function DriverDeliveries() {
                       }
                     >
                       <option value="">Cambiar estado</option>
-                      <option>En ruta</option>
                       <option>Entregado</option>
                       <option>Cancelado</option>
                     </select>
@@ -149,7 +153,7 @@ export default function DriverDeliveries() {
               <tr key={s.pedido_id}>
                 <td>{s.pedido_id}</td>
                 <td>{s.cliente}</td>
-                <td><span className="tag">{s.estado_entrega}</span></td>
+                <td><span className={statusClass(s.estado_entrega)}>{s.estado_entrega}</span></td>
                 <td>{s.entregado_en ? new Date(s.entregado_en).toLocaleString() : "-"}</td>
                 <td>{s.camion}</td>
                 <td>{s.repartidor}</td>

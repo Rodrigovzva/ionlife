@@ -17,19 +17,23 @@ export default function Nav({ user, onLogout }) {
       <div className="container nav-inner">
         <Link className="nav-brand" to="/">Ionlife</Link>
         <div className="nav-links">
-          <Link to="/">Inicio</Link>
-          <Link to="/clientes">Clientes</Link>
-          <Link to="/productos">Productos</Link>
-          <Link to="/almacenes">Almacenes</Link>
-          <Link to="/pedidos">Pedidos</Link>
-          <Link to="/logistica">Logística</Link>
-          <Link to="/reportes">Reportes</Link>
-          {showDeliveries && <Link to="/mis-entregas">Mis entregas</Link>}
-          {isAdmin && <Link to="/admin">Administración</Link>}
+          <Link className="nav-link" to="/">Inicio</Link>
+          <Link className="nav-link" to="/clientes">Clientes</Link>
+          <Link className="nav-link" to="/productos">Productos</Link>
+          <Link className="nav-link" to="/almacenes">Almacenes</Link>
+          <Link className="nav-link" to="/pedidos">Pedidos</Link>
+          <Link className="nav-link" to="/logistica">Logística</Link>
+          <Link className="nav-link" to="/reportes">Reportes</Link>
+          {showDeliveries && (
+            <Link className="nav-link" to="/mis-entregas">Mis entregas</Link>
+          )}
+          {isAdmin && (
+            <Link className="nav-link" to="/admin">Administración</Link>
+          )}
         </div>
         <div className="nav-user">
-          <span>{user?.email}</span>
-          <button className="btn btn-outline" onClick={handleLogout}>
+          <span className="nav-user-name">{user?.email}</span>
+          <button className="btn btn-outline nav-logout" onClick={handleLogout}>
             Salir
           </button>
         </div>

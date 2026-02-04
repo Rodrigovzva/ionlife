@@ -1,6 +1,16 @@
 import { useEffect, useState } from "react";
 import api from "../api";
 
+function statusClass(status) {
+  if (!status) return "tag";
+  const normalized = status
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, "_");
+  return `tag status-${normalized}`;
+}
+
 export default function Reports() {
   const [sales, setSales] = useState([]);
   const [ordersByStatus, setOrdersByStatus] = useState([]);
@@ -21,15 +31,10 @@ export default function Reports() {
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryError, setSummaryError] = useState("");
   const [trucks, setTrucks] = useState([]);
-  const [drivers, setDrivers] = useState([]);
-  const [sellers, setSellers] = useState([]);
   const [summaryFilters, setSummaryFilters] = useState({
-    from: "",
-    to: "",
-    month: "",
+    date: "",
     truck_id: "",
-    driver_id: "",
-    seller_id: "",
+    status: "",
   });
 
   async function load(nextRange) {
@@ -64,18 +69,12 @@ export default function Reports() {
 
   async function loadSummaryOptions() {
     try {
-      const [t, d, u] = await Promise.all([
+      const [t] = await Promise.all([
         api.get("/api/reports/trucks"),
-        api.get("/api/reports/drivers"),
-        api.get("/api/reports/users"),
       ]);
       setTrucks(t.data || []);
-      setDrivers(d.data || []);
-      setSellers(u.data || []);
     } catch (_err) {
       setTrucks([]);
-      setDrivers([]);
-      setSellers([]);
     }
   }
 
@@ -84,7 +83,13 @@ export default function Reports() {
     setSummaryError("");
     try {
       const params = nextFilters || summaryFilters;
-      const res = await api.get("/api/reports/orders-summary", { params });
+      const dateValue = params.date;
+      const rangeParams = {
+        ...params,
+        from: dateValue || "",
+        to: dateValue || "",
+      };
+      const res = await api.get("/api/reports/orders-summary", { params: rangeParams });
       setSummaryRows(res.data || []);
     } catch (_err) {
       setSummaryError("No se pudo cargar el resumen.");
@@ -176,7 +181,7 @@ export default function Reports() {
             <tbody>
               {ordersByStatus.map((o) => (
                 <tr key={o.status}>
-                  <td><span className="tag">{o.status}</span></td>
+                  <td><span className={statusClass(o.status)}>{o.status}</span></td>
                   <td>{o.total}</td>
                 </tr>
               ))}
@@ -200,7 +205,7 @@ export default function Reports() {
             <tbody>
               {deliveriesByStatus.map((d) => (
                 <tr key={d.status}>
-                  <td><span className="tag">{d.status}</span></td>
+                  <td><span className={statusClass(d.status)}>{d.status}</span></td>
                   <td>{d.total}</td>
                 </tr>
               ))}
@@ -275,30 +280,26 @@ export default function Reports() {
       </div>
       <div className="card" style={{ marginTop: 16 }}>
         <h4>Resumen de estados de pedidos</h4>
-        <div className="form-row">
+        <div className="form-row report-filters">
           <input
             type="date"
-            value={summaryFilters.from}
+            value={summaryFilters.date}
             onChange={(e) =>
-              setSummaryFilters({ ...summaryFilters, from: e.target.value })
+              setSummaryFilters({ ...summaryFilters, date: e.target.value })
             }
           />
-          <input
-            type="date"
-            value={summaryFilters.to}
+          <select
+            value={summaryFilters.status}
             onChange={(e) =>
-              setSummaryFilters({ ...summaryFilters, to: e.target.value })
+              setSummaryFilters({ ...summaryFilters, status: e.target.value })
             }
-          />
-          <input
-            type="month"
-            value={summaryFilters.month}
-            onChange={(e) =>
-              setSummaryFilters({ ...summaryFilters, month: e.target.value })
-            }
-          />
-        </div>
-        <div className="form-row">
+          >
+            <option value="">Todos los estados</option>
+            <option>Pendiente</option>
+            <option>Entregado</option>
+            <option>Cancelado</option>
+            <option>Reprogramado</option>
+          </select>
           <select
             value={summaryFilters.truck_id}
             onChange={(e) =>
@@ -309,32 +310,6 @@ export default function Reports() {
             {trucks.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.plate}
-              </option>
-            ))}
-          </select>
-          <select
-            value={summaryFilters.driver_id}
-            onChange={(e) =>
-              setSummaryFilters({ ...summaryFilters, driver_id: e.target.value })
-            }
-          >
-            <option value="">Todos los repartidores</option>
-            {drivers.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name}
-              </option>
-            ))}
-          </select>
-          <select
-            value={summaryFilters.seller_id}
-            onChange={(e) =>
-              setSummaryFilters({ ...summaryFilters, seller_id: e.target.value })
-            }
-          >
-            <option value="">Todos los vendedores</option>
-            {sellers.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
               </option>
             ))}
           </select>
@@ -370,7 +345,7 @@ export default function Reports() {
                 <td>{s.order_id}</td>
                 <td>{s.customer_name}</td>
                 <td>{s.address || "-"}</td>
-                <td><span className="tag">{s.status}</span></td>
+                <td><span className={statusClass(s.status)}>{s.status}</span></td>
                 <td>{s.created_at ? new Date(s.created_at).toLocaleString() : "-"}</td>
                 <td>{s.truck_plate || "-"}</td>
                 <td>{s.driver_name || "-"}</td>

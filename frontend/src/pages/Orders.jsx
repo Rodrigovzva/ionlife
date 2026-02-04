@@ -3,7 +3,12 @@ import api from "../api";
 
 function statusClass(status) {
   if (!status) return "tag";
-  return `tag status-${status.toLowerCase().replace(/\s+/g, "_")}`;
+  const normalized = status
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, "_");
+  return `tag status-${normalized}`;
 }
 
 export default function Orders() {
@@ -15,8 +20,15 @@ export default function Orders() {
   const [results, setResults] = useState([]);
   const [searchError, setSearchError] = useState("");
   const [orderError, setOrderError] = useState("");
+  const [orderSuccess, setOrderSuccess] = useState("");
   const [products, setProducts] = useState([]);
   const [tiposCliente, setTiposCliente] = useState([]);
+  const [tiposPrecio, setTiposPrecio] = useState([]);
+  const [preciosProducto, setPreciosProducto] = useState([]);
+  const [orderFilters, setOrderFilters] = useState({
+    status: "Pendiente|Reprogramado",
+    month: "",
+  });
   const [addressHint, setAddressHint] = useState("");
   const [form, setForm] = useState({
     customer_id: "",
@@ -26,18 +38,30 @@ export default function Orders() {
     address_id: "",
   });
   const [items, setItems] = useState([
-    { product_id: "", quantity: 1, price: 0, discount_unit: 0 },
+    {
+      product_id: "",
+      quantity: 1,
+      price: 0,
+      discount_unit: 0,
+      price_type_id: "",
+      price_type_name: "",
+    },
   ]);
 
   async function load() {
-    const [resOrders, resProducts, resTipos] = await Promise.all([
+    const [resOrders, resProducts, resTipos, resTiposPrecio, resPreciosProducto] =
+      await Promise.all([
       api.get("/api/orders"),
       api.get("/api/products"),
       api.get("/api/tipos-cliente"),
+      api.get("/api/tipos-precio"),
+      api.get("/api/precios-producto"),
     ]);
     setOrders(resOrders.data);
     setProducts(resProducts.data || []);
     setTiposCliente(resTipos.data || []);
+    setTiposPrecio(resTiposPrecio.data || []);
+    setPreciosProducto(resPreciosProducto.data || []);
   }
 
   useEffect(() => {
@@ -64,17 +88,52 @@ export default function Orders() {
   async function handleCreate(e) {
     e.preventDefault();
     setOrderError("");
+    setOrderSuccess("");
     if (!form.customer_id) {
       setOrderError("Seleccione un cliente antes de crear el pedido.");
       return;
+    }
+    const today = new Date();
+    const hasOrderToday = orders.some((o) => {
+      if (String(o.customer_id || o.cliente_id) !== String(form.customer_id)) {
+        return false;
+      }
+      if (!o.created_at) return false;
+      const created = new Date(o.created_at);
+      return (
+        created.getFullYear() === today.getFullYear() &&
+        created.getMonth() === today.getMonth() &&
+        created.getDate() === today.getDate()
+      );
+    });
+    if (hasOrderToday) {
+      const ok = window.confirm(
+        "Este cliente ya tiene pedidos para hoy. ¿Seguro que quiere registrar otro?"
+      );
+      if (!ok) {
+        return;
+      }
     }
     const cleanItems = items
       .filter((i) => i.product_id && Number(i.quantity) > 0)
       .map((i) => ({
         product_id: Number(i.product_id),
         quantity: Number(i.quantity),
-        price: Math.max(0, Number(i.price) - Number(i.discount_unit || 0)),
+        price: Number(i.price),
+        discount_unit: Number(i.discount_unit || 0),
+        price_type_id: i.price_type_id ? Number(i.price_type_id) : null,
       }));
+    for (const item of cleanItems) {
+      if (item.price_type_id) {
+        const fixedPrice = getFixedPrice(item.product_id, item.price_type_id);
+        if (fixedPrice === null) {
+          setOrderError(
+            "El tipo de precio seleccionado no tiene precio definido para un producto."
+          );
+          return;
+        }
+      }
+    }
     if (cleanItems.length === 0) {
       setOrderError("Agregue al menos un producto.");
       return;
@@ -103,6 +162,7 @@ export default function Orders() {
         address_id: addressId,
         items: cleanItems,
       });
+      setOrderSuccess("Pedido creado correctamente.");
       setForm({
         customer_id: "",
         customer_name: "",
@@ -110,7 +170,16 @@ export default function Orders() {
         address_text: "",
         address_id: "",
       });
-      setItems([{ product_id: "", quantity: 1, price: 0, discount_unit: 0 }]);
+      setItems([
+        {
+          product_id: "",
+          quantity: 1,
+          price: 0,
+          discount_unit: 0,
+          price_type_id: "",
+          price_type_name: "",
+        },
+      ]);
       load();
     } catch (err) {
       const data = err?.response?.data;
@@ -131,7 +200,9 @@ export default function Orders() {
     if (!nextStatus) return;
     setStatusLoading((prev) => ({ ...prev, [orderId]: true }));
     try {
-      await api.patch(`/api/orders/${orderId}/status`, { status: nextStatus });
+      await api.patch(`/api/orders/${orderId}/status`, {
+        status: nextStatus,
+      });
       setStatusUpdates((prev) => ({ ...prev, [orderId]: "" }));
       load();
     } finally {
@@ -142,14 +213,30 @@ export default function Orders() {
   function handleAddItem() {
     setItems((prev) => [
       ...prev,
-      { product_id: "", quantity: 1, price: 0, discount_unit: 0 },
+      {
+        product_id: "",
+        quantity: 1,
+        price: 0,
+        discount_unit: 0,
+        price_type_id: "",
+        price_type_name: "",
+      },
     ]);
   }
 
   function handleRemoveItem(index) {
     setItems((prev) => {
       if (prev.length === 1) {
-        return [{ product_id: "", quantity: 1, price: 0, discount_unit: 0 }];
+        return [
+          {
+            product_id: "",
+            quantity: 1,
+            price: 0,
+            discount_unit: 0,
+            price_type_id: "",
+            price_type_name: "",
+          },
+        ];
       }
       return prev.filter((_, i) => i !== index);
     });
@@ -164,15 +251,56 @@ export default function Orders() {
     );
   }
 
+  function getFixedPrice(productId, priceTypeId) {
+    const row = preciosProducto.find(
+      (p) =>
+        String(p.producto_id) === String(productId) &&
+        String(p.tipo_precio_id) === String(priceTypeId)
+    );
+    return row ? Number(row.precio) : null;
+  }
+
   function handleProductSelect(index, productId) {
     const product = products.find((p) => String(p.id) === String(productId));
+    const basePrice = product ? Number(product.price) : 0;
     setItems((prev) =>
       prev.map((item, i) => {
         if (i !== index) return item;
+        const fixedPrice = item.price_type_id
+          ? getFixedPrice(productId, item.price_type_id)
+          : null;
+        const nextPrice =
+          fixedPrice !== null && fixedPrice > 0 ? fixedPrice : basePrice;
         return {
           ...item,
           product_id: productId,
-          price: product ? Number(product.price) : 0,
+          price: nextPrice,
+        };
+      })
+    );
+  }
+
+  function handlePriceTypeChange(index, value) {
+    const tipo = tiposPrecio.find((t) => t.nombre === value);
+    const priceTypeId = tipo ? String(tipo.id) : "";
+    setItems((prev) =>
+      prev.map((item, i) => {
+        if (i !== index) return item;
+        const fixedPrice =
+          item.product_id && priceTypeId
+            ? getFixedPrice(item.product_id, priceTypeId)
+            : null;
+        const product = products.find(
+          (p) => String(p.id) === String(item.product_id)
+        );
+        const basePrice = product ? Number(product.price) : Number(item.price || 0);
+        const nextPrice =
+          fixedPrice !== null && fixedPrice > 0 ? fixedPrice : basePrice;
+        return {
+          ...item,
+          price_type_id: priceTypeId,
+          price_type_name: value,
+          price: nextPrice,
         };
       })
     );
@@ -225,6 +353,23 @@ export default function Orders() {
       setAddressHint("No se pudo cargar la dirección del cliente.");
     }
   }
+
+  const filteredOrders = orders.filter((order) => {
+    const statusFilter = orderFilters.status;
+    const matchStatus =
+      !statusFilter ||
+      (statusFilter.includes("|")
+        ? statusFilter.split("|").includes(order.status)
+        : order.status === statusFilter);
+    if (!matchStatus) return false;
+    if (!orderFilters.month) return true;
+    if (!order.created_at) return false;
+    const monthValue = new Date(order.created_at).toISOString().slice(0, 7);
+    return monthValue === orderFilters.month;
+  });
+  const pendientesTotal = filteredOrders.filter(
+    (order) => order.status === "Pendiente"
+  ).length;
 
   return (
     <div className="container page">
@@ -337,6 +482,7 @@ export default function Orders() {
           </div>
           {addressHint && <div className="tag">{addressHint}</div>}
           {orderError && <div className="error">{orderError}</div>}
+          {orderSuccess && <div className="tag" style={{ marginTop: 8 }}>{orderSuccess}</div>}
           <div className="card" style={{ background: "var(--bg)" }}>
             <h4>Productos</h4>
             {items.map((item, index) => (
@@ -369,10 +515,20 @@ export default function Orders() {
                   />
                 </div>
                 <div className="form-field">
+                  <label>Tipo de precio</label>
+                  <input
+                    list="tipos-precio"
+                    placeholder="Tipo de precio"
+                    value={item.price_type_name || ""}
+                    onChange={(e) => handlePriceTypeChange(index, e.target.value)}
+                  />
+                </div>
+                <div className="form-field">
                   <label>Precio</label>
                   <input
                     placeholder="Precio"
                     value={item.price}
+                    readOnly
                     onChange={(e) =>
                       handleItemChange(index, "price", e.target.value)
                     }
@@ -397,6 +553,11 @@ export default function Orders() {
                 </button>
               </div>
             ))}
+            <datalist id="tipos-precio">
+              {tiposPrecio.map((t) => (
+                <option key={t.id} value={t.nombre} />
+              ))}
+            </datalist>
             <button className="btn btn-outline" type="button" onClick={handleAddItem}>
               Agregar producto
             </button>
@@ -414,6 +575,33 @@ export default function Orders() {
         </form>
       </div>
       <div style={{ marginTop: 16 }}>
+        <div className="card" style={{ marginBottom: 12 }}>
+          <div className="form-row">
+            <select
+              value={orderFilters.status}
+              onChange={(e) =>
+                setOrderFilters((prev) => ({ ...prev, status: e.target.value }))
+              }
+            >
+              <option value="">Todos los estados</option>
+              <option value="Pendiente|Reprogramado">Pendiente y reprogramado</option>
+              <option>Pendiente</option>
+              <option>Entregado</option>
+              <option>Cancelado</option>
+              <option>Reprogramado</option>
+            </select>
+            <input
+              type="month"
+              value={orderFilters.month}
+              onChange={(e) =>
+                setOrderFilters((prev) => ({ ...prev, month: e.target.value }))
+              }
+            />
+          </div>
+          <div style={{ marginTop: 8 }}>
+            Pedidos pendientes: <strong>{pendientesTotal}</strong>
+          </div>
+        </div>
         <table className="table">
         <thead>
           <tr>
@@ -425,7 +613,7 @@ export default function Orders() {
           </tr>
         </thead>
         <tbody>
-          {orders.map((o) => (
+          {filteredOrders.map((o) => (
               <tr key={o.id}>
                 <td>{o.id}</td>
                 <td>{o.customer_name}</td>
@@ -443,13 +631,10 @@ export default function Orders() {
                       }
                     >
                       <option value="">Cambiar estado</option>
-                      <option>Creado</option>
-                      <option>Confirmado</option>
-                      <option>En preparación</option>
-                      <option>Despachado</option>
-                      <option>En ruta</option>
+                      <option>Pendiente</option>
                       <option>Entregado</option>
                       <option>Cancelado</option>
+                      <option>Reprogramado</option>
                     </select>
                     <button
                       className="btn btn-outline btn-sm"

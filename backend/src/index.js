@@ -117,6 +117,56 @@ async function ensureOrderColumns() {
   }
 }
 
+async function ensurePriceTypes() {
+  await query(
+    `CREATE TABLE IF NOT EXISTS tipos_precio (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      nombre VARCHAR(120) NOT NULL UNIQUE,
+      activo TINYINT(1) NOT NULL DEFAULT 1,
+      fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`
+  );
+  const columns = await query(
+    "SHOW COLUMNS FROM tipos_precio LIKE 'ajuste_unidades'"
+  );
+  if (columns.length > 0) {
+    await query("ALTER TABLE tipos_precio DROP COLUMN ajuste_unidades");
+  }
+}
+
+async function ensureProductPriceTypes() {
+  await query(
+    `CREATE TABLE IF NOT EXISTS tipos_precio_producto (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      tipo_precio_id INT NOT NULL,
+      producto_id INT NOT NULL,
+      precio DECIMAL(10,2) NOT NULL,
+      activo TINYINT(1) NOT NULL DEFAULT 1,
+      fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY uniq_tipo_producto (tipo_precio_id, producto_id),
+      FOREIGN KEY (tipo_precio_id) REFERENCES tipos_precio(id) ON DELETE CASCADE,
+      FOREIGN KEY (producto_id) REFERENCES productos(id) ON DELETE CASCADE
+    )`
+  );
+}
+
+async function ensureOrderItemPriceTypeColumn() {
+  const columns = await query(
+    "SHOW COLUMNS FROM items_pedido LIKE 'tipo_precio_id'"
+  );
+  if (columns.length === 0) {
+    await query("ALTER TABLE items_pedido ADD COLUMN tipo_precio_id INT NULL");
+  }
+  const fk = await query(
+    "SELECT CONSTRAINT_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'items_pedido' AND COLUMN_NAME = 'tipo_precio_id' AND REFERENCED_TABLE_NAME = 'tipos_precio'"
+  );
+  if (fk.length === 0) {
+    await query(
+      "ALTER TABLE items_pedido ADD CONSTRAINT fk_items_pedido_tipo_precio FOREIGN KEY (tipo_precio_id) REFERENCES tipos_precio(id) ON DELETE SET NULL"
+    );
+  }
+}
+
 app.post("/api/auth/login", async (req, res) => {
   const { email, password } = req.body || {};
   if (!email || !password) {
@@ -142,8 +192,12 @@ app.post("/api/auth/login", async (req, res) => {
     [user.id]
   );
   const roleNames = roles.map((r) => r.name);
+  const [driver] = await query(
+    "SELECT id FROM repartidores WHERE nombre = ? LIMIT 1",
+    [user.name]
+  );
   const token = jwt.sign(
-    { id: user.id, email: user.email, roles: roleNames },
+    { id: user.id, email: user.email, roles: roleNames, driver_id: driver?.id || null },
     JWT_SECRET,
     { expiresIn: "8h" }
   );
@@ -168,26 +222,34 @@ app.use("/api/admin", requireAuth, auditMiddleware("admin"));
 app.get("/api/driver/entregas", requireAuth, async (req, res) => {
   const roles = req.user?.roles || [];
   const isAdmin = roles.includes("Administrador del sistema");
+  const isDriver = roles.includes("Repartidor");
   const baseQuery =
     "SELECT e.id, e.estado, e.programado_en, e.entregado_en, p.id as pedido_id, c.nombre_completo as cliente, r.nombre as repartidor, cam.placa as camion FROM entregas e JOIN pedidos p ON p.id = e.pedido_id JOIN clientes c ON c.id = p.cliente_id JOIN repartidores r ON r.id = e.repartidor_id JOIN camiones cam ON cam.id = e.camion_id";
   if (isAdmin) {
     const rows = await query(`${baseQuery} ORDER BY e.id DESC`);
     return res.json(rows);
   }
-  const driverName = req.user?.name;
-  if (!driverName) {
+  if (!isDriver) {
     return res.json([]);
   }
-  const rows = await query(
-    `${baseQuery} WHERE r.nombre = ? ORDER BY e.id DESC`,
-    [driverName]
-  );
+  const driverId = req.user?.driver_id;
+  const driverName = req.user?.name;
+  const rows = driverId
+    ? await query(
+        `${baseQuery} WHERE r.id = ? ORDER BY e.id DESC`,
+        [driverId]
+      )
+    : await query(
+        `${baseQuery} WHERE r.nombre = ? ORDER BY e.id DESC`,
+        [driverName]
+      );
   res.json(rows);
 });
 
 app.get("/api/driver/ventas", requireAuth, async (req, res) => {
   const roles = req.user?.roles || [];
   const isAdmin = roles.includes("Administrador del sistema");
+  const isDriver = roles.includes("Repartidor");
   const baseQuery =
     "SELECT p.id as pedido_id, c.nombre_completo as cliente, cam.placa as camion, r.nombre as repartidor, e.estado as estado_entrega, e.entregado_en, SUM(oi.cantidad * oi.precio) as total FROM entregas e JOIN pedidos p ON p.id = e.pedido_id JOIN clientes c ON c.id = p.cliente_id JOIN items_pedido oi ON oi.pedido_id = p.id JOIN repartidores r ON r.id = e.repartidor_id JOIN camiones cam ON cam.id = e.camion_id WHERE (e.estado = 'Entregado' OR p.estado = 'Entregado')";
   if (isAdmin) {
@@ -196,20 +258,44 @@ app.get("/api/driver/ventas", requireAuth, async (req, res) => {
     );
     return res.json(rows);
   }
-  const driverName = req.user?.name;
-  if (!driverName) {
+  if (!isDriver) {
     return res.json([]);
   }
-  const rows = await query(
-    `${baseQuery} AND r.nombre = ? GROUP BY p.id, c.nombre_completo, cam.placa, r.nombre, e.estado, e.entregado_en ORDER BY p.id DESC`,
-    [driverName]
-  );
+  const driverId = req.user?.driver_id;
+  const driverName = req.user?.name;
+  const rows = driverId
+    ? await query(
+        `${baseQuery} AND r.id = ? GROUP BY p.id, c.nombre_completo, cam.placa, r.nombre, e.estado, e.entregado_en ORDER BY p.id DESC`,
+        [driverId]
+      )
+    : await query(
+        `${baseQuery} AND r.nombre = ? GROUP BY p.id, c.nombre_completo, cam.placa, r.nombre, e.estado, e.entregado_en ORDER BY p.id DESC`,
+        [driverName]
+      );
   res.json(rows);
 });
 
 app.get("/api/tipos-cliente", requireAuth, async (_req, res) => {
   const rows = await query(
     "SELECT id, nombre, descuento_unidades FROM tipos_cliente WHERE activo = 1 ORDER BY nombre"
+  );
+  res.json(rows);
+});
+
+app.get("/api/tipos-precio", requireAuth, async (_req, res) => {
+  const rows = await query(
+    "SELECT id, nombre FROM tipos_precio WHERE activo = 1 ORDER BY nombre"
+  );
+  res.json(rows);
+});
+
+app.get("/api/precios-producto", requireAuth, async (_req, res) => {
+  const rows = await query(
+    `SELECT tpp.producto_id, tpp.tipo_precio_id, tpp.precio
+     FROM tipos_precio_producto tpp
+     JOIN tipos_precio tp ON tp.id = tpp.tipo_precio_id
+     JOIN productos p ON p.id = tpp.producto_id
+     WHERE tpp.activo = 1 AND tp.activo = 1 AND p.activo = 1`
   );
   res.json(rows);
 });
@@ -522,7 +608,7 @@ app.post("/api/inventory/move", requireAuth, async (req, res) => {
 
 app.get("/api/orders", requireRole(ACCESS.orders), async (_req, res) => {
   const rows = await query(
-    "SELECT o.id, o.estado as status, o.metodo_pago as payment_method, o.prioridad as priority, o.notas as notes, o.fecha_creacion as created_at, c.nombre_completo as customer_name, cam.placa as truck_plate FROM pedidos o JOIN clientes c ON c.id = o.cliente_id LEFT JOIN entregas e ON e.pedido_id = o.id LEFT JOIN camiones cam ON cam.id = e.camion_id ORDER BY o.id DESC"
+    "SELECT o.id, o.cliente_id as customer_id, o.estado as status, o.metodo_pago as payment_method, o.prioridad as priority, o.notas as notes, o.fecha_creacion as created_at, c.nombre_completo as customer_name, cam.placa as truck_plate FROM pedidos o JOIN clientes c ON c.id = o.cliente_id LEFT JOIN entregas e ON e.pedido_id = o.id LEFT JOIN camiones cam ON cam.id = e.camion_id ORDER BY o.id DESC"
   );
   res.json(rows);
 });
@@ -563,6 +649,9 @@ app.post("/api/orders", requireRole(ACCESS.orders), async (req, res) => {
     if (!item.product_id || !item.quantity || Number(item.quantity) <= 0) {
       return res.status(400).json({ error: "Cantidad inválida en productos" });
     }
+    if (item.price_type_id && Number(item.price_type_id) <= 0) {
+      return res.status(400).json({ error: "Tipo de precio inválido" });
+    }
     const productId = Number(item.product_id);
     const qty = Number(item.quantity);
     requiredByProduct.set(productId, (requiredByProduct.get(productId) || 0) + qty);
@@ -597,12 +686,62 @@ app.post("/api/orders", requireRole(ACCESS.orders), async (req, res) => {
       details: insufficient,
     });
   }
+  const priceTypeItems = items.filter((i) => i.price_type_id);
+  let priceTypeMap = new Map();
+  if (priceTypeItems.length > 0) {
+    const priceTypeIds = Array.from(
+      new Set(priceTypeItems.map((i) => Number(i.price_type_id)))
+    );
+    const productIdsForPrice = Array.from(
+      new Set(priceTypeItems.map((i) => Number(i.product_id)))
+    );
+    const typePlaceholders = priceTypeIds.map(() => "?").join(", ");
+    const productPlaceholders = productIdsForPrice.map(() => "?").join(", ");
+    const rows = await query(
+      `SELECT tpp.producto_id, tpp.tipo_precio_id, tpp.precio
+       FROM tipos_precio_producto tpp
+       JOIN tipos_precio tp ON tp.id = tpp.tipo_precio_id
+       WHERE tpp.activo = 1 AND tp.activo = 1
+       AND tpp.tipo_precio_id IN (${typePlaceholders})
+       AND tpp.producto_id IN (${productPlaceholders})`,
+      [...priceTypeIds, ...productIdsForPrice]
+    );
+    priceTypeMap = new Map(
+      rows.map((r) => [`${r.producto_id}:${r.tipo_precio_id}`, Number(r.precio)])
+    );
+  }
+  const normalizedItems = [];
+  for (const item of items) {
+    const productId = Number(item.product_id);
+    const priceTypeId = item.price_type_id ? Number(item.price_type_id) : null;
+    let basePrice = Number(item.price || 0);
+    if (priceTypeId) {
+      const key = `${productId}:${priceTypeId}`;
+      if (!priceTypeMap.has(key)) {
+        return res.status(400).json({
+          error: "Tipo de precio sin precio definido para el producto.",
+        });
+      }
+      basePrice = priceTypeMap.get(key);
+    }
+    if (!priceTypeId && (!item.price || Number(item.price) <= 0)) {
+      return res.status(400).json({ error: "Precio inválido en productos" });
+    }
+    const discountUnit = Number(item.discount_unit || 0);
+    const finalPrice = Math.max(0, basePrice - discountUnit);
+    normalizedItems.push({
+      product_id: productId,
+      quantity: Number(item.quantity),
+      price: finalPrice,
+      price_type_id: priceTypeId,
+    });
+  }
   const result = await query(
     "INSERT INTO pedidos (cliente_id, direccion_id, estado, metodo_pago, prioridad, notas, creado_por_usuario_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
     [
       customer_id,
       address_id,
-      "Creado",
+      "Pendiente",
       payment_method || null,
       priority || "Normal",
       notes || null,
@@ -610,15 +749,21 @@ app.post("/api/orders", requireRole(ACCESS.orders), async (req, res) => {
     ]
   );
   const orderId = result.insertId;
-  for (const item of items) {
+  for (const item of normalizedItems) {
     await query(
-      "INSERT INTO items_pedido (pedido_id, producto_id, cantidad, precio) VALUES (?, ?, ?, ?)",
-      [orderId, item.product_id, item.quantity, item.price]
+      "INSERT INTO items_pedido (pedido_id, producto_id, cantidad, precio, tipo_precio_id) VALUES (?, ?, ?, ?, ?)",
+      [
+        orderId,
+        item.product_id,
+        item.quantity,
+        item.price,
+        item.price_type_id || null,
+      ]
     );
   }
   await query(
     "INSERT INTO historial_estado_pedido (pedido_id, estado, nota) VALUES (?, ?, ?)",
-    [orderId, "Creado", "Pedido creado"]
+    [orderId, "Pendiente", "Pedido creado"]
   );
   await req.audit({ action: "CREATE", entityId: orderId });
   res.status(201).json({ id: orderId });
@@ -637,20 +782,41 @@ app.patch("/api/orders/:id/status", requireRole(ACCESS.orders), async (req, res)
     "INSERT INTO historial_estado_pedido (pedido_id, estado, nota) VALUES (?, ?, ?)",
     [req.params.id, status, note || null]
   );
-  if (status === "Confirmado" && warehouse_id) {
-    const items = await query(
-      "SELECT producto_id, cantidad FROM items_pedido WHERE pedido_id = ?",
+  if (status === "Entregado") {
+    const existing = await query(
+      "SELECT id FROM movimientos_inventario WHERE pedido_id = ? AND tipo = 'SALIDA' LIMIT 1",
       [req.params.id]
     );
-    for (const item of items) {
-      await query(
-        "INSERT INTO movimientos_inventario (almacen_id, producto_id, cantidad, tipo, pedido_id, nota) VALUES (?, ?, ?, 'SALIDA', ?, 'Confirmación de pedido')",
-        [warehouse_id, item.producto_id, -item.cantidad, req.params.id]
+    if (existing.length === 0) {
+      const items = await query(
+        "SELECT producto_id, cantidad FROM items_pedido WHERE pedido_id = ?",
+        [req.params.id]
       );
-      await query(
-        "UPDATE inventario SET cantidad = cantidad - ? WHERE almacen_id = ? AND producto_id = ?",
-        [item.cantidad, warehouse_id, item.producto_id]
-      );
+      for (const item of items) {
+        const [inv] = await query(
+          "SELECT almacen_id, cantidad FROM inventario WHERE producto_id = ? ORDER BY cantidad DESC LIMIT 1",
+          [item.producto_id]
+        );
+        if (!inv || inv.cantidad < item.cantidad) {
+          return res.status(400).json({
+            error: "Sin existencias suficientes en almacenes.",
+          });
+        }
+        await query(
+          "INSERT INTO movimientos_inventario (almacen_id, producto_id, cantidad, tipo, pedido_id, nota) VALUES (?, ?, ?, 'SALIDA', ?, ?)",
+          [
+            inv.almacen_id,
+            item.producto_id,
+            -item.cantidad,
+            req.params.id,
+            status === "Entregado" ? "Entrega confirmada" : "Confirmación de pedido",
+          ]
+        );
+        await query(
+          "UPDATE inventario SET cantidad = cantidad - ? WHERE almacen_id = ? AND producto_id = ?",
+          [item.cantidad, inv.almacen_id, item.producto_id]
+        );
+      }
     }
   }
   await req.audit({
@@ -670,7 +836,7 @@ app.get("/api/logistics/trucks", requireRole(ACCESS.logistics), async (_req, res
 
 app.get("/api/logistics/pending-orders", requireRole(ACCESS.logistics), async (_req, res) => {
   const rows = await query(
-    "SELECT p.id, p.estado as status, c.nombre_completo as customer_name, p.fecha_creacion as created_at FROM pedidos p JOIN clientes c ON c.id = p.cliente_id WHERE p.estado IN ('Creado', 'Confirmado', 'En preparación') ORDER BY p.id DESC"
+    "SELECT p.id, p.estado as status, c.nombre_completo as customer_name, c.zona, c.direccion, c.telefono_principal as phone, p.fecha_creacion as created_at FROM pedidos p JOIN clientes c ON c.id = p.cliente_id WHERE p.estado IN ('Pendiente', 'Reprogramado', 'Creado') ORDER BY p.id DESC"
   );
   res.json(rows);
 });
@@ -748,6 +914,41 @@ app.post("/api/logistics/deliveries", requireRole(ACCESS.logistics), async (req,
   res.status(201).json({ id: result.insertId });
 });
 
+app.post("/api/logistics/deliveries/bulk", requireRole(ACCESS.logistics), async (req, res) => {
+  const { order_ids, truck_id, driver_id } = req.body || {};
+  if (!Array.isArray(order_ids) || order_ids.length === 0 || !truck_id || !driver_id) {
+    return res.status(400).json({ error: "Datos incompletos" });
+  }
+  let assigned = 0;
+  let skipped = 0;
+  for (const rawId of order_ids) {
+    const orderId = Number(rawId);
+    if (!orderId) continue;
+    const existing = await query(
+      "SELECT id FROM entregas WHERE pedido_id = ? LIMIT 1",
+      [orderId]
+    );
+    if (existing.length > 0) {
+      skipped += 1;
+      continue;
+    }
+    const result = await query(
+      "INSERT INTO entregas (pedido_id, camion_id, repartidor_id, estado, programado_en) VALUES (?, ?, ?, 'Despachado', NULL)",
+      [orderId, truck_id, driver_id]
+    );
+    await query("UPDATE pedidos SET estado = 'Despachado' WHERE id = ?", [
+      orderId,
+    ]);
+    await query(
+      "INSERT INTO historial_estado_pedido (pedido_id, estado, nota) VALUES (?, 'Despachado', 'Asignado a camión (masivo)')",
+      [orderId]
+    );
+    await req.audit({ action: "ASSIGN_DELIVERY_BULK", entityId: result.insertId });
+    assigned += 1;
+  }
+  res.json({ ok: true, assigned, skipped });
+});
+
 app.patch(
   "/api/logistics/deliveries/:id/status",
   requireRole(ACCESS.logistics),
@@ -789,6 +990,113 @@ app.patch(
     res.json({ ok: true });
   }
 );
+
+async function getCentralWarehouseId() {
+  const [central] = await query(
+    "SELECT id FROM almacenes WHERE LOWER(nombre) LIKE '%central%' ORDER BY id ASC LIMIT 1"
+  );
+  if (central) return central.id;
+  const [first] = await query("SELECT id FROM almacenes ORDER BY id ASC LIMIT 1");
+  return first ? first.id : null;
+}
+
+app.get("/api/logistics/truck-summary", requireRole(ACCESS.logistics), async (req, res) => {
+  const { truck_id } = req.query || {};
+  if (!truck_id) {
+    return res.status(400).json({ error: "truck_id requerido" });
+  }
+  const rows = await query(
+    `SELECT
+      COUNT(DISTINCT p.id) as total_orders,
+      COALESCE(SUM(oi.cantidad), 0) as total_items,
+      COALESCE(SUM(oi.cantidad * oi.precio), 0) as total_value
+     FROM entregas e
+     JOIN pedidos p ON p.id = e.pedido_id
+     JOIN items_pedido oi ON oi.pedido_id = p.id
+     WHERE e.camion_id = ?
+       AND DATE(COALESCE(e.programado_en, p.fecha_creacion)) = CURDATE()`,
+    [truck_id]
+  );
+  res.json(rows[0] || { total_orders: 0, total_items: 0, total_value: 0 });
+});
+
+app.get("/api/logistics/truck-orders", requireRole(ACCESS.logistics), async (req, res) => {
+  const { truck_id } = req.query || {};
+  if (!truck_id) {
+    return res.status(400).json({ error: "truck_id requerido" });
+  }
+  const rows = await query(
+    `SELECT
+      p.id,
+      p.estado as status,
+      c.nombre_completo as customer_name,
+      c.telefono_principal as phone,
+      c.zona,
+      COALESCE(dc.direccion, c.direccion) as address,
+      p.fecha_creacion as created_at
+     FROM entregas e
+     JOIN pedidos p ON p.id = e.pedido_id
+     JOIN clientes c ON c.id = p.cliente_id
+     LEFT JOIN direcciones_clientes dc ON dc.id = p.direccion_id
+     WHERE e.camion_id = ?
+     ORDER BY p.id DESC`,
+    [truck_id]
+  );
+  res.json(rows);
+});
+
+app.post("/api/logistics/returns", requireRole(ACCESS.logistics), async (req, res) => {
+  const { order_id, truck_id, cash_amount } = req.body || {};
+  if (!order_id || !truck_id) {
+    return res.status(400).json({ error: "Datos incompletos" });
+  }
+  const warehouseId = await getCentralWarehouseId();
+  if (!warehouseId) {
+    return res.status(400).json({ error: "No hay almacenes disponibles" });
+  }
+  const items = await query(
+    "SELECT producto_id, cantidad FROM items_pedido WHERE pedido_id = ?",
+    [order_id]
+  );
+  for (const item of items) {
+    await query(
+      "INSERT INTO movimientos_inventario (almacen_id, producto_id, cantidad, tipo, pedido_id, nota) VALUES (?, ?, ?, 'DEVOLUCION', ?, 'Devolución de vendedor')",
+      [warehouseId, item.producto_id, item.cantidad, order_id]
+    );
+    const existing = await query(
+      "SELECT id FROM inventario WHERE almacen_id = ? AND producto_id = ?",
+      [warehouseId, item.producto_id]
+    );
+    if (existing.length === 0) {
+      await query(
+        "INSERT INTO inventario (almacen_id, producto_id, cantidad, stock_minimo) VALUES (?, ?, ?, 0)",
+        [warehouseId, item.producto_id, item.cantidad]
+      );
+    } else {
+      await query(
+        "UPDATE inventario SET cantidad = cantidad + ? WHERE almacen_id = ? AND producto_id = ?",
+        [item.cantidad, warehouseId, item.producto_id]
+      );
+    }
+  }
+  await query("UPDATE pedidos SET estado = 'Reprogramado' WHERE id = ?", [order_id]);
+  await query(
+    "UPDATE entregas SET estado = 'Reprogramado' WHERE pedido_id = ? AND camion_id = ?",
+    [order_id, truck_id]
+  );
+  if (cash_amount && Number(cash_amount) > 0) {
+    await query(
+      "INSERT INTO pagos (pedido_id, monto, metodo, estado) VALUES (?, ?, 'Caja', 'Recibido')",
+      [order_id, Number(cash_amount)]
+    );
+  }
+  await req.audit({
+    action: "RETURN_TO_WAREHOUSE",
+    entityId: order_id,
+    detail: `camion:${truck_id}`,
+  });
+  res.json({ ok: true });
+});
 
 app.get("/api/reports/sales", requireRole(ACCESS.reports), async (req, res) => {
   const { from, to, status } = req.query;
@@ -893,32 +1201,18 @@ app.get(
   "/api/reports/orders-summary",
   requireRole(ACCESS.reports),
   async (req, res) => {
-    const { from, to, month, truck_id, driver_id, seller_id } = req.query || {};
-    let rangeFrom = from || "1970-01-01";
-    let rangeTo = to || "2999-12-31";
-    if (month) {
-      const [year, monthStr] = String(month).split("-");
-      const y = Number(year);
-      const m = Number(monthStr);
-      if (y && m) {
-        const lastDay = new Date(y, m, 0).getDate();
-        rangeFrom = `${year}-${String(m).padStart(2, "0")}-01`;
-        rangeTo = `${year}-${String(m).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
-      }
-    }
+    const { from, to, truck_id, status } = req.query || {};
+    const rangeFrom = from || "1970-01-01";
+    const rangeTo = to || "2999-12-31";
     const where = ["p.fecha_creacion BETWEEN ? AND ?"];
     const params = [rangeFrom, rangeTo];
     if (truck_id) {
       where.push("e.camion_id = ?");
       params.push(truck_id);
     }
-    if (driver_id) {
-      where.push("e.repartidor_id = ?");
-      params.push(driver_id);
-    }
-    if (seller_id) {
-      where.push("p.creado_por_usuario_id = ?");
-      params.push(seller_id);
+    if (status) {
+      where.push("p.estado = ?");
+      params.push(status);
     }
     const rows = await query(
       `SELECT
@@ -968,9 +1262,62 @@ app.get("/api/admin/roles", requireRole(ACCESS.admin), async (_req, res) => {
   res.json(roles);
 });
 
+app.post("/api/admin/roles", requireRole(ACCESS.admin), async (req, res) => {
+  const { name } = req.body || {};
+  if (!name) {
+    return res.status(400).json({ error: "Nombre requerido" });
+  }
+  try {
+    const result = await query("INSERT INTO roles (nombre) VALUES (?)", [name]);
+    await req.audit({ action: "CREATE_ROLE", entityId: result.insertId, detail: name });
+    res.status(201).json({ id: result.insertId });
+  } catch (err) {
+    if (err?.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({ error: "El rol ya existe" });
+    }
+    throw err;
+  }
+});
+
+app.put("/api/admin/roles/:id", requireRole(ACCESS.admin), async (req, res) => {
+  const { name } = req.body || {};
+  if (!name) {
+    return res.status(400).json({ error: "Nombre requerido" });
+  }
+  try {
+    await query("UPDATE roles SET nombre = ? WHERE id = ?", [name, req.params.id]);
+    await req.audit({ action: "UPDATE_ROLE", entityId: req.params.id, detail: name });
+    res.json({ ok: true });
+  } catch (err) {
+    if (err?.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({ error: "El rol ya existe" });
+    }
+    throw err;
+  }
+});
+
 app.get("/api/admin/tipos-cliente", requireRole(ACCESS.admin), async (_req, res) => {
   const rows = await query(
     "SELECT id, nombre, activo, descuento_unidades, fecha_creacion FROM tipos_cliente ORDER BY nombre"
+  );
+  res.json(rows);
+});
+
+app.get("/api/admin/tipos-precio", requireRole(ACCESS.admin), async (_req, res) => {
+  const rows = await query(
+    "SELECT id, nombre, activo, fecha_creacion FROM tipos_precio ORDER BY nombre"
+  );
+  res.json(rows);
+});
+
+app.get("/api/admin/precios-producto", requireRole(ACCESS.admin), async (_req, res) => {
+  const rows = await query(
+    `SELECT tpp.id, tpp.precio, tpp.activo, tpp.tipo_precio_id, tp.nombre as tipo_precio,
+      tpp.producto_id, p.nombre as producto
+     FROM tipos_precio_producto tpp
+     JOIN tipos_precio tp ON tp.id = tpp.tipo_precio_id
+     JOIN productos p ON p.id = tpp.producto_id
+     ORDER BY tp.nombre, p.nombre`
   );
   res.json(rows);
 });
@@ -988,6 +1335,48 @@ app.post("/api/admin/tipos-cliente", requireRole(ACCESS.admin), async (req, res)
   res.status(201).json({ id: result.insertId });
 });
 
+app.post("/api/admin/tipos-precio", requireRole(ACCESS.admin), async (req, res) => {
+  const { nombre } = req.body || {};
+  if (!nombre) {
+    return res.status(400).json({ error: "Nombre requerido" });
+  }
+  const result = await query(
+    "INSERT INTO tipos_precio (nombre, activo) VALUES (?, 1)",
+    [nombre]
+  );
+  await req.audit({ action: "CREATE_TIPO_PRECIO", entityId: result.insertId, detail: nombre });
+  res.status(201).json({ id: result.insertId });
+});
+
+app.post("/api/admin/precios-producto", requireRole(ACCESS.admin), async (req, res) => {
+  const { tipo_precio_id, producto_id, precio, activo } = req.body || {};
+  if (!tipo_precio_id || !producto_id || precio === undefined) {
+    return res.status(400).json({ error: "Datos incompletos" });
+  }
+  try {
+    const result = await query(
+      "INSERT INTO tipos_precio_producto (tipo_precio_id, producto_id, precio, activo) VALUES (?, ?, ?, ?)",
+      [
+        Number(tipo_precio_id),
+        Number(producto_id),
+        Number(precio),
+        activo === false ? 0 : 1,
+      ]
+    );
+    await req.audit({
+      action: "CREATE_PRECIO_PRODUCTO",
+      entityId: result.insertId,
+      detail: `${tipo_precio_id}:${producto_id}`,
+    });
+    res.status(201).json({ id: result.insertId });
+  } catch (err) {
+    if (err?.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({ error: "El precio ya existe para este producto" });
+    }
+    throw err;
+  }
+});
+
 app.put("/api/admin/tipos-cliente/:id", requireRole(ACCESS.admin), async (req, res) => {
   const { nombre, activo, descuento_unidades } = req.body || {};
   if (!nombre) {
@@ -998,6 +1387,35 @@ app.put("/api/admin/tipos-cliente/:id", requireRole(ACCESS.admin), async (req, r
     [nombre, activo ? 1 : 0, Number(descuento_unidades || 0), req.params.id]
   );
   await req.audit({ action: "UPDATE_TIPO_CLIENTE", entityId: req.params.id, detail: nombre });
+  res.json({ ok: true });
+});
+
+app.put("/api/admin/tipos-precio/:id", requireRole(ACCESS.admin), async (req, res) => {
+  const { nombre, activo } = req.body || {};
+  if (!nombre) {
+    return res.status(400).json({ error: "Nombre requerido" });
+  }
+  await query(
+    "UPDATE tipos_precio SET nombre = ?, activo = ? WHERE id = ?",
+    [nombre, activo ? 1 : 0, req.params.id]
+  );
+  await req.audit({ action: "UPDATE_TIPO_PRECIO", entityId: req.params.id, detail: nombre });
+  res.json({ ok: true });
+});
+
+app.put("/api/admin/precios-producto/:id", requireRole(ACCESS.admin), async (req, res) => {
+  const { precio, activo } = req.body || {};
+  if (precio === undefined) {
+    return res.status(400).json({ error: "Precio requerido" });
+  }
+  await query(
+    "UPDATE tipos_precio_producto SET precio = ?, activo = ? WHERE id = ?",
+    [Number(precio), activo ? 1 : 0, req.params.id]
+  );
+  await req.audit({
+    action: "UPDATE_PRECIO_PRODUCTO",
+    entityId: req.params.id,
+  });
   res.json({ ok: true });
 });
 
@@ -1032,6 +1450,20 @@ app.put("/api/admin/users/:id", requireRole(ACCESS.admin), async (req, res) => {
   res.json({ ok: true });
 });
 
+app.put("/api/admin/users/:id/password", requireRole(ACCESS.admin), async (req, res) => {
+  const { password } = req.body || {};
+  if (!password) {
+    return res.status(400).json({ error: "Contraseña requerida" });
+  }
+  const hash = await bcrypt.hash(password, 10);
+  await query("UPDATE usuarios SET hash_contrasena = ? WHERE id = ?", [
+    hash,
+    req.params.id,
+  ]);
+  await req.audit({ action: "UPDATE_USER_PASSWORD", entityId: req.params.id });
+  res.json({ ok: true });
+});
+
 app.put("/api/admin/users/:id/roles", requireRole(ACCESS.admin), async (req, res) => {
   const { role_ids } = req.body || {};
   if (!Array.isArray(role_ids)) {
@@ -1052,6 +1484,9 @@ async function start() {
   await ensureBaseRoles();
   await ensureAdminUser();
   await ensureOrderColumns();
+  await ensurePriceTypes();
+  await ensureProductPriceTypes();
+  await ensureOrderItemPriceTypeColumn();
   app.listen(PORT, () => {
     console.log(`Ionlife API escuchando en puerto ${PORT}`);
   });

@@ -14,6 +14,14 @@ CREATE TABLE IF NOT EXISTS tipos_cliente (
   fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS tipos_precio (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  nombre VARCHAR(120) NOT NULL UNIQUE,
+  activo TINYINT(1) NOT NULL DEFAULT 1,
+  fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+
 CREATE TABLE IF NOT EXISTS usuarios (
   id INT AUTO_INCREMENT PRIMARY KEY,
   nombre VARCHAR(120) NOT NULL,
@@ -69,6 +77,18 @@ CREATE TABLE IF NOT EXISTS productos (
   activo TINYINT(1) NOT NULL DEFAULT 1
 );
 
+CREATE TABLE IF NOT EXISTS tipos_precio_producto (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  tipo_precio_id INT NOT NULL,
+  producto_id INT NOT NULL,
+  precio DECIMAL(10,2) NOT NULL,
+  activo TINYINT(1) NOT NULL DEFAULT 1,
+  fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_tipo_producto (tipo_precio_id, producto_id),
+  FOREIGN KEY (tipo_precio_id) REFERENCES tipos_precio(id) ON DELETE CASCADE,
+  FOREIGN KEY (producto_id) REFERENCES productos(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS almacenes (
   id INT AUTO_INCREMENT PRIMARY KEY,
   nombre VARCHAR(160) NOT NULL,
@@ -120,8 +140,10 @@ CREATE TABLE IF NOT EXISTS items_pedido (
   producto_id INT NOT NULL,
   cantidad INT NOT NULL,
   precio DECIMAL(10,2) NOT NULL,
+  tipo_precio_id INT NULL,
   FOREIGN KEY (pedido_id) REFERENCES pedidos(id) ON DELETE CASCADE,
-  FOREIGN KEY (producto_id) REFERENCES productos(id) ON DELETE CASCADE
+  FOREIGN KEY (producto_id) REFERENCES productos(id) ON DELETE CASCADE,
+  FOREIGN KEY (tipo_precio_id) REFERENCES tipos_precio(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS historial_estado_pedido (

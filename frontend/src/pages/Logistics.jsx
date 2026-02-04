@@ -3,7 +3,12 @@ import api from "../api";
 
 function statusClass(status) {
   if (!status) return "tag";
-  return `tag status-${status.toLowerCase().replace(/\s+/g, "_")}`;
+  const normalized = status
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, "_");
+  return `tag status-${normalized}`;
 }
 
 export default function Logistics() {
@@ -11,16 +16,32 @@ export default function Logistics() {
   const [drivers, setDrivers] = useState([]);
   const [deliveries, setDeliveries] = useState([]);
   const [pendingOrders, setPendingOrders] = useState([]);
-  const [truckForm, setTruckForm] = useState({ plate: "", capacity: "" });
-  const [driverForm, setDriverForm] = useState({ name: "", phone: "" });
-  const [deliveryForm, setDeliveryForm] = useState({
-    order_id: "",
+  const [bulkForm, setBulkForm] = useState({
     truck_id: "",
     driver_id: "",
   });
-  const [truckError, setTruckError] = useState("");
-  const [driverError, setDriverError] = useState("");
-  const [deliveryError, setDeliveryError] = useState("");
+  const [bulkSelection, setBulkSelection] = useState({});
+  const [bulkError, setBulkError] = useState("");
+  const [bulkResult, setBulkResult] = useState(null);
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const [summaryTruckId, setSummaryTruckId] = useState("");
+  const [truckSummary, setTruckSummary] = useState({
+    total_orders: 0,
+    total_items: 0,
+    total_value: 0,
+  });
+  const [summaryError, setSummaryError] = useState("");
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [returnForm, setReturnForm] = useState({
+    truck_id: "",
+    order_id: "",
+    cash_amount: "",
+  });
+  const [truckOrders, setTruckOrders] = useState([]);
+  const [returnError, setReturnError] = useState("");
+  const [printTruckId, setPrintTruckId] = useState("");
+  const [printLoading, setPrintLoading] = useState(false);
+  const [printError, setPrintError] = useState("");
 
   async function load() {
     const [t, d, p] = await Promise.all([
@@ -38,52 +59,187 @@ export default function Logistics() {
     setDeliveries(res.data);
   }
 
+  async function loadPendingOrders() {
+    const res = await api.get("/api/logistics/pending-orders");
+    setPendingOrders(res.data || []);
+    setBulkSelection({});
+    setBulkResult(null);
+  }
+
+  async function loadTruckSummary(truckId) {
+    if (!truckId) {
+      setTruckSummary({ total_orders: 0, total_items: 0, total_value: 0 });
+      return;
+    }
+    setSummaryLoading(true);
+    setSummaryError("");
+    try {
+      const res = await api.get("/api/logistics/truck-summary", {
+        params: { truck_id: truckId },
+      });
+      setTruckSummary(res.data || { total_orders: 0, total_items: 0, total_value: 0 });
+    } catch (_err) {
+      setSummaryError("No se pudo cargar el resumen del camión.");
+    } finally {
+      setSummaryLoading(false);
+    }
+  }
+
+  async function loadTruckOrders(truckId) {
+    if (!truckId) {
+      setTruckOrders([]);
+      return;
+    }
+    const res = await api.get("/api/logistics/truck-orders", {
+      params: { truck_id: truckId },
+    });
+    setTruckOrders(res.data || []);
+  }
+
   useEffect(() => {
     load();
     loadDeliveries();
+    loadPendingOrders();
   }, []);
 
-  async function createTruck(e) {
-    e.preventDefault();
-    setTruckError("");
-    if (!truckForm.plate.trim()) {
-      setTruckError("La placa es obligatoria.");
-      return;
-    }
-    await api.post("/api/logistics/trucks", {
-      plate: truckForm.plate.trim(),
-      capacity: Number(truckForm.capacity),
-    });
-    setTruckForm({ plate: "", capacity: "" });
-    load();
+  function toggleBulkSelection(orderId) {
+    setBulkSelection((prev) => ({
+      ...prev,
+      [orderId]: !prev[orderId],
+    }));
   }
 
-  async function createDriver(e) {
-    e.preventDefault();
-    setDriverError("");
-    if (!driverForm.name.trim()) {
-      setDriverError("El nombre es obligatorio.");
+  function toggleAllBulk(selectAll) {
+    if (!selectAll) {
+      setBulkSelection({});
       return;
     }
-    await api.post("/api/logistics/drivers", driverForm);
-    setDriverForm({ name: "", phone: "" });
-    load();
+    const next = {};
+    pendingOrders.forEach((o) => {
+      next[o.id] = true;
+    });
+    setBulkSelection(next);
   }
 
-  async function createDelivery(e) {
+  async function assignBulk(e) {
     e.preventDefault();
-    setDeliveryError("");
-    if (!deliveryForm.order_id || !deliveryForm.truck_id || !deliveryForm.driver_id) {
-      setDeliveryError("Complete pedido, camión y repartidor.");
+    setBulkError("");
+    setBulkResult(null);
+    const orderIds = Object.keys(bulkSelection).filter((id) => bulkSelection[id]);
+    if (orderIds.length === 0 || !bulkForm.truck_id || !bulkForm.driver_id) {
+      setBulkError("Seleccione pedidos, camión y repartidor.");
       return;
     }
-    await api.post("/api/logistics/deliveries", {
-      order_id: Number(deliveryForm.order_id),
-      truck_id: Number(deliveryForm.truck_id),
-      driver_id: Number(deliveryForm.driver_id),
+    setBulkLoading(true);
+    try {
+      const res = await api.post("/api/logistics/deliveries/bulk", {
+        order_ids: orderIds.map(Number),
+        truck_id: Number(bulkForm.truck_id),
+        driver_id: Number(bulkForm.driver_id),
+      });
+      setBulkResult(res.data);
+      await loadPendingOrders();
+      await loadDeliveries();
+    } catch (_err) {
+      setBulkError("No se pudo asignar en forma masiva.");
+    } finally {
+      setBulkLoading(false);
+    }
+  }
+
+  async function handleReturn(e) {
+    e.preventDefault();
+    setReturnError("");
+    if (!returnForm.truck_id || !returnForm.order_id) {
+      setReturnError("Seleccione camión y pedido.");
+      return;
+    }
+    await api.post("/api/logistics/returns", {
+      truck_id: Number(returnForm.truck_id),
+      order_id: Number(returnForm.order_id),
+      cash_amount: returnForm.cash_amount ? Number(returnForm.cash_amount) : 0,
     });
-    setDeliveryForm({ order_id: "", truck_id: "", driver_id: "" });
-    loadDeliveries();
+    setReturnForm({ truck_id: returnForm.truck_id, order_id: "", cash_amount: "" });
+    loadTruckSummary(returnForm.truck_id);
+    loadTruckOrders(returnForm.truck_id);
+  }
+
+  async function printRouteSheet() {
+    setPrintError("");
+    if (!printTruckId) {
+      setPrintError("Seleccione un camión.");
+      return;
+    }
+    setPrintLoading(true);
+    try {
+      const res = await api.get("/api/logistics/truck-orders", {
+        params: { truck_id: printTruckId },
+      });
+      const orders = res.data || [];
+      const truck = trucks.find((t) => String(t.id) === String(printTruckId));
+      const title = `Hoja de ruta - ${truck?.plate || "Camión"}`;
+      const now = new Date().toLocaleString();
+      const rowsHtml = orders
+        .map(
+          (o) => `
+            <tr>
+              <td>${o.id}</td>
+              <td>${o.customer_name || "-"}</td>
+              <td>${o.phone || "-"}</td>
+              <td>${o.zona || "-"}</td>
+              <td>${o.address || "-"}</td>
+              <td>${o.status || "-"}</td>
+            </tr>
+          `
+        )
+        .join("");
+      const win = window.open("", "_blank", "width=900,height=700");
+      if (!win) {
+        setPrintError("No se pudo abrir la ventana de impresión.");
+        return;
+      }
+      win.document.write(`
+        <html>
+          <head>
+            <title>${title}</title>
+            <style>
+              body { font-family: Arial, sans-serif; padding: 24px; }
+              h2 { margin: 0 0 6px; }
+              .meta { color: #555; margin-bottom: 16px; }
+              table { width: 100%; border-collapse: collapse; }
+              th, td { border: 1px solid #ccc; padding: 8px; text-align: left; font-size: 12px; }
+              th { background: #f2f4f7; }
+            </style>
+          </head>
+          <body>
+            <h2>${title}</h2>
+            <div class="meta">Fecha: ${now}</div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Pedido</th>
+                  <th>Cliente</th>
+                  <th>Teléfono</th>
+                  <th>Zona</th>
+                  <th>Dirección</th>
+                  <th>Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rowsHtml || "<tr><td colspan='6'>No hay pedidos asignados.</td></tr>"}
+              </tbody>
+            </table>
+          </body>
+        </html>
+      `);
+      win.document.close();
+      win.focus();
+      win.print();
+    } catch (_err) {
+      setPrintError("No se pudo generar la hoja de ruta.");
+    } finally {
+      setPrintLoading(false);
+    }
   }
 
   return (
@@ -91,69 +247,22 @@ export default function Logistics() {
       <h2>Logística</h2>
       <div className="grid">
         <div className="card">
-          <form onSubmit={createTruck} className="form">
-            <div className="form-row">
-              <input
-                placeholder="Placa"
-                value={truckForm.plate}
-                onChange={(e) =>
-                  setTruckForm({ ...truckForm, plate: e.target.value })
-                }
-              />
-              <input
-                placeholder="Capacidad"
-                value={truckForm.capacity}
-                onChange={(e) =>
-                  setTruckForm({ ...truckForm, capacity: e.target.value })
-                }
-              />
-            </div>
-            <button className="btn" type="submit">Registrar camión</button>
-          </form>
-          {truckError && <div className="error">{truckError}</div>}
-        </div>
-        <div className="card">
-          <form onSubmit={createDriver} className="form">
-            <div className="form-row">
-              <input
-                placeholder="Nombre"
-                value={driverForm.name}
-                onChange={(e) =>
-                  setDriverForm({ ...driverForm, name: e.target.value })
-                }
-              />
-              <input
-                placeholder="Teléfono"
-                value={driverForm.phone}
-                onChange={(e) =>
-                  setDriverForm({ ...driverForm, phone: e.target.value })
-                }
-              />
-            </div>
-            <button className="btn" type="submit">Registrar repartidor</button>
-          </form>
-          {driverError && <div className="error">{driverError}</div>}
-        </div>
-        <div className="card">
-          <form onSubmit={createDelivery} className="form">
+          <h4>Asignar pedidos pendientes (masivo)</h4>
+          <div className="form-row">
+            <button
+              className="btn btn-outline"
+              type="button"
+              onClick={loadPendingOrders}
+            >
+              Cargar pedidos pendientes
+            </button>
+          </div>
+          <form onSubmit={assignBulk} className="form" style={{ marginTop: 8 }}>
             <div className="form-row">
               <select
-                value={deliveryForm.order_id}
+                value={bulkForm.truck_id}
                 onChange={(e) =>
-                  setDeliveryForm({ ...deliveryForm, order_id: e.target.value })
-                }
-              >
-                <option value="">Seleccione pedido pendiente</option>
-                {pendingOrders.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    #{p.id} - {p.customer_name} ({p.status})
-                  </option>
-                ))}
-              </select>
-              <select
-                value={deliveryForm.truck_id}
-                onChange={(e) =>
-                  setDeliveryForm({ ...deliveryForm, truck_id: e.target.value })
+                  setBulkForm({ ...bulkForm, truck_id: e.target.value })
                 }
               >
                 <option value="">Seleccione camión</option>
@@ -164,9 +273,9 @@ export default function Logistics() {
                 ))}
               </select>
               <select
-                value={deliveryForm.driver_id}
+                value={bulkForm.driver_id}
                 onChange={(e) =>
-                  setDeliveryForm({ ...deliveryForm, driver_id: e.target.value })
+                  setBulkForm({ ...bulkForm, driver_id: e.target.value })
                 }
               >
                 <option value="">Seleccione repartidor</option>
@@ -176,10 +285,153 @@ export default function Logistics() {
                   </option>
                 ))}
               </select>
+              <button className="btn" type="submit" disabled={bulkLoading}>
+                {bulkLoading ? "Asignando..." : "Asignar seleccionados"}
+              </button>
             </div>
-            <button className="btn" type="submit">Asignar entrega</button>
           </form>
-          {deliveryError && <div className="error">{deliveryError}</div>}
+          {bulkError && <div className="error">{bulkError}</div>}
+          {bulkResult && (
+            <div className="tag" style={{ marginTop: 8 }}>
+              Asignados: {bulkResult.assigned} | Omitidos: {bulkResult.skipped}
+            </div>
+          )}
+          <table className="table" style={{ marginTop: 12 }}>
+            <thead>
+              <tr>
+                <th>
+                  <input
+                    type="checkbox"
+                    checked={
+                      pendingOrders.length > 0 &&
+                      pendingOrders.every((o) => bulkSelection[o.id])
+                    }
+                    onChange={(e) => toggleAllBulk(e.target.checked)}
+                  />
+                </th>
+                <th>ID</th>
+                <th>Nombre</th>
+                <th>Estado</th>
+                <th>Zona</th>
+                <th>Dirección</th>
+                <th>Tel. principal</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pendingOrders.map((p) => (
+                <tr key={p.id}>
+                  <td>
+                    <input
+                      type="checkbox"
+                      checked={!!bulkSelection[p.id]}
+                      onChange={() => toggleBulkSelection(p.id)}
+                    />
+                  </td>
+                  <td>{p.id}</td>
+                  <td>{p.customer_name}</td>
+                  <td><span className={statusClass(p.status)}>{p.status}</span></td>
+                  <td>{p.zona || "-"}</td>
+                  <td>{p.direccion || "-"}</td>
+                  <td>{p.phone || "-"}</td>
+                </tr>
+              ))}
+              {pendingOrders.length === 0 && (
+                <tr>
+                  <td colSpan={7}>No hay pedidos pendientes.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <div className="card">
+          <h4>Resumen del camión (hoy)</h4>
+          <div className="form-row">
+            <select
+              value={summaryTruckId}
+              onChange={(e) => {
+                const nextId = e.target.value;
+                setSummaryTruckId(nextId);
+                loadTruckSummary(nextId);
+              }}
+            >
+              <option value="">Seleccione camión</option>
+              {trucks.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.plate}
+                </option>
+              ))}
+            </select>
+          </div>
+          {summaryError && <div className="error">{summaryError}</div>}
+          <div style={{ marginTop: 8 }}>
+            <div>Pedidos: <strong>{truckSummary.total_orders}</strong></div>
+            <div>Productos: <strong>{truckSummary.total_items}</strong></div>
+            <div>Valor Bs.: <strong>{Number(truckSummary.total_value || 0).toFixed(2)}</strong></div>
+          </div>
+        </div>
+        <div className="card">
+          <h4>Hoja de ruta (PDF)</h4>
+          <div className="form-row">
+            <select
+              value={printTruckId}
+              onChange={(e) => setPrintTruckId(e.target.value)}
+            >
+              <option value="">Seleccione camión</option>
+              {trucks.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.plate}
+                </option>
+              ))}
+            </select>
+            <button className="btn" type="button" onClick={printRouteSheet} disabled={printLoading}>
+              {printLoading ? "Generando..." : "Imprimir hoja de ruta"}
+            </button>
+          </div>
+          {printError && <div className="error">{printError}</div>}
+        </div>
+        <div className="card">
+          <h4>Devolución a almacén y caja</h4>
+          <form onSubmit={handleReturn} className="form">
+            <div className="form-row">
+              <select
+                value={returnForm.truck_id}
+                onChange={(e) => {
+                  const nextId = e.target.value;
+                  setReturnForm((prev) => ({ ...prev, truck_id: nextId, order_id: "" }));
+                  loadTruckOrders(nextId);
+                }}
+              >
+                <option value="">Seleccione camión</option>
+                {trucks.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.plate}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={returnForm.order_id}
+                onChange={(e) =>
+                  setReturnForm((prev) => ({ ...prev, order_id: e.target.value }))
+                }
+              >
+                <option value="">Seleccione pedido</option>
+                {truckOrders.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    #{o.id} - {o.customer_name} ({o.status})
+                  </option>
+                ))}
+              </select>
+              <input
+                placeholder="Monto entregado a caja"
+                value={returnForm.cash_amount}
+                onChange={(e) =>
+                  setReturnForm((prev) => ({ ...prev, cash_amount: e.target.value }))
+                }
+              />
+            </div>
+            <button className="btn" type="submit">Registrar devolución</button>
+          </form>
+          {returnError && <div className="error">{returnError}</div>}
         </div>
       </div>
       <div className="card" style={{ marginTop: 16 }}>
