@@ -574,7 +574,11 @@ app.get(
   }
 );
 
-app.post("/api/inventory/move", requireAuth, async (req, res) => {
+app.post(
+  "/api/inventory/move",
+  requireAuth,
+  auditMiddleware("inventory"),
+  async (req, res) => {
   const { warehouse_id, product_id, qty, type, order_id, note } = req.body || {};
   if (!warehouse_id || !product_id || !qty || !type) {
     return res.status(400).json({ error: "Datos incompletos" });
