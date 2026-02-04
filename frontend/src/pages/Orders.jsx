@@ -16,7 +16,12 @@ export default function Orders() {
   
   const [statusUpdates, setStatusUpdates] = useState({});
   const [statusLoading, setStatusLoading] = useState({});
-  const [search, setSearch] = useState({ nombre: "", telefono: "", nit: "" });
+  const [search, setSearch] = useState({
+    nombre: "",
+    telefono: "",
+    direccion: "",
+    zona: "",
+  });
   const [results, setResults] = useState([]);
   const [searchError, setSearchError] = useState("");
   const [orderError, setOrderError] = useState("");
@@ -76,7 +81,8 @@ export default function Orders() {
         params: {
           nombre: search.nombre || undefined,
           telefono: search.telefono || undefined,
-          nit: search.nit || undefined,
+          direccion: search.direccion || undefined,
+          zona: search.zona || undefined,
         },
       });
       setResults(res.data);
@@ -389,9 +395,16 @@ export default function Orders() {
               onChange={(e) => setSearch({ ...search, telefono: e.target.value })}
             />
             <input
-              placeholder="NIT"
-              value={search.nit}
-              onChange={(e) => setSearch({ ...search, nit: e.target.value })}
+              placeholder="Dirección"
+              value={search.direccion}
+              onChange={(e) =>
+                setSearch({ ...search, direccion: e.target.value })
+              }
+            />
+            <input
+              placeholder="Zona"
+              value={search.zona}
+              onChange={(e) => setSearch({ ...search, zona: e.target.value })}
             />
           </div>
           <div style={{ display: "flex", gap: 8 }}>
@@ -400,7 +413,7 @@ export default function Orders() {
               className="btn btn-outline"
               type="button"
               onClick={() => {
-                setSearch({ nombre: "", telefono: "", nit: "" });
+                setSearch({ nombre: "", telefono: "", direccion: "", zona: "" });
                 setResults([]);
                 setSearchError("");
               }}
@@ -603,20 +616,24 @@ export default function Orders() {
           </div>
         </div>
         <table className="table">
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Cliente</th>
-            <th>Estado</th>
-            <th>Camión</th>
-            <th>Actualizar</th>
-          </tr>
-        </thead>
-        <tbody>
-          {filteredOrders.map((o) => (
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Cliente</th>
+              <th>Dirección</th>
+              <th>Zona</th>
+              <th>Estado</th>
+              <th>Camión</th>
+              <th>Actualizar</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredOrders.map((o) => (
               <tr key={o.id}>
                 <td>{o.id}</td>
                 <td>{o.customer_name}</td>
+                <td>{o.address || "-"}</td>
+                <td>{o.zone || "-"}</td>
                 <td><span className={statusClass(o.status)}>{o.status}</span></td>
                 <td>{o.status === "Despachado" ? (o.truck_plate || "-") : "-"}</td>
                 <td>
@@ -648,7 +665,7 @@ export default function Orders() {
                 </td>
               </tr>
             ))}
-        </tbody>
+          </tbody>
         </table>
       </div>
     </div>

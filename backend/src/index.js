@@ -308,7 +308,7 @@ app.get("/api/customers", requireRole(ACCESS.customers), async (_req, res) => {
 });
 
 app.get("/api/customers/search", requireRole(ACCESS.orders), async (req, res) => {
-  const { nombre, telefono, nit } = req.query || {};
+  const { nombre, telefono, direccion, zona } = req.query || {};
   const conditions = [];
   const params = [];
 
@@ -320,9 +320,13 @@ app.get("/api/customers/search", requireRole(ACCESS.orders), async (req, res) =>
     conditions.push("telefono_principal LIKE ?");
     params.push(`%${telefono}%`);
   }
-  if (nit) {
-    conditions.push("nit LIKE ?");
-    params.push(`%${nit}%`);
+  if (direccion) {
+    conditions.push("direccion LIKE ?");
+    params.push(`%${direccion}%`);
+  }
+  if (zona) {
+    conditions.push("zona LIKE ?");
+    params.push(`%${zona}%`);
   }
 
   if (conditions.length === 0) {
@@ -612,7 +616,7 @@ app.post(
 
 app.get("/api/orders", requireRole(ACCESS.orders), async (_req, res) => {
   const rows = await query(
-    "SELECT o.id, o.cliente_id as customer_id, o.estado as status, o.metodo_pago as payment_method, o.prioridad as priority, o.notas as notes, o.fecha_creacion as created_at, c.nombre_completo as customer_name, cam.placa as truck_plate FROM pedidos o JOIN clientes c ON c.id = o.cliente_id LEFT JOIN entregas e ON e.pedido_id = o.id LEFT JOIN camiones cam ON cam.id = e.camion_id ORDER BY o.id DESC"
+    "SELECT o.id, o.cliente_id as customer_id, o.estado as status, o.metodo_pago as payment_method, o.prioridad as priority, o.notas as notes, o.fecha_creacion as created_at, c.nombre_completo as customer_name, c.direccion as address, c.zona as zone, cam.placa as truck_plate FROM pedidos o JOIN clientes c ON c.id = o.cliente_id LEFT JOIN entregas e ON e.pedido_id = o.id LEFT JOIN camiones cam ON cam.id = e.camion_id ORDER BY o.id DESC"
   );
   res.json(rows);
 });
@@ -1037,12 +1041,16 @@ app.get("/api/logistics/truck-orders", requireRole(ACCESS.logistics), async (req
       c.telefono_principal as phone,
       c.zona,
       COALESCE(dc.direccion, c.direccion) as address,
-      p.fecha_creacion as created_at
+      p.fecha_creacion as created_at,
+      GROUP_CONCAT(CONCAT(pr.nombre, " x", oi.cantidad) SEPARATOR ", ") as items
      FROM entregas e
      JOIN pedidos p ON p.id = e.pedido_id
      JOIN clientes c ON c.id = p.cliente_id
      LEFT JOIN direcciones_clientes dc ON dc.id = p.direccion_id
+     JOIN items_pedido oi ON oi.pedido_id = p.id
+     JOIN productos pr ON pr.id = oi.producto_id
      WHERE e.camion_id = ?
+     GROUP BY p.id, p.estado, c.nombre_completo, c.telefono_principal, c.zona, address, p.fecha_creacion
      ORDER BY p.id DESC`,
     [truck_id]
   );

@@ -52,6 +52,7 @@ export default function Admin() {
   });
   const [roleForm, setRoleForm] = useState({ name: "" });
   const [roleError, setRoleError] = useState("");
+  const [roleSuccess, setRoleSuccess] = useState("");
   const [editRoleId, setEditRoleId] = useState(null);
   const [editRoleName, setEditRoleName] = useState("");
 
@@ -183,8 +184,9 @@ export default function Admin() {
   }
 
   async function handleUpdateRole(e) {
-    e.preventDefault();
+    e?.preventDefault?.();
     setRoleError("");
+    setRoleSuccess("");
     if (!editRoleId || !editRoleName.trim()) {
       setRoleError("Nombre requerido.");
       return;
@@ -193,6 +195,7 @@ export default function Admin() {
       await api.put(`/api/admin/roles/${editRoleId}`, {
         name: editRoleName.trim(),
       });
+      setRoleSuccess("Rol actualizado correctamente.");
       cancelEditRole();
       load();
     } catch (err) {
@@ -403,6 +406,7 @@ export default function Admin() {
           </div>
         </form>
         {roleError && <div className="error">{roleError}</div>}
+        {roleSuccess && <div className="tag">{roleSuccess}</div>}
         <table className="table" style={{ marginTop: 12 }}>
           <thead>
             <tr>
@@ -427,8 +431,14 @@ export default function Admin() {
                 </td>
                 <td>
                   {editRoleId === r.id ? (
-                    <form onSubmit={handleUpdateRole} style={{ display: "flex", gap: 8 }}>
-                      <button className="btn btn-sm" type="submit">Guardar</button>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button
+                        className="btn btn-sm"
+                        type="button"
+                        onClick={handleUpdateRole}
+                      >
+                        Guardar
+                      </button>
                       <button
                         className="btn btn-outline btn-sm"
                         type="button"
@@ -436,7 +446,7 @@ export default function Admin() {
                       >
                         Cancelar
                       </button>
-                    </form>
+                    </div>
                   ) : (
                     <button
                       className="btn btn-outline btn-sm"

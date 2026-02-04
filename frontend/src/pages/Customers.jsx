@@ -2,6 +2,77 @@ import { useEffect, useState } from "react";
 import api from "../api";
 
 export default function Customers() {
+  const zonas = [
+    "SOPOCACHI",
+    "CALACOTO",
+    "COTA COTA",
+    "ACHUMANI",
+    "BAJO SEGUEN",
+    "MIRAFLORES",
+    "VILLA FATIMA",
+    "ALTO OBRAJES",
+    "OBRAJES",
+    "SAN PEDRO",
+    "CALIRI",
+    "IRPAVI",
+    "LOS PINOS",
+    "LA FLORIDA",
+    "ALTO MIRAF",
+    "VILLA ARMO",
+    "Z. NORTE",
+    "IRPAVI II",
+    "EL ALTO",
+    "KUPINI",
+    "ALTO SAN P",
+    "CENTRO",
+    "BOLOGNIA",
+    "ALTO PAMPA",
+    "VILLA COPAC",
+    "CIUDAD FER",
+    "ACHACHICALA",
+    "EL TEJAR",
+    "MALLASA",
+    "BELLA VISTA",
+    "VALLE HERM",
+    "ALTO SEGUEN",
+    "SAN JORGE",
+    "BAJO SAN AN",
+    "VILLA PABÓN",
+    "SAN ANTONI",
+    "CHASQUIPAM",
+    "MUNAYPATA",
+    "VINO TINTO",
+    "BAJO SAN IS",
+    "VILLA VICTO",
+    "ALTO SOPOC",
+    "VILLA EL CAR",
+    "VILLA LA MER",
+    "PURA PURA",
+    "COTAHUMA",
+    "CRISTO REY",
+    "ALTO AUQUIS",
+    "ALTO SAN AN",
+    "ALTO TACAG",
+    "ARANJUEZ",
+    "PERIFERICA",
+    "MALLASILLA",
+    "PAMPAHASI",
+    "BAJO AUQUIS",
+    "KOANI",
+    "ALTO CHIJINI",
+    "TEMBLADERA",
+    "BAJO PAMPA",
+    "BAJO LLOJET",
+    "ALTO IRPAVI",
+    "COCHABAMBA",
+    "HUACHICALLA",
+    "BARRIO GRA",
+    "ALTO LLOJETA",
+    "BAJO TACAG",
+    "SAID",
+    "JUPAPINA",
+    "OVEJUYO",
+  ];
   const [customers, setCustomers] = useState([]);
   const [tiposCliente, setTiposCliente] = useState([]);
   const [form, setForm] = useState({
@@ -112,10 +183,16 @@ export default function Customers() {
               onChange={(e) => setForm({ ...form, direccion: e.target.value })}
             />
             <input
+              list="zonas"
               placeholder="Zona"
               value={form.zona}
               onChange={(e) => setForm({ ...form, zona: e.target.value })}
             />
+            <datalist id="zonas">
+              {zonas.map((z) => (
+                <option key={z} value={z} />
+              ))}
+            </datalist>
           </div>
           <div className="form-row">
             <input

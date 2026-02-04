@@ -179,16 +179,22 @@ export default function Logistics() {
       const truck = trucks.find((t) => String(t.id) === String(printTruckId));
       const title = `Hoja de ruta - ${truck?.plate || "Camión"}`;
       const now = new Date().toLocaleString();
+      const formatDate = (value) =>
+        value ? new Date(value).toLocaleDateString() : "-";
       const rowsHtml = orders
         .map(
           (o) => `
             <tr>
-              <td>${o.id}</td>
+              <td>${formatDate(o.created_at)}</td>
               <td>${o.customer_name || "-"}</td>
-              <td>${o.phone || "-"}</td>
               <td>${o.zona || "-"}</td>
               <td>${o.address || "-"}</td>
-              <td>${o.status || "-"}</td>
+              <td>${o.phone || "-"}</td>
+              <td>${o.items || "-"}</td>
+              <td class="center">
+                <input type="checkbox" ${o.status === "Entregado" ? "checked" : ""} />
+              </td>
+              <td class="obs"></td>
             </tr>
           `
         )
@@ -203,12 +209,16 @@ export default function Logistics() {
           <head>
             <title>${title}</title>
             <style>
-              body { font-family: Arial, sans-serif; padding: 24px; }
-              h2 { margin: 0 0 6px; }
-              .meta { color: #555; margin-bottom: 16px; }
+              @page { size: landscape; margin: 16mm; }
+              body { font-family: Arial, sans-serif; padding: 12px; }
+              h2 { margin: 0 0 4px; font-size: 16px; }
+              .meta { color: #555; margin-bottom: 8px; font-size: 11px; }
               table { width: 100%; border-collapse: collapse; }
-              th, td { border: 1px solid #ccc; padding: 8px; text-align: left; font-size: 12px; }
-              th { background: #f2f4f7; }
+              th, td { border: 1px solid #ccc; padding: 3px 4px; text-align: left; font-size: 10px; vertical-align: top; line-height: 1.2; }
+              th { background: #f2f4f7; font-size: 10px; }
+              .center { text-align: center; }
+              .obs { min-width: 120px; }
+              input[type="checkbox"] { width: 11px; height: 11px; }
             </style>
           </head>
           <body>
@@ -217,16 +227,18 @@ export default function Logistics() {
             <table>
               <thead>
                 <tr>
-                  <th>Pedido</th>
-                  <th>Cliente</th>
-                  <th>Teléfono</th>
+                  <th>Fecha pedido</th>
+                  <th>Nombre cliente</th>
                   <th>Zona</th>
                   <th>Dirección</th>
-                  <th>Estado</th>
+                  <th>Teléfono</th>
+                  <th>Pedido por producto</th>
+                  <th>Entregado</th>
+                  <th>Observaciones</th>
                 </tr>
               </thead>
               <tbody>
-                ${rowsHtml || "<tr><td colspan='6'>No hay pedidos asignados.</td></tr>"}
+                ${rowsHtml || "<tr><td colspan='8'>No hay pedidos asignados.</td></tr>"}
               </tbody>
             </table>
           </body>
