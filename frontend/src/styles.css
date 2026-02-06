@@ -211,6 +211,7 @@ textarea {
   border: 1px solid var(--border);
   border-radius: 12px;
   overflow: hidden;
+  table-layout: auto;
 }
 
 .table th,
@@ -219,12 +220,25 @@ textarea {
   padding: 10px 12px;
   border-bottom: 1px solid var(--border);
   font-size: 0.95rem;
+  word-break: normal;
+  overflow-wrap: break-word;
+  line-height: 1.25;
+  white-space: normal;
 }
 
 .table th {
   background: #eef5fb;
   color: var(--muted);
   font-weight: 600;
+}
+
+.table-scroll {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.table-scroll .table {
+  min-width: 100%;
 }
 
 .tag {

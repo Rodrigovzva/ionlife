@@ -219,63 +219,67 @@ export default function Reports() {
         </div>
         <div className="card">
           <h4>Stock por almacén</h4>
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Almacén</th>
-                <th>Producto</th>
-                <th>Cantidad</th>
-                <th>Estado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {stock.map((s, idx) => (
-                <tr key={`${s.warehouse}-${idx}`}>
-                  <td>{s.warehouse}</td>
-                  <td>{s.product}</td>
-                  <td>{s.quantity}</td>
-                  <td>
-                    {Number(s.quantity) <= Number(s.min_stock) ? (
-                      <span className="tag">Bajo stock</span>
-                    ) : (
-                      "-"
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {stock.length === 0 && (
+          <div className="table-scroll">
+            <table className="table">
+              <thead>
                 <tr>
-                  <td colSpan={4}>Sin datos.</td>
+                  <th>Almacén</th>
+                  <th>Producto</th>
+                  <th>Cantidad</th>
+                  <th>Estado</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {stock.map((s, idx) => (
+                  <tr key={`${s.warehouse}-${idx}`}>
+                    <td>{s.warehouse}</td>
+                    <td>{s.product}</td>
+                    <td>{s.quantity}</td>
+                    <td>
+                      {Number(s.quantity) <= Number(s.min_stock) ? (
+                        <span className="tag">Bajo stock</span>
+                      ) : (
+                        "-"
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {stock.length === 0 && (
+                  <tr>
+                    <td colSpan={4}>Sin datos.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
         <div className="card">
           <h4>Rendimiento por camión y repartidor</h4>
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Camión</th>
-                <th>Repartidor</th>
-                <th>Entregas</th>
-              </tr>
-            </thead>
-            <tbody>
-              {performance.map((p, idx) => (
-                <tr key={`${p.plate}-${idx}`}>
-                  <td>{p.plate}</td>
-                  <td>{p.driver}</td>
-                  <td>{p.total_deliveries}</td>
-                </tr>
-              ))}
-              {performance.length === 0 && (
+          <div className="table-scroll">
+            <table className="table">
+              <thead>
                 <tr>
-                  <td colSpan={3}>Sin datos.</td>
+                  <th>Camión</th>
+                  <th>Repartidor</th>
+                  <th>Entregas</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {performance.map((p, idx) => (
+                  <tr key={`${p.plate}-${idx}`}>
+                    <td>{p.plate}</td>
+                    <td>{p.driver}</td>
+                    <td>{p.total_deliveries}</td>
+                  </tr>
+                ))}
+                {performance.length === 0 && (
+                  <tr>
+                    <td colSpan={3}>Sin datos.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
       <div className="card" style={{ marginTop: 16 }}>

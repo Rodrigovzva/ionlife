@@ -1,5 +1,34 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import api from "../api";
+import { MapContainer, Marker, TileLayer, useMapEvents } from "react-leaflet";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
+
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: new URL(
+    "leaflet/dist/images/marker-icon-2x.png",
+    import.meta.url
+  ).toString(),
+  iconUrl: new URL("leaflet/dist/images/marker-icon.png", import.meta.url).toString(),
+  shadowUrl: new URL("leaflet/dist/images/marker-shadow.png", import.meta.url).toString(),
+});
+
+function parseCoords(value) {
+  if (!value) return null;
+  const parts = value.split(",").map((p) => Number(p.trim()));
+  if (parts.length !== 2 || parts.some((p) => Number.isNaN(p))) return null;
+  return { lat: parts[0], lng: parts[1] };
+}
+
+function MapClickHandler({ onSelect }) {
+  useMapEvents({
+    click(e) {
+      onSelect(e.latlng);
+    },
+  });
+  return null;
+}
 
 export default function Customers() {
   const zonas = [
@@ -90,6 +119,15 @@ export default function Customers() {
   });
   const [gpsLoading, setGpsLoading] = useState(false);
   const [gpsError, setGpsError] = useState("");
+  const [showMap, setShowMap] = useState(false);
+  const [mapPosition, setMapPosition] = useState(null);
+
+  const mapCenter = useMemo(() => {
+    const parsed = parseCoords(form.datos_gps);
+    if (parsed) return parsed;
+    if (mapPosition) return mapPosition;
+    return { lat: -16.5, lng: -68.15 };
+  }, [form.datos_gps, mapPosition]);
 
   async function load() {
     const [resCustomers, resTipos] = await Promise.all([
@@ -208,7 +246,42 @@ export default function Customers() {
             >
               {gpsLoading ? "Capturando..." : "Capturar GPS"}
             </button>
+            <button
+              className="btn btn-outline"
+              type="button"
+              onClick={() => {
+                const parsed = parseCoords(form.datos_gps);
+                setMapPosition(parsed);
+                setShowMap((prev) => !prev);
+              }}
+            >
+              {showMap ? "Ocultar mapa" : "Seleccionar en mapa"}
+            </button>
           </div>
+          {showMap && (
+            <div style={{ marginTop: 8 }}>
+              <MapContainer
+                center={mapCenter}
+                zoom={13}
+                style={{ height: 280, width: "100%" }}
+              >
+                <TileLayer
+                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                />
+                <MapClickHandler
+                  onSelect={(latlng) => {
+                    setMapPosition(latlng);
+                    setForm((prev) => ({
+                      ...prev,
+                      datos_gps: `${latlng.lat.toFixed(6)}, ${latlng.lng.toFixed(6)}`,
+                    }));
+                  }}
+                />
+                {mapPosition && <Marker position={mapPosition} />}
+              </MapContainer>
+            </div>
+          )}
           {gpsError && <div className="error">{gpsError}</div>}
           <div className="form-row">
             <select

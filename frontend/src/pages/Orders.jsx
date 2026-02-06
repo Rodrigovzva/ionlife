@@ -42,6 +42,7 @@ export default function Orders() {
     address_text: "",
     address_id: "",
     scheduled_date: "",
+    notes: "",
   });
   const [items, setItems] = useState([
     {
@@ -168,6 +169,7 @@ export default function Orders() {
         customer_id: Number(form.customer_id),
         address_id: addressId,
         scheduled_date: form.scheduled_date || null,
+        notes: form.notes || null,
         items: cleanItems,
       });
       setOrderSuccess("Pedido creado correctamente.");
@@ -178,6 +180,7 @@ export default function Orders() {
         address_text: "",
         address_id: "",
         scheduled_date: "",
+        notes: "",
       });
       setItems([
         {
@@ -502,6 +505,14 @@ export default function Orders() {
               onChange={(e) =>
                 setForm({ ...form, scheduled_date: e.target.value })
               }
+            />
+          </div>
+          <div className="form-row">
+            <textarea
+              placeholder="Observaciones del cliente"
+              rows={2}
+              value={form.notes}
+              onChange={(e) => setForm({ ...form, notes: e.target.value })}
             />
           </div>
           {addressHint && <div className="tag">{addressHint}</div>}
