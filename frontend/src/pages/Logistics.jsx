@@ -191,6 +191,7 @@ export default function Logistics() {
               <td>${o.address || "-"}</td>
               <td>${o.phone || "-"}</td>
               <td>${o.items || "-"}</td>
+              <td>Bs. ${Number(o.total || 0).toFixed(2)}</td>
               <td class="center">
                 <input type="checkbox" ${o.status === "Entregado" ? "checked" : ""} />
               </td>
@@ -233,12 +234,13 @@ export default function Logistics() {
                   <th>Dirección</th>
                   <th>Teléfono</th>
                   <th>Pedido por producto</th>
+                  <th>Precio</th>
                   <th>Entregado</th>
                   <th>Observaciones</th>
                 </tr>
               </thead>
               <tbody>
-                ${rowsHtml || "<tr><td colspan='8'>No hay pedidos asignados.</td></tr>"}
+                ${rowsHtml || "<tr><td colspan='9'>No hay pedidos asignados.</td></tr>"}
               </tbody>
             </table>
           </body>

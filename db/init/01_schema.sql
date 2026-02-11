@@ -11,14 +11,24 @@ CREATE TABLE IF NOT EXISTS tipos_cliente (
   nombre VARCHAR(120) NOT NULL UNIQUE,
   activo TINYINT(1) NOT NULL DEFAULT 1,
   descuento_unidades DECIMAL(10,2) NOT NULL DEFAULT 0,
-  fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  fecha_actualizacion TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+  creado_por_usuario_id INT,
+  actualizado_por_usuario_id INT,
+  FOREIGN KEY (creado_por_usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL,
+  FOREIGN KEY (actualizado_por_usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS tipos_precio (
   id INT AUTO_INCREMENT PRIMARY KEY,
   nombre VARCHAR(120) NOT NULL UNIQUE,
   activo TINYINT(1) NOT NULL DEFAULT 1,
-  fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  fecha_actualizacion TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+  creado_por_usuario_id INT,
+  actualizado_por_usuario_id INT,
+  FOREIGN KEY (creado_por_usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL,
+  FOREIGN KEY (actualizado_por_usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL
 );
 
 
@@ -53,9 +63,12 @@ CREATE TABLE IF NOT EXISTS clientes (
   estado VARCHAR(40) NOT NULL DEFAULT 'Activo',
   notas TEXT,
   creado_por_usuario_id INT,
+  actualizado_por_usuario_id INT,
+  fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   fecha_actualizacion TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
-  FOREIGN KEY (creado_por_usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL
+  FOREIGN KEY (creado_por_usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL,
+  FOREIGN KEY (actualizado_por_usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS direcciones_clientes (
@@ -66,7 +79,13 @@ CREATE TABLE IF NOT EXISTS direcciones_clientes (
   ciudad VARCHAR(120),
   referencia VARCHAR(255),
   es_principal TINYINT(1) NOT NULL DEFAULT 0,
-  FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE CASCADE
+  creado_por_usuario_id INT,
+  actualizado_por_usuario_id INT,
+  fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  fecha_actualizacion TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE CASCADE,
+  FOREIGN KEY (creado_por_usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL,
+  FOREIGN KEY (actualizado_por_usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS productos (
@@ -74,7 +93,13 @@ CREATE TABLE IF NOT EXISTS productos (
   nombre VARCHAR(160) NOT NULL,
   descripcion TEXT,
   precio DECIMAL(10,2) NOT NULL,
-  activo TINYINT(1) NOT NULL DEFAULT 1
+  activo TINYINT(1) NOT NULL DEFAULT 1,
+  creado_por_usuario_id INT,
+  actualizado_por_usuario_id INT,
+  fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  fecha_actualizacion TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (creado_por_usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL,
+  FOREIGN KEY (actualizado_por_usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS tipos_precio_producto (
@@ -84,15 +109,26 @@ CREATE TABLE IF NOT EXISTS tipos_precio_producto (
   precio DECIMAL(10,2) NOT NULL,
   activo TINYINT(1) NOT NULL DEFAULT 1,
   fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  fecha_actualizacion TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+  creado_por_usuario_id INT,
+  actualizado_por_usuario_id INT,
   UNIQUE KEY uniq_tipo_producto (tipo_precio_id, producto_id),
   FOREIGN KEY (tipo_precio_id) REFERENCES tipos_precio(id) ON DELETE CASCADE,
-  FOREIGN KEY (producto_id) REFERENCES productos(id) ON DELETE CASCADE
+  FOREIGN KEY (producto_id) REFERENCES productos(id) ON DELETE CASCADE,
+  FOREIGN KEY (creado_por_usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL,
+  FOREIGN KEY (actualizado_por_usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS almacenes (
   id INT AUTO_INCREMENT PRIMARY KEY,
   nombre VARCHAR(160) NOT NULL,
-  ubicacion VARCHAR(200)
+  ubicacion VARCHAR(200),
+  creado_por_usuario_id INT,
+  actualizado_por_usuario_id INT,
+  fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  fecha_actualizacion TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (creado_por_usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL,
+  FOREIGN KEY (actualizado_por_usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS inventario (
@@ -101,9 +137,15 @@ CREATE TABLE IF NOT EXISTS inventario (
   producto_id INT NOT NULL,
   cantidad INT NOT NULL DEFAULT 0,
   stock_minimo INT NOT NULL DEFAULT 0,
+  creado_por_usuario_id INT,
+  actualizado_por_usuario_id INT,
+  fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  fecha_actualizacion TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uniq_inv (almacen_id, producto_id),
   FOREIGN KEY (almacen_id) REFERENCES almacenes(id) ON DELETE CASCADE,
-  FOREIGN KEY (producto_id) REFERENCES productos(id) ON DELETE CASCADE
+  FOREIGN KEY (producto_id) REFERENCES productos(id) ON DELETE CASCADE,
+  FOREIGN KEY (creado_por_usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL,
+  FOREIGN KEY (actualizado_por_usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS movimientos_inventario (
@@ -115,8 +157,13 @@ CREATE TABLE IF NOT EXISTS movimientos_inventario (
   pedido_id INT,
   nota VARCHAR(255),
   fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  fecha_actualizacion TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+  creado_por_usuario_id INT,
+  actualizado_por_usuario_id INT,
   FOREIGN KEY (almacen_id) REFERENCES almacenes(id) ON DELETE CASCADE,
-  FOREIGN KEY (producto_id) REFERENCES productos(id) ON DELETE CASCADE
+  FOREIGN KEY (producto_id) REFERENCES productos(id) ON DELETE CASCADE,
+  FOREIGN KEY (creado_por_usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL,
+  FOREIGN KEY (actualizado_por_usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS pedidos (
@@ -130,9 +177,12 @@ CREATE TABLE IF NOT EXISTS pedidos (
   fecha_programada DATE NULL,
   creado_por_usuario_id INT,
   fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  actualizado_por_usuario_id INT,
+  fecha_actualizacion TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE CASCADE,
   FOREIGN KEY (direccion_id) REFERENCES direcciones_clientes(id) ON DELETE CASCADE,
-  FOREIGN KEY (creado_por_usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL
+  FOREIGN KEY (creado_por_usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL,
+  FOREIGN KEY (actualizado_por_usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS items_pedido (
@@ -142,9 +192,15 @@ CREATE TABLE IF NOT EXISTS items_pedido (
   cantidad INT NOT NULL,
   precio DECIMAL(10,2) NOT NULL,
   tipo_precio_id INT NULL,
+  creado_por_usuario_id INT,
+  actualizado_por_usuario_id INT,
+  fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  fecha_actualizacion TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (pedido_id) REFERENCES pedidos(id) ON DELETE CASCADE,
   FOREIGN KEY (producto_id) REFERENCES productos(id) ON DELETE CASCADE,
-  FOREIGN KEY (tipo_precio_id) REFERENCES tipos_precio(id) ON DELETE SET NULL
+  FOREIGN KEY (tipo_precio_id) REFERENCES tipos_precio(id) ON DELETE SET NULL,
+  FOREIGN KEY (creado_por_usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL,
+  FOREIGN KEY (actualizado_por_usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS historial_estado_pedido (
@@ -163,21 +219,38 @@ CREATE TABLE IF NOT EXISTS pagos (
   metodo VARCHAR(60),
   estado VARCHAR(40) NOT NULL DEFAULT 'Pendiente',
   fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (pedido_id) REFERENCES pedidos(id) ON DELETE CASCADE
+  fecha_actualizacion TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+  creado_por_usuario_id INT,
+  actualizado_por_usuario_id INT,
+  FOREIGN KEY (pedido_id) REFERENCES pedidos(id) ON DELETE CASCADE,
+  FOREIGN KEY (creado_por_usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL,
+  FOREIGN KEY (actualizado_por_usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS camiones (
   id INT AUTO_INCREMENT PRIMARY KEY,
   placa VARCHAR(40) NOT NULL UNIQUE,
   capacidad INT,
-  activo TINYINT(1) NOT NULL DEFAULT 1
+  activo TINYINT(1) NOT NULL DEFAULT 1,
+  creado_por_usuario_id INT,
+  actualizado_por_usuario_id INT,
+  fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  fecha_actualizacion TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (creado_por_usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL,
+  FOREIGN KEY (actualizado_por_usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS repartidores (
   id INT AUTO_INCREMENT PRIMARY KEY,
   nombre VARCHAR(160) NOT NULL,
   telefono VARCHAR(40),
-  activo TINYINT(1) NOT NULL DEFAULT 1
+  activo TINYINT(1) NOT NULL DEFAULT 1,
+  creado_por_usuario_id INT,
+  actualizado_por_usuario_id INT,
+  fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  fecha_actualizacion TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (creado_por_usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL,
+  FOREIGN KEY (actualizado_por_usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS entregas (
@@ -188,9 +261,15 @@ CREATE TABLE IF NOT EXISTS entregas (
   estado VARCHAR(40) NOT NULL DEFAULT 'Despachado',
   programado_en DATETIME,
   entregado_en DATETIME,
+  creado_por_usuario_id INT,
+  actualizado_por_usuario_id INT,
+  fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  fecha_actualizacion TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (pedido_id) REFERENCES pedidos(id) ON DELETE CASCADE,
   FOREIGN KEY (camion_id) REFERENCES camiones(id) ON DELETE CASCADE,
-  FOREIGN KEY (repartidor_id) REFERENCES repartidores(id) ON DELETE CASCADE
+  FOREIGN KEY (repartidor_id) REFERENCES repartidores(id) ON DELETE CASCADE,
+  FOREIGN KEY (creado_por_usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL,
+  FOREIGN KEY (actualizado_por_usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS incidencias_entrega (
