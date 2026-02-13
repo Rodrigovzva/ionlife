@@ -68,73 +68,75 @@ export default function DriverDeliveries() {
       <h2>Mis entregas</h2>
       <div className="card">
         {error && <div className="error" style={{ marginBottom: 8 }}>{error}</div>}
-        <table className="table">
-          <thead>
-            <tr>
-              <th>ID Entrega</th>
-              <th>Pedido</th>
-              <th>Cliente</th>
-              <th>Dirección</th>
-              <th>Repartidor</th>
-              <th>Camión</th>
-              <th>Estado</th>
-              <th>Pedido</th>
-              <th>Programado</th>
-              <th>Actualizar</th>
-            </tr>
-          </thead>
-          <tbody>
-            {deliveries.map((d) => (
-              <tr key={d.id}>
-                <td>{d.id}</td>
-                <td>{d.pedido_detalle || "-"}</td>
-                <td>{d.cliente}</td>
-                <td>{d.direccion || "-"}</td>
-                <td>{d.repartidor}</td>
-                <td>{d.camion}</td>
-                <td><span className={statusClass(d.estado)}>{d.estado}</span></td>
-                <td>{d.pedido_detalle || "-"}</td>
-                <td>
-                  {d.programado_en
-                    ? new Date(d.programado_en).toLocaleString()
-                    : d.fecha_programada
-                    ? new Date(d.fecha_programada).toLocaleDateString()
-                    : "-"}
-                </td>
-                <td>
-                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    <select
-                      value={statusUpdates[d.id] || ""}
-                      onChange={(e) =>
-                        setStatusUpdates((prev) => ({
-                          ...prev,
-                          [d.id]: e.target.value,
-                        }))
-                      }
-                    >
-                      <option value="">Cambiar estado</option>
-                      <option>Entregado</option>
-                      <option>Cancelado</option>
-                    </select>
-                    <button
-                      className="btn btn-outline btn-sm"
-                      type="button"
-                      onClick={() => updateStatus(d.id)}
-                      disabled={!statusUpdates[d.id] || loading}
-                    >
-                      {loading ? "Guardando..." : "Actualizar"}
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {deliveries.length === 0 && (
+        <div className="table-scroll">
+          <table className="table table-deliveries">
+            <thead>
               <tr>
-                <td colSpan={9}>No hay entregas asignadas.</td>
+                <th>ID Entrega</th>
+                <th>Cliente</th>
+                <th className="col-address">Dirección</th>
+                <th>Repartidor</th>
+                <th>Camión</th>
+                <th>Estado</th>
+                <th className="col-order">Pedido</th>
+                <th>Fecha venta</th>
+                <th>Programado</th>
+                <th>Actualizar</th>
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {deliveries.map((d) => (
+                <tr key={d.id}>
+                  <td>{d.id}</td>
+                  <td>{d.cliente}</td>
+                  <td className="col-address">{d.direccion || "-"}</td>
+                  <td>{d.repartidor}</td>
+                  <td>{d.camion}</td>
+                  <td><span className={statusClass(d.estado)}>{d.estado}</span></td>
+                  <td className="col-order">{d.pedido_detalle || "-"}</td>
+                  <td>{d.entregado_en ? new Date(d.entregado_en).toLocaleString() : "-"}</td>
+                  <td>
+                    {d.programado_en
+                      ? new Date(d.programado_en).toLocaleString()
+                      : d.fecha_programada
+                      ? new Date(d.fecha_programada).toLocaleDateString()
+                      : "-"}
+                  </td>
+                  <td>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <select
+                        value={statusUpdates[d.id] || ""}
+                        onChange={(e) =>
+                          setStatusUpdates((prev) => ({
+                            ...prev,
+                            [d.id]: e.target.value,
+                          }))
+                        }
+                      >
+                        <option value="">Cambiar estado</option>
+                        <option>Entregado</option>
+                        <option>Cancelado</option>
+                      </select>
+                      <button
+                        className="btn btn-outline btn-sm"
+                        type="button"
+                        onClick={() => updateStatus(d.id)}
+                        disabled={!statusUpdates[d.id] || loading}
+                      >
+                        {loading ? "Guardando..." : "Actualizar"}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {deliveries.length === 0 && (
+                <tr>
+                  <td colSpan={10}>No hay entregas asignadas.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
       <div className="card" style={{ marginTop: 16 }}>
         <h4>Ventas realizadas</h4>
@@ -146,47 +148,49 @@ export default function DriverDeliveries() {
             Bs. {sales.reduce((sum, s) => sum + Number(s.total || 0), 0).toFixed(2)}
           </strong>
         </div>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Pedido</th>
-              <th>Cliente</th>
-              <th>Estado</th>
-              <th>Entregado</th>
-              <th>Camión</th>
-              <th>Repartidor</th>
-              <th>Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sales.map((s) => (
-              <tr key={s.pedido_id}>
-                <td>{s.pedido_id}</td>
-                <td>{s.cliente}</td>
-                <td><span className={statusClass(s.estado_entrega)}>{s.estado_entrega}</span></td>
-                <td>{s.entregado_en ? new Date(s.entregado_en).toLocaleString() : "-"}</td>
-                <td>{s.camion}</td>
-                <td>{s.repartidor}</td>
-                <td>Bs. {Number(s.total || 0).toFixed(2)}</td>
-              </tr>
-            ))}
-            {!salesLoading && sales.length === 0 && (
+        <div className="table-scroll">
+          <table className="table table-sales">
+            <thead>
               <tr>
-                <td colSpan={7}>No hay ventas registradas.</td>
+                <th>Pedido</th>
+                <th>Cliente</th>
+                <th>Estado</th>
+                <th>Entregado</th>
+                <th>Camión</th>
+                <th>Repartidor</th>
+                <th>Total</th>
               </tr>
-            )}
-            {sales.length > 0 && (
-              <tr>
-                <td colSpan={6} style={{ textAlign: "right" }}>
-                  Total
-                </td>
-                <td>
-                  Bs. {sales.reduce((sum, s) => sum + Number(s.total || 0), 0).toFixed(2)}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {sales.map((s) => (
+                <tr key={s.pedido_id}>
+                  <td>{s.pedido_id}</td>
+                  <td>{s.cliente}</td>
+                  <td><span className={statusClass(s.estado_entrega)}>{s.estado_entrega}</span></td>
+                  <td>{s.entregado_en ? new Date(s.entregado_en).toLocaleString() : "-"}</td>
+                  <td>{s.camion}</td>
+                  <td>{s.repartidor}</td>
+                  <td>Bs. {Number(s.total || 0).toFixed(2)}</td>
+                </tr>
+              ))}
+              {!salesLoading && sales.length === 0 && (
+                <tr>
+                  <td colSpan={7}>No hay ventas registradas.</td>
+                </tr>
+              )}
+              {sales.length > 0 && (
+                <tr>
+                  <td colSpan={6} style={{ textAlign: "right" }}>
+                    Total
+                  </td>
+                  <td>
+                    Bs. {sales.reduce((sum, s) => sum + Number(s.total || 0), 0).toFixed(2)}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

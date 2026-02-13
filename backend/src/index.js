@@ -1072,6 +1072,10 @@ app.patch(
       );
     }
     if (status === "Entregado") {
+      await query(
+        "UPDATE entregas SET entregado_en = COALESCE(entregado_en, NOW()), actualizado_por_usuario_id = ? WHERE id = ?",
+        [req.user?.id || null, req.params.id]
+      );
       const [delivery] = await query(
         "SELECT pedido_id FROM entregas WHERE id = ?",
         [req.params.id]
@@ -1126,10 +1130,13 @@ app.get("/api/logistics/truck-summary", requireRole(ACCESS.logistics), async (re
 });
 
 app.get("/api/logistics/truck-orders", requireRole(ACCESS.logistics), async (req, res) => {
-  const { truck_id } = req.query || {};
+  const { truck_id, delivered_to } = req.query || {};
   if (!truck_id) {
     return res.status(400).json({ error: "truck_id requerido" });
   }
+  const deliveredTo = delivered_to ? `${delivered_to} 23:59:59` : null;
+  const deliveredClause = deliveredTo ? " AND e.entregado_en <= ?" : "";
+  const deliveredParams = deliveredTo ? [deliveredTo] : [];
   const rows = await query(
     `SELECT
       p.id,
@@ -1161,10 +1168,10 @@ app.get("/api/logistics/truck-orders", requireRole(ACCESS.logistics), async (req
      JOIN productos pr ON pr.id = oi.producto_id
      JOIN camiones cam ON cam.id = e.camion_id
      JOIN repartidores r ON r.id = e.repartidor_id
-     WHERE e.camion_id = ?
+     WHERE e.camion_id = ?${deliveredClause}
      GROUP BY p.id, p.estado, c.nombre_completo, c.telefono_principal, c.telefono_secundario, c.zona, address, p.fecha_creacion, cam.placa, r.nombre
      ORDER BY p.id DESC`,
-    [truck_id]
+    [truck_id, ...deliveredParams]
   );
   res.json(rows);
 });

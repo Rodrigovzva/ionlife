@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "react-router-dom";
+import { Link, NavLink, useNavigate } from "react-router-dom";
 
 export default function Nav({ user, onLogout }) {
   const navigate = useNavigate();
@@ -17,18 +17,18 @@ export default function Nav({ user, onLogout }) {
       <div className="container nav-inner">
         <Link className="nav-brand" to="/">Ionlife</Link>
         <div className="nav-links">
-          <Link className="nav-link" to="/">Inicio</Link>
-          <Link className="nav-link" to="/clientes">Clientes</Link>
-          <Link className="nav-link" to="/productos">Productos</Link>
-          <Link className="nav-link" to="/almacenes">Almacenes</Link>
-          <Link className="nav-link" to="/pedidos">Pedidos</Link>
-          <Link className="nav-link" to="/logistica">Logística</Link>
-          <Link className="nav-link" to="/reportes">Reportes</Link>
+          <NavLink className="nav-link" to="/">Inicio</NavLink>
+          <NavLink className="nav-link" to="/clientes">Clientes</NavLink>
+          <NavLink className="nav-link" to="/productos">Productos</NavLink>
+          <NavLink className="nav-link" to="/almacenes">Almacenes</NavLink>
+          <NavLink className="nav-link" to="/pedidos">Pedidos</NavLink>
+          <NavLink className="nav-link" to="/logistica">Logística</NavLink>
+          <NavLink className="nav-link" to="/reportes">Reportes</NavLink>
           {showDeliveries && (
-            <Link className="nav-link" to="/mis-entregas">Mis entregas</Link>
+            <NavLink className="nav-link" to="/mis-entregas">Mis entregas</NavLink>
           )}
           {isAdmin && (
-            <Link className="nav-link" to="/admin">Administración</Link>
+            <NavLink className="nav-link" to="/admin">Administración</NavLink>
           )}
         </div>
         <div className="nav-user">

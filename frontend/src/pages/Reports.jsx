@@ -150,6 +150,93 @@ export default function Reports() {
     <div className="container page">
       <h2>Reportes</h2>
       <div className="card" style={{ marginBottom: 16 }}>
+        <h4>Resumen de estados de pedidos</h4>
+        <div className="form-row report-filters">
+          <input
+            type="date"
+            value={summaryFilters.date}
+            onChange={(e) =>
+              setSummaryFilters({ ...summaryFilters, date: e.target.value })
+            }
+          />
+          <select
+            value={summaryFilters.status}
+            onChange={(e) =>
+              setSummaryFilters({ ...summaryFilters, status: e.target.value })
+            }
+          >
+            <option value="">Todos los estados</option>
+            <option>Pendiente</option>
+            <option>Entregado</option>
+            <option>Cancelado</option>
+            <option>Reprogramado</option>
+          </select>
+          <select
+            value={summaryFilters.truck_id}
+            onChange={(e) =>
+              setSummaryFilters({ ...summaryFilters, truck_id: e.target.value })
+            }
+          >
+            <option value="">Todos los camiones</option>
+            {trucks.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.plate}
+              </option>
+            ))}
+          </select>
+          <div className="report-actions">
+            <button
+              className="btn"
+              type="button"
+              disabled={summaryLoading}
+              onClick={() => loadSummary(summaryFilters)}
+            >
+              {summaryLoading ? "Cargando..." : "Aplicar"}
+            </button>
+            <button className="btn btn-outline" type="button" onClick={printReport}>
+              Imprimir
+            </button>
+          </div>
+        </div>
+        {summaryError && <div className="error">{summaryError}</div>}
+        <div style={{ marginTop: 8 }}>
+          Total pedidos: <strong>{summaryTotal}</strong>
+        </div>
+        <table className="table" style={{ marginTop: 8 }}>
+          <thead>
+            <tr>
+              <th>Pedido</th>
+              <th>Nombre</th>
+              <th>Dirección</th>
+              <th>Estado</th>
+              <th>Fecha</th>
+              <th>Camión</th>
+              <th>Repartidor</th>
+              <th>Vendedor</th>
+            </tr>
+          </thead>
+          <tbody>
+            {summaryRows.map((s) => (
+              <tr key={s.order_id}>
+                <td>{s.order_id}</td>
+                <td>{s.customer_name}</td>
+                <td>{s.address || "-"}</td>
+                <td><span className={statusClass(s.status)}>{s.status}</span></td>
+                <td>{s.created_at ? new Date(s.created_at).toLocaleString() : "-"}</td>
+                <td>{s.truck_plate || "-"}</td>
+                <td>{s.driver_name || "-"}</td>
+                <td>{s.seller_name || "-"}</td>
+              </tr>
+            ))}
+            {summaryRows.length === 0 && (
+              <tr>
+                <td colSpan={8}>Sin datos.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      <div className="card" style={{ marginBottom: 16 }}>
         <div className="form-row">
           <input
             type="date"
@@ -326,93 +413,6 @@ export default function Reports() {
             </table>
           </div>
         </div>
-      </div>
-      <div className="card" style={{ marginTop: 16 }}>
-        <h4>Resumen de estados de pedidos</h4>
-        <div className="form-row report-filters">
-          <input
-            type="date"
-            value={summaryFilters.date}
-            onChange={(e) =>
-              setSummaryFilters({ ...summaryFilters, date: e.target.value })
-            }
-          />
-          <select
-            value={summaryFilters.status}
-            onChange={(e) =>
-              setSummaryFilters({ ...summaryFilters, status: e.target.value })
-            }
-          >
-            <option value="">Todos los estados</option>
-            <option>Pendiente</option>
-            <option>Entregado</option>
-            <option>Cancelado</option>
-            <option>Reprogramado</option>
-          </select>
-          <select
-            value={summaryFilters.truck_id}
-            onChange={(e) =>
-              setSummaryFilters({ ...summaryFilters, truck_id: e.target.value })
-            }
-          >
-            <option value="">Todos los camiones</option>
-            {trucks.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.plate}
-              </option>
-            ))}
-          </select>
-          <div className="report-actions">
-            <button
-              className="btn"
-              type="button"
-              disabled={summaryLoading}
-              onClick={() => loadSummary(summaryFilters)}
-            >
-              {summaryLoading ? "Cargando..." : "Aplicar"}
-            </button>
-            <button className="btn btn-outline" type="button" onClick={printReport}>
-              Imprimir
-            </button>
-          </div>
-        </div>
-        {summaryError && <div className="error">{summaryError}</div>}
-        <div style={{ marginTop: 8 }}>
-          Total pedidos: <strong>{summaryTotal}</strong>
-        </div>
-        <table className="table" style={{ marginTop: 8 }}>
-          <thead>
-            <tr>
-              <th>Pedido</th>
-              <th>Nombre</th>
-              <th>Dirección</th>
-              <th>Estado</th>
-              <th>Fecha</th>
-              <th>Camión</th>
-              <th>Repartidor</th>
-              <th>Vendedor</th>
-            </tr>
-          </thead>
-          <tbody>
-            {summaryRows.map((s) => (
-              <tr key={s.order_id}>
-                <td>{s.order_id}</td>
-                <td>{s.customer_name}</td>
-                <td>{s.address || "-"}</td>
-                <td><span className={statusClass(s.status)}>{s.status}</span></td>
-                <td>{s.created_at ? new Date(s.created_at).toLocaleString() : "-"}</td>
-                <td>{s.truck_plate || "-"}</td>
-                <td>{s.driver_name || "-"}</td>
-                <td>{s.seller_name || "-"}</td>
-              </tr>
-            ))}
-            {summaryRows.length === 0 && (
-              <tr>
-                <td colSpan={8}>Sin datos.</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
       </div>
     </div>
   );

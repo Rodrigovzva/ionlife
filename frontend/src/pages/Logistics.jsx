@@ -40,8 +40,13 @@ export default function Logistics({ user }) {
   const [truckOrders, setTruckOrders] = useState([]);
   const [returnError, setReturnError] = useState("");
   const [printTruckId, setPrintTruckId] = useState("");
+  const [printDateFilter, setPrintDateFilter] = useState("");
   const [printLoading, setPrintLoading] = useState(false);
   const [printError, setPrintError] = useState("");
+  const [previewOrders, setPreviewOrders] = useState([]);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState("");
+  const [showPreview, setShowPreview] = useState(false);
 
   async function load() {
     const [t, d, p] = await Promise.all([
@@ -173,7 +178,10 @@ export default function Logistics({ user }) {
     setPrintLoading(true);
     try {
       const res = await api.get("/api/logistics/truck-orders", {
-        params: { truck_id: printTruckId },
+        params: {
+          truck_id: printTruckId,
+          delivered_to: printDateFilter || undefined,
+        },
       });
       const orders = res.data || [];
       const truck = trucks.find((t) => String(t.id) === String(printTruckId));
@@ -283,6 +291,29 @@ export default function Logistics({ user }) {
       setPrintError("No se pudo generar la hoja de ruta.");
     } finally {
       setPrintLoading(false);
+    }
+  }
+
+  async function loadPreview() {
+    setPreviewError("");
+    if (!printTruckId) {
+      setPreviewError("Seleccione un camión.");
+      return;
+    }
+    setPreviewLoading(true);
+    try {
+      const res = await api.get("/api/logistics/truck-orders", {
+        params: {
+          truck_id: printTruckId,
+          delivered_to: printDateFilter || undefined,
+        },
+      });
+      setPreviewOrders(res.data || []);
+      setShowPreview(true);
+    } catch (_err) {
+      setPreviewError("No se pudo cargar la previsualización.");
+    } finally {
+      setPreviewLoading(false);
     }
   }
 
@@ -427,11 +458,86 @@ export default function Logistics({ user }) {
                 </option>
               ))}
             </select>
+            <input
+              type="date"
+              value={printDateFilter}
+              onChange={(e) => setPrintDateFilter(e.target.value)}
+              placeholder="Hasta fecha de entrega"
+            />
+            <button className="btn btn-outline" type="button" onClick={loadPreview} disabled={previewLoading}>
+              {previewLoading ? "Cargando..." : "Previsualizar"}
+            </button>
             <button className="btn" type="button" onClick={printRouteSheet} disabled={printLoading}>
               {printLoading ? "Generando..." : "Imprimir hoja de ruta"}
             </button>
           </div>
           {printError && <div className="error">{printError}</div>}
+          {previewError && <div className="error">{previewError}</div>}
+          {showPreview && (
+            <div style={{ marginTop: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
+                <strong>Previsualización</strong>
+                <button className="btn btn-outline btn-sm" type="button" onClick={() => setShowPreview(false)}>
+                  Ocultar
+                </button>
+              </div>
+              <div style={{ marginTop: 8, color: "#6b7a8c" }}>
+                Camión: <strong>{previewOrders[0]?.truck_plate || trucks.find((t) => String(t.id) === String(printTruckId))?.plate || "-"}</strong>{" "}
+                | Distribuidor: <strong>{previewOrders[0]?.driver_name || "-"}</strong>
+              </div>
+              <div className="table-scroll" style={{ marginTop: 8 }}>
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Nro pedido</th>
+                      <th>Nombre cliente</th>
+                      <th>Zona</th>
+                      <th>Dirección</th>
+                      <th>Tel. principal</th>
+                      <th>Tel. secundario</th>
+                      <th>Packs 600cc</th>
+                      <th>Packs 1 LT</th>
+                      <th>Packs 2 LT</th>
+                      <th>Bidón 5 LT</th>
+                      <th>Recarga</th>
+                      <th>Base</th>
+                      <th>Botellón</th>
+                      <th>Kit completo</th>
+                      <th>Botellón purificada</th>
+                      <th>Precio</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {previewOrders.map((o) => (
+                      <tr key={o.id}>
+                        <td>{o.id || "-"}</td>
+                        <td>{o.customer_name || "-"}</td>
+                        <td>{o.zona || "-"}</td>
+                        <td>{o.address || "-"}</td>
+                        <td>{o.phone || "-"}</td>
+                        <td>{o.phone_secondary || "-"}</td>
+                        <td>{Number(o.packs_600 || 0)}</td>
+                        <td>{Number(o.packs_1lt || 0)}</td>
+                        <td>{Number(o.packs_2lt || 0)}</td>
+                        <td>{Number(o.bidon_5 || 0)}</td>
+                        <td>{Number(o.recarga || 0)}</td>
+                        <td>{Number(o.base || 0)}</td>
+                        <td>{Number(o.botellon || 0)}</td>
+                        <td>{Number(o.kit_completo || 0)}</td>
+                        <td>{Number(o.botellon_purificada || 0)}</td>
+                        <td>Bs. {Number(o.total || 0).toFixed(2)}</td>
+                      </tr>
+                    ))}
+                    {previewOrders.length === 0 && (
+                      <tr>
+                        <td colSpan={16}>No hay pedidos asignados.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
         <div className="card">
           <h4>Devolución a almacén y caja</h4>
