@@ -181,7 +181,14 @@ a {
 }
 
 .report-filters {
-  grid-template-columns: repeat(4, minmax(180px, 1fr));
+  grid-template-columns: repeat(3, minmax(180px, 1fr)) auto;
+}
+
+.report-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
 }
 
 .form-field {

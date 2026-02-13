@@ -283,9 +283,9 @@ app.get("/api/driver/entregas", requireAuth, async (req, res) => {
   const isAdmin = roles.includes("Administrador del sistema");
   const isDriver = roles.includes("Repartidor");
   const baseQuery =
-    "SELECT e.id, e.estado, e.programado_en, e.entregado_en, p.id as pedido_id, c.nombre_completo as cliente, r.nombre as repartidor, cam.placa as camion FROM entregas e JOIN pedidos p ON p.id = e.pedido_id JOIN clientes c ON c.id = p.cliente_id JOIN repartidores r ON r.id = e.repartidor_id JOIN camiones cam ON cam.id = e.camion_id";
+    "SELECT e.id, e.estado, e.programado_en, e.entregado_en, p.id as pedido_id, p.fecha_programada as fecha_programada, c.nombre_completo as cliente, COALESCE(dc.direccion, c.direccion) as direccion, r.nombre as repartidor, cam.placa as camion, GROUP_CONCAT(CONCAT(pr.nombre, ' x', oi.cantidad) SEPARATOR ', ') as pedido_detalle FROM entregas e JOIN pedidos p ON p.id = e.pedido_id JOIN clientes c ON c.id = p.cliente_id LEFT JOIN direcciones_clientes dc ON dc.id = p.direccion_id JOIN repartidores r ON r.id = e.repartidor_id JOIN camiones cam ON cam.id = e.camion_id JOIN items_pedido oi ON oi.pedido_id = p.id JOIN productos pr ON pr.id = oi.producto_id";
   if (isAdmin) {
-    const rows = await query(`${baseQuery} ORDER BY e.id DESC`);
+    const rows = await query(`${baseQuery} GROUP BY e.id, e.estado, e.programado_en, e.entregado_en, p.id, p.fecha_programada, c.nombre_completo, direccion, r.nombre, cam.placa ORDER BY e.id DESC`);
     return res.json(rows);
   }
   if (!isDriver) {
@@ -295,11 +295,11 @@ app.get("/api/driver/entregas", requireAuth, async (req, res) => {
   const driverName = req.user?.name;
   const rows = driverId
     ? await query(
-        `${baseQuery} WHERE r.id = ? ORDER BY e.id DESC`,
+        `${baseQuery} WHERE r.id = ? GROUP BY e.id, e.estado, e.programado_en, e.entregado_en, p.id, p.fecha_programada, c.nombre_completo, direccion, r.nombre, cam.placa ORDER BY e.id DESC`,
         [driverId]
       )
     : await query(
-        `${baseQuery} WHERE r.nombre = ? ORDER BY e.id DESC`,
+        `${baseQuery} WHERE r.nombre = ? GROUP BY e.id, e.estado, e.programado_en, e.entregado_en, p.id, p.fecha_programada, c.nombre_completo, direccion, r.nombre, cam.placa ORDER BY e.id DESC`,
         [driverName]
       );
   res.json(rows);
@@ -1136,19 +1136,33 @@ app.get("/api/logistics/truck-orders", requireRole(ACCESS.logistics), async (req
       p.estado as status,
       c.nombre_completo as customer_name,
       c.telefono_principal as phone,
+      c.telefono_secundario as phone_secondary,
       c.zona,
       COALESCE(dc.direccion, c.direccion) as address,
       p.fecha_creacion as created_at,
       GROUP_CONCAT(CONCAT(pr.nombre, " x", oi.cantidad) SEPARATOR ", ") as items,
-      COALESCE(SUM(oi.cantidad * oi.precio), 0) as total
+      COALESCE(SUM(oi.cantidad * oi.precio), 0) as total,
+      COALESCE(SUM(CASE WHEN LOWER(pr.nombre) LIKE '%600%' THEN oi.cantidad ELSE 0 END), 0) as packs_600,
+      COALESCE(SUM(CASE WHEN LOWER(pr.nombre) LIKE '%1 lt%' OR LOWER(pr.nombre) LIKE '%1lt%' THEN oi.cantidad ELSE 0 END), 0) as packs_1lt,
+      COALESCE(SUM(CASE WHEN LOWER(pr.nombre) LIKE '%2 lt%' OR LOWER(pr.nombre) LIKE '%2lt%' THEN oi.cantidad ELSE 0 END), 0) as packs_2lt,
+      COALESCE(SUM(CASE WHEN LOWER(pr.nombre) LIKE '%bidon%' OR LOWER(pr.nombre) LIKE '%bidón%' THEN oi.cantidad ELSE 0 END), 0) as bidon_5,
+      COALESCE(SUM(CASE WHEN LOWER(pr.nombre) LIKE '%recarga%' THEN oi.cantidad ELSE 0 END), 0) as recarga,
+      COALESCE(SUM(CASE WHEN LOWER(pr.nombre) LIKE '%base%' THEN oi.cantidad ELSE 0 END), 0) as base,
+      COALESCE(SUM(CASE WHEN LOWER(pr.nombre) LIKE '%botellon%' OR LOWER(pr.nombre) LIKE '%botellón%' THEN oi.cantidad ELSE 0 END), 0) as botellon,
+      COALESCE(SUM(CASE WHEN LOWER(pr.nombre) LIKE '%kit completo%' THEN oi.cantidad ELSE 0 END), 0) as kit_completo,
+      COALESCE(SUM(CASE WHEN LOWER(pr.nombre) LIKE '%purificada%' THEN oi.cantidad ELSE 0 END), 0) as botellon_purificada,
+      cam.placa as truck_plate,
+      r.nombre as driver_name
      FROM entregas e
      JOIN pedidos p ON p.id = e.pedido_id
      JOIN clientes c ON c.id = p.cliente_id
      LEFT JOIN direcciones_clientes dc ON dc.id = p.direccion_id
      JOIN items_pedido oi ON oi.pedido_id = p.id
      JOIN productos pr ON pr.id = oi.producto_id
+     JOIN camiones cam ON cam.id = e.camion_id
+     JOIN repartidores r ON r.id = e.repartidor_id
      WHERE e.camion_id = ?
-     GROUP BY p.id, p.estado, c.nombre_completo, c.telefono_principal, c.zona, address, p.fecha_creacion
+     GROUP BY p.id, p.estado, c.nombre_completo, c.telefono_principal, c.telefono_secundario, c.zona, address, p.fecha_creacion, cam.placa, r.nombre
      ORDER BY p.id DESC`,
     [truck_id]
   );

@@ -11,7 +11,7 @@ function statusClass(status) {
   return `tag status-${normalized}`;
 }
 
-export default function Logistics() {
+export default function Logistics({ user }) {
   const [trucks, setTrucks] = useState([]);
   const [drivers, setDrivers] = useState([]);
   const [deliveries, setDeliveries] = useState([]);
@@ -177,20 +177,30 @@ export default function Logistics() {
       });
       const orders = res.data || [];
       const truck = trucks.find((t) => String(t.id) === String(printTruckId));
-      const title = `Hoja de ruta - ${truck?.plate || "Camión"}`;
+      const title = "Hoja de ruta";
       const now = new Date().toLocaleString();
-      const formatDate = (value) =>
-        value ? new Date(value).toLocaleDateString() : "-";
+      const driverName = orders[0]?.driver_name || "-";
+      const printerName = user?.email || user?.name || "-";
+      const truckName = orders[0]?.truck_plate || truck?.plate || "-";
       const rowsHtml = orders
         .map(
           (o) => `
             <tr>
-              <td>${formatDate(o.created_at)}</td>
+              <td>${o.id || "-"}</td>
               <td>${o.customer_name || "-"}</td>
               <td>${o.zona || "-"}</td>
               <td>${o.address || "-"}</td>
               <td>${o.phone || "-"}</td>
-              <td>${o.items || "-"}</td>
+              <td>${o.phone_secondary || "-"}</td>
+              <td>${Number(o.packs_600 || 0)}</td>
+              <td>${Number(o.packs_1lt || 0)}</td>
+              <td>${Number(o.packs_2lt || 0)}</td>
+              <td>${Number(o.bidon_5 || 0)}</td>
+              <td>${Number(o.recarga || 0)}</td>
+              <td>${Number(o.base || 0)}</td>
+              <td>${Number(o.botellon || 0)}</td>
+              <td>${Number(o.kit_completo || 0)}</td>
+              <td>${Number(o.botellon_purificada || 0)}</td>
               <td>Bs. ${Number(o.total || 0).toFixed(2)}</td>
               <td class="center">
                 <input type="checkbox" ${o.status === "Entregado" ? "checked" : ""} />
@@ -214,6 +224,8 @@ export default function Logistics() {
               body { font-family: Arial, sans-serif; padding: 12px; }
               h2 { margin: 0 0 4px; font-size: 16px; }
               .meta { color: #555; margin-bottom: 8px; font-size: 11px; }
+              .meta-grid { display: grid; grid-template-columns: repeat(2, minmax(220px, 1fr)); gap: 6px 16px; margin-bottom: 10px; font-size: 11px; }
+              .line { display: inline-block; border-bottom: 1px solid #333; min-width: 160px; height: 12px; vertical-align: middle; }
               table { width: 100%; border-collapse: collapse; }
               th, td { border: 1px solid #ccc; padding: 3px 4px; text-align: left; font-size: 10px; vertical-align: top; line-height: 1.2; }
               th { background: #f2f4f7; font-size: 10px; }
@@ -225,22 +237,40 @@ export default function Logistics() {
           <body>
             <h2>${title}</h2>
             <div class="meta">Fecha: ${now}</div>
+            <div class="meta-grid">
+              <div><strong>Usuario:</strong> ${printerName}</div>
+              <div><strong>Camión:</strong> ${truckName}</div>
+              <div><strong>Distribuidor:</strong> ${driverName}</div>
+              <div><strong>Ayudante:</strong> <span class="line"></span></div>
+              <div><strong>KM inicial:</strong> <span class="line"></span></div>
+              <div><strong>KM final:</strong> <span class="line"></span></div>
+              <div><strong>Refrigerio:</strong> <span class="line"></span></div>
+            </div>
             <table>
               <thead>
                 <tr>
-                  <th>Fecha pedido</th>
+                  <th>Nro pedido</th>
                   <th>Nombre cliente</th>
                   <th>Zona</th>
                   <th>Dirección</th>
-                  <th>Teléfono</th>
-                  <th>Pedido por producto</th>
+                  <th>Tel. principal</th>
+                  <th>Tel. secundario</th>
+                  <th>Packs 600cc</th>
+                  <th>Packs 1 LT</th>
+                  <th>Packs 2 LT</th>
+                  <th>Bidón 5 LT</th>
+                  <th>Recarga</th>
+                  <th>Base</th>
+                  <th>Botellón</th>
+                  <th>Kit completo</th>
+                  <th>Botellón purificada</th>
                   <th>Precio</th>
                   <th>Entregado</th>
                   <th>Observaciones</th>
                 </tr>
               </thead>
               <tbody>
-                ${rowsHtml || "<tr><td colspan='9'>No hay pedidos asignados.</td></tr>"}
+                ${rowsHtml || "<tr><td colspan='18'>No hay pedidos asignados.</td></tr>"}
               </tbody>
             </table>
           </body>

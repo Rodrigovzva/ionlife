@@ -117,10 +117,30 @@ export default function Customers() {
     estado: "Activo",
     notas: "",
   });
+  const [editId, setEditId] = useState(null);
   const [gpsLoading, setGpsLoading] = useState(false);
   const [gpsError, setGpsError] = useState("");
   const [showMap, setShowMap] = useState(false);
   const [mapPosition, setMapPosition] = useState(null);
+
+  function resetForm() {
+    setForm({
+      nombre_completo: "",
+      telefono_principal: "",
+      telefono_secundario: "",
+      direccion: "",
+      zona: "",
+      datos_gps: "",
+      tipo_cliente: "Residencial",
+      razon_social: "",
+      nit: "",
+      estado: "Activo",
+      notas: "",
+    });
+    setEditId(null);
+    setShowMap(false);
+    setMapPosition(null);
+  }
 
   const mapCenter = useMemo(() => {
     const parsed = parseCoords(form.datos_gps);
@@ -146,20 +166,36 @@ export default function Customers() {
     e.preventDefault();
     setGpsError("");
     await api.post("/api/customers", form);
-    setForm({
-      nombre_completo: "",
-      telefono_principal: "",
-      telefono_secundario: "",
-      direccion: "",
-      zona: "",
-      datos_gps: "",
-      tipo_cliente: "Residencial",
-      razon_social: "",
-      nit: "",
-      estado: "Activo",
-      notas: "",
-    });
+    resetForm();
     load();
+  }
+
+  async function handleUpdate(e) {
+    e.preventDefault();
+    if (!editId) return;
+    setGpsError("");
+    await api.put(`/api/customers/${editId}`, form);
+    resetForm();
+    load();
+  }
+
+  function startEdit(customer) {
+    setEditId(customer.id);
+    setForm({
+      nombre_completo: customer.nombre_completo || "",
+      telefono_principal: customer.telefono_principal || "",
+      telefono_secundario: customer.telefono_secundario || "",
+      direccion: customer.direccion || "",
+      zona: customer.zona || "",
+      datos_gps: customer.datos_gps || "",
+      tipo_cliente: customer.tipo_cliente || "Residencial",
+      razon_social: customer.razon_social || "",
+      nit: customer.nit || "",
+      estado: customer.estado || "Activo",
+      notas: customer.notas || "",
+    });
+    const parsed = parseCoords(customer.datos_gps || "");
+    setMapPosition(parsed);
   }
 
   function handleGetGps() {
@@ -190,7 +226,7 @@ export default function Customers() {
     <div className="container page">
       <h2>Clientes</h2>
       <div className="card">
-        <form onSubmit={handleCreate} className="form">
+        <form onSubmit={editId ? handleUpdate : handleCreate} className="form">
           <div className="form-row">
             <input
               placeholder="Nombre completo"
@@ -327,7 +363,16 @@ export default function Customers() {
               onChange={(e) => setForm({ ...form, notas: e.target.value })}
             />
           </div>
-          <button className="btn" type="submit">Registrar</button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn" type="submit">
+              {editId ? "Actualizar" : "Registrar"}
+            </button>
+            {editId && (
+              <button className="btn btn-outline" type="button" onClick={resetForm}>
+                Cancelar
+              </button>
+            )}
+          </div>
         </form>
       </div>
       <div style={{ marginTop: 16 }}>
@@ -343,6 +388,7 @@ export default function Customers() {
             <th>Registrado por</th>
             <th>Registro</th>
             <th>Actualización</th>
+            <th>Acciones</th>
           </tr>
         </thead>
         <tbody>
@@ -357,6 +403,15 @@ export default function Customers() {
               <td>{c.creado_por_nombre || "-"}</td>
               <td>{c.fecha_registro ? new Date(c.fecha_registro).toLocaleString() : "-"}</td>
               <td>{c.fecha_actualizacion ? new Date(c.fecha_actualizacion).toLocaleString() : "-"}</td>
+              <td>
+                <button
+                  className="btn btn-outline btn-sm"
+                  type="button"
+                  onClick={() => startEdit(c)}
+                >
+                  Editar
+                </button>
+              </td>
             </tr>
           ))}
         </tbody>

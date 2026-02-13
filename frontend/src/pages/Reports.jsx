@@ -101,6 +101,51 @@ export default function Reports() {
   const salesTotal = sales.reduce((sum, item) => sum + Number(item.total || 0), 0);
   const summaryTotal = summaryRows.length;
 
+  function printReport() {
+    const now = new Date().toLocaleString();
+    const summaryFilterText = `Filtro: fecha=${summaryFilters.date || "-"}, estado=${summaryFilters.status || "-"}, camión=${summaryFilters.truck_id || "-"}`;
+    const summaryRowsHtml = summaryRows
+      .map(
+        (s) =>
+          `<tr><td>${s.order_id}</td><td>${s.customer_name}</td><td>${s.address || "-"}</td><td>${s.status}</td><td>${
+            s.created_at ? new Date(s.created_at).toLocaleString() : "-"
+          }</td><td>${s.truck_plate || "-"}</td><td>${s.driver_name || "-"}</td><td>${s.seller_name || "-"}</td></tr>`
+      )
+      .join("");
+
+    const win = window.open("", "_blank", "width=1000,height=700");
+    if (!win) return;
+    win.document.write(`
+      <html>
+        <head>
+          <title>Resumen de estados de pedidos</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 16px; color: #1b2a3a; }
+            h2 { margin: 0 0 6px; }
+            .meta { color: #6b7a8c; margin-bottom: 12px; }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+            th, td { border: 1px solid #d9e3ec; padding: 6px 8px; text-align: left; font-size: 12px; }
+            th { background: #eef5fb; }
+          </style>
+        </head>
+        <body>
+          <h2>Resumen de estados de pedidos</h2>
+          <div class="meta">Fecha impresión: ${now}</div>
+          <div class="meta">${summaryFilterText}</div>
+          <table>
+            <thead>
+              <tr><th>Pedido</th><th>Nombre</th><th>Dirección</th><th>Estado</th><th>Fecha</th><th>Camión</th><th>Repartidor</th><th>Vendedor</th></tr>
+            </thead>
+            <tbody>${summaryRowsHtml || "<tr><td colspan='8'>Sin datos.</td></tr>"}</tbody>
+          </table>
+        </body>
+      </html>
+    `);
+    win.document.close();
+    win.focus();
+    win.print();
+  }
+
   return (
     <div className="container page">
       <h2>Reportes</h2>
@@ -317,14 +362,19 @@ export default function Reports() {
               </option>
             ))}
           </select>
-          <button
-            className="btn"
-            type="button"
-            disabled={summaryLoading}
-            onClick={() => loadSummary(summaryFilters)}
-          >
-            {summaryLoading ? "Cargando..." : "Aplicar"}
-          </button>
+          <div className="report-actions">
+            <button
+              className="btn"
+              type="button"
+              disabled={summaryLoading}
+              onClick={() => loadSummary(summaryFilters)}
+            >
+              {summaryLoading ? "Cargando..." : "Aplicar"}
+            </button>
+            <button className="btn btn-outline" type="button" onClick={printReport}>
+              Imprimir
+            </button>
+          </div>
         </div>
         {summaryError && <div className="error">{summaryError}</div>}
         <div style={{ marginTop: 8 }}>

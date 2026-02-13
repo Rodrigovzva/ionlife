@@ -74,9 +74,11 @@ export default function DriverDeliveries() {
               <th>ID Entrega</th>
               <th>Pedido</th>
               <th>Cliente</th>
+              <th>Dirección</th>
               <th>Repartidor</th>
               <th>Camión</th>
               <th>Estado</th>
+              <th>Pedido</th>
               <th>Programado</th>
               <th>Actualizar</th>
             </tr>
@@ -85,12 +87,20 @@ export default function DriverDeliveries() {
             {deliveries.map((d) => (
               <tr key={d.id}>
                 <td>{d.id}</td>
-                <td>{d.pedido_id}</td>
+                <td>{d.pedido_detalle || "-"}</td>
                 <td>{d.cliente}</td>
+                <td>{d.direccion || "-"}</td>
                 <td>{d.repartidor}</td>
                 <td>{d.camion}</td>
                 <td><span className={statusClass(d.estado)}>{d.estado}</span></td>
-                <td>{d.programado_en ? new Date(d.programado_en).toLocaleString() : "-"}</td>
+                <td>{d.pedido_detalle || "-"}</td>
+                <td>
+                  {d.programado_en
+                    ? new Date(d.programado_en).toLocaleString()
+                    : d.fecha_programada
+                    ? new Date(d.fecha_programada).toLocaleDateString()
+                    : "-"}
+                </td>
                 <td>
                   <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                     <select
@@ -120,7 +130,7 @@ export default function DriverDeliveries() {
             ))}
             {deliveries.length === 0 && (
               <tr>
-                <td colSpan={8}>No hay entregas asignadas.</td>
+                <td colSpan={9}>No hay entregas asignadas.</td>
               </tr>
             )}
           </tbody>

@@ -101,7 +101,7 @@ export default function App() {
           path="/logistica"
           element={
             <PrivateRoute user={user}>
-              <Logistics />
+              <Logistics user={user} />
             </PrivateRoute>
           }
         />
