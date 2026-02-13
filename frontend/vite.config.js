@@ -6,5 +6,6 @@ export default defineConfig({
   server: {
     host: true,
     port: 18080,
+    allowedHosts: true,
   },
 });

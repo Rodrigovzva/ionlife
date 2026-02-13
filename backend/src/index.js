@@ -87,7 +87,7 @@ async function ensureAdminUser() {
   const hash = await bcrypt.hash(ADMIN_PASSWORD, 10);
   const result = await query(
     "INSERT INTO usuarios (nombre, usuario, hash_contrasena, activo) VALUES (?, ?, ?, 1)",
-    ["Administrador", ADMIN_EMAIL, hash]
+    [ADMIN_EMAIL, ADMIN_EMAIL, hash]
   );
   const [role] = await query("SELECT id FROM roles WHERE nombre = ?", [
     "Administrador del sistema",
@@ -228,12 +228,14 @@ async function ensureOrderItemPriceTypeColumn() {
 
 app.post("/api/auth/login", async (req, res) => {
   const { email, password } = req.body || {};
-  if (!email || !password) {
+  const emailTrim = (email && typeof email === "string" ? email : "").trim();
+  const passwordTrim = (password != null && typeof password === "string" ? password : "").trim();
+  if (!emailTrim || !passwordTrim) {
     return res.status(400).json({ error: "Email y contraseña requeridos" });
   }
   const users = await query(
     "SELECT id, nombre as name, usuario as email, hash_contrasena, activo as is_active FROM usuarios WHERE usuario = ?",
-    [email]
+    [emailTrim]
   );
   if (users.length === 0) {
     return res.status(401).json({ error: "Credenciales inválidas" });
@@ -242,7 +244,7 @@ app.post("/api/auth/login", async (req, res) => {
   if (!user.is_active) {
     return res.status(403).json({ error: "Usuario inactivo" });
   }
-  const ok = await bcrypt.compare(password, user.hash_contrasena);
+  const ok = await bcrypt.compare(passwordTrim, user.hash_contrasena);
   if (!ok) {
     return res.status(401).json({ error: "Credenciales inválidas" });
   }
@@ -1247,8 +1249,10 @@ app.post("/api/logistics/returns", requireRole(ACCESS.logistics), async (req, re
 
 app.get("/api/reports/sales", requireRole(ACCESS.reports), async (req, res) => {
   const { from, to, status } = req.query;
-  const where = ["o.fecha_creacion BETWEEN ? AND ?"];
-  const params = [from || "1970-01-01", to || "2999-12-31"];
+  const fromDate = from || "1970-01-01";
+  const toDate = to || "2999-12-31";
+  const where = ["DATE(o.fecha_creacion) BETWEEN ? AND ?"];
+  const params = [fromDate, toDate];
   if (status && status !== "all") {
     where.push("o.estado = ?");
     params.push(status);
@@ -1281,8 +1285,10 @@ app.get("/api/reports/deliveries", requireRole(ACCESS.reports), async (_req, res
 
 app.get("/api/reports/sales-by-client-type", requireRole(ACCESS.reports), async (req, res) => {
   const { from, to, status } = req.query;
-  const where = ["o.fecha_creacion BETWEEN ? AND ?"];
-  const params = [from || "1970-01-01", to || "2999-12-31"];
+  const fromDate = from || "1970-01-01";
+  const toDate = to || "2999-12-31";
+  const where = ["DATE(o.fecha_creacion) BETWEEN ? AND ?"];
+  const params = [fromDate, toDate];
   if (status && status !== "all") {
     where.push("o.estado = ?");
     params.push(status);
@@ -1356,7 +1362,7 @@ app.get(
         rangeTo = `${year}-${String(m).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
       }
     }
-    const where = ["p.fecha_creacion BETWEEN ? AND ?"];
+    const where = ["DATE(p.fecha_creacion) BETWEEN ? AND ?"];
     const params = [rangeFrom, rangeTo];
     if (truck_id) {
       where.push("e.camion_id = ?");
@@ -1390,7 +1396,7 @@ app.get(
     const { from, to, truck_id, status } = req.query || {};
     const rangeFrom = from || "1970-01-01";
     const rangeTo = to || "2999-12-31";
-    const where = ["p.fecha_creacion BETWEEN ? AND ?"];
+    const where = ["DATE(p.fecha_creacion) BETWEEN ? AND ?"];
     const params = [rangeFrom, rangeTo];
     if (truck_id) {
       where.push("e.camion_id = ?");

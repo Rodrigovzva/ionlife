@@ -208,6 +208,27 @@ a {
   font-weight: 600;
 }
 
+.orders-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-end;
+}
+
+.orders-filters .form-field {
+  min-width: 140px;
+}
+
+.orders-filters .form-field input[type="date"],
+.orders-filters .form-field select {
+  min-width: 140px;
+}
+
+.orders-filters-summary {
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
 input,
 select,
 textarea {

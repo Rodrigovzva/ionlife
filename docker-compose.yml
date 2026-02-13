@@ -1,36 +1,46 @@
+# Variables desde .env (no commitear .env; usar .env.example como plantilla)
+# Si no existe .env: cp .env.example .env y rellenar valores reales.
+
 services:
   backend:
     build: ./backend
     container_name: ionlife_backend
+    env_file: .env
     environment:
       PORT: 18081
-      DB_HOST: host.docker.internal
-      DB_PORT: 3306
-      DB_USER: root
-      DB_PASSWORD: Rvel8080Ipv6**
-      DB_NAME: ionlifebd
-      JWT_SECRET: super_secret_change_me
-      ADMIN_EMAIL: admin@ionlife.local
-      ADMIN_PASSWORD: Admin123!
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      JWT_SECRET: ${JWT_SECRET}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
     ports:
       - "18081:18081"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
       - ionlife_net
+      - sisvel_net
 
   frontend:
     build: ./frontend
     container_name: ionlife_frontend
+    env_file: .env
     environment:
-      VITE_API_URL: http://10.0.0.3:18081
+      VITE_API_URL: ${VITE_API_URL}
     ports:
       - "18080:18080"
     depends_on:
       - backend
     networks:
       - ionlife_net
+      - sisvel_net
 
 networks:
   ionlife_net:
     driver: bridge
+  sisvel_net:
+    external: true
+    name: docker_sisvel-network

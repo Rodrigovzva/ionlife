@@ -167,6 +167,7 @@ export default function Reports() {
           >
             <option value="">Todos los estados</option>
             <option>Pendiente</option>
+            <option>Despachado</option>
             <option>Entregado</option>
             <option>Cancelado</option>
             <option>Reprogramado</option>

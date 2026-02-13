@@ -30,9 +30,13 @@ export default function Orders() {
   const [tiposCliente, setTiposCliente] = useState([]);
   const [tiposPrecio, setTiposPrecio] = useState([]);
   const [preciosProducto, setPreciosProducto] = useState([]);
-  const [orderFilters, setOrderFilters] = useState({
-    status: "Pendiente|Reprogramado",
-    month: "",
+  const [orderFilters, setOrderFilters] = useState(() => {
+    const today = new Date();
+    const iso = today.toISOString().slice(0, 10);
+    return {
+      status: "Pendiente|Reprogramado",
+      fecha_registro: iso,
+    };
   });
   const [addressHint, setAddressHint] = useState("");
   const [form, setForm] = useState({
@@ -374,10 +378,13 @@ export default function Orders() {
         ? statusFilter.split("|").includes(order.status)
         : order.status === statusFilter);
     if (!matchStatus) return false;
-    if (!orderFilters.month) return true;
+    const fechaIso = orderFilters.fecha_registro && orderFilters.fecha_registro.length >= 10
+      ? orderFilters.fecha_registro.slice(0, 10)
+      : "";
+    if (!fechaIso) return true;
     if (!order.created_at) return false;
-    const monthValue = new Date(order.created_at).toISOString().slice(0, 7);
-    return monthValue === orderFilters.month;
+    const orderDate = new Date(order.created_at).toISOString().slice(0, 10);
+    return orderDate === fechaIso;
   });
   const pendientesTotal = filteredOrders.filter(
     (order) => order.status === "Pendiente"
@@ -610,31 +617,46 @@ export default function Orders() {
         </form>
       </div>
       <div style={{ marginTop: 16 }}>
-        <div className="card" style={{ marginBottom: 12 }}>
-          <div className="form-row">
-            <select
-              value={orderFilters.status}
-              onChange={(e) =>
-                setOrderFilters((prev) => ({ ...prev, status: e.target.value }))
-              }
-            >
-              <option value="">Todos los estados</option>
-              <option value="Pendiente|Reprogramado">Pendiente y reprogramado</option>
-              <option>Pendiente</option>
-              <option>Entregado</option>
-              <option>Cancelado</option>
-              <option>Reprogramado</option>
-            </select>
-            <input
-              type="month"
-              value={orderFilters.month}
-              onChange={(e) =>
-                setOrderFilters((prev) => ({ ...prev, month: e.target.value }))
-              }
-            />
+        <div className="card orders-filters-card" style={{ marginBottom: 12 }}>
+          <h4 style={{ marginTop: 0, marginBottom: 12 }}>Filtros del listado</h4>
+          <div className="orders-filters">
+            <div className="form-field">
+              <label htmlFor="orders-filter-status">Estado</label>
+              <select
+                id="orders-filter-status"
+                value={orderFilters.status}
+                onChange={(e) =>
+                  setOrderFilters((prev) => ({ ...prev, status: e.target.value }))
+                }
+              >
+                <option value="">Todos los estados</option>
+                <option value="Pendiente|Reprogramado">Pendiente y reprogramado</option>
+                <option>Pendiente</option>
+                <option>Despachado</option>
+                <option>Entregado</option>
+                <option>Cancelado</option>
+                <option>Reprogramado</option>
+              </select>
+            </div>
+            <div className="form-field">
+              <label htmlFor="orders-filter-fecha">Fecha de registro</label>
+              <input
+                id="orders-filter-fecha"
+                type="date"
+                value={orderFilters.fecha_registro}
+                onChange={(e) =>
+                  setOrderFilters((prev) => ({ ...prev, fecha_registro: e.target.value }))
+                }
+              />
+            </div>
           </div>
-          <div style={{ marginTop: 8 }}>
-            Pedidos pendientes: <strong>{pendientesTotal}</strong>
+          <div className="orders-filters-summary" style={{ marginTop: 12 }}>
+            Mostrando <strong>{filteredOrders.length}</strong> pedidos
+            {orderFilters.fecha_registro ? (
+              <span> con fecha de registro {new Date(orderFilters.fecha_registro + "T12:00:00").toLocaleDateString("es")}</span>
+            ) : null}
+            {" · "}
+            Pendientes: <strong>{pendientesTotal}</strong>
           </div>
         </div>
         <table className="table">

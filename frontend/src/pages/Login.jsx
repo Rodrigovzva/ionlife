@@ -16,7 +16,8 @@ export default function Login({ onLogin }) {
       localStorage.setItem("ionlife_token", res.data.token);
       onLogin?.(res.data.user);
     } catch (err) {
-      setError("Credenciales inválidas");
+      const msg = err.response?.data?.error || err.message || "Credenciales inválidas";
+      setError(msg);
     } finally {
       setLoading(false);
     }

@@ -1,0 +1,14 @@
+# Credenciales de despliegue (nunca subir a Git)
+config/deploy-credentials.env
+.env
+.env.local
+docker-compose.override.yml
+*.env.local
+
+# Dependencias
+node_modules/
+
+# Build / logs
+dist/
+*.log
+.env.deploy
