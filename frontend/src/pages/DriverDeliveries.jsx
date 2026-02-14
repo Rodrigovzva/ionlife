@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import api from "../api";
 
 function statusClass(status) {
@@ -12,6 +13,7 @@ function statusClass(status) {
 }
 
 export default function DriverDeliveries() {
+  const navigate = useNavigate();
   const [deliveries, setDeliveries] = useState([]);
   const [sales, setSales] = useState([]);
   const [statusUpdates, setStatusUpdates] = useState({});
@@ -104,6 +106,14 @@ export default function DriverDeliveries() {
                   </td>
                   <td>
                     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <button
+                        className="btn btn-outline btn-sm"
+                        type="button"
+                        onClick={() => navigate(`/pedidos?edit=${d.pedido_id}`)}
+                        disabled={!d.pedido_id}
+                      >
+                        Editar pedido
+                      </button>
                       <select
                         value={statusUpdates[d.id] || ""}
                         onChange={(e) =>

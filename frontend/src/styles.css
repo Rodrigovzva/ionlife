@@ -197,6 +197,16 @@ a {
   justify-content: flex-end;
 }
 
+.orders-filters {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.orders-filters input[type="date"] {
+  min-width: 180px;
+}
+
 .form-field {
   display: grid;
   gap: 6px;
@@ -227,6 +237,20 @@ a {
 .orders-filters-summary {
   font-size: 0.9rem;
   color: var(--muted);
+}
+
+.order-item-row {
+  grid-template-columns: repeat(5, minmax(160px, 1fr)) auto;
+  align-items: end;
+}
+
+.order-item-stock {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  font-size: 0.82rem;
+  line-height: 1.2;
+  margin: 6px 0 2px;
 }
 
 input,
@@ -363,6 +387,10 @@ textarea {
   color: var(--danger);
 }
 
+.muted {
+  color: var(--muted);
+}
+
 .login-hero {
   display: grid;
   gap: 16px;
@@ -389,5 +417,8 @@ textarea {
     display: block;
     overflow-x: auto;
     white-space: nowrap;
+  }
+  .order-item-row {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   }
 }

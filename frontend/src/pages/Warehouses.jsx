@@ -8,8 +8,6 @@ export default function Warehouses() {
   const [products, setProducts] = useState([]);
   const [form, setForm] = useState({ product_id: "", qty: "" });
   const [inventoryError, setInventoryError] = useState("");
-  const [warehouseForm, setWarehouseForm] = useState({ name: "", location: "" });
-  const [warehouseError, setWarehouseError] = useState("");
 
   async function load() {
     const res = await api.get("/api/warehouses");
@@ -36,18 +34,6 @@ export default function Warehouses() {
     loadProducts();
   }, []);
 
-  async function handleCreateWarehouse(e) {
-    e.preventDefault();
-    setWarehouseError("");
-    if (!warehouseForm.name) {
-      setWarehouseError("Nombre requerido.");
-      return;
-    }
-    await api.post("/api/warehouses", warehouseForm);
-    setWarehouseForm({ name: "", location: "" });
-    load();
-  }
-
   async function handleCreate(e) {
     e.preventDefault();
     setInventoryError("");
@@ -73,28 +59,6 @@ export default function Warehouses() {
   return (
     <div className="container page">
       <h2>Almacenes</h2>
-      <div className="card">
-        <form onSubmit={handleCreateWarehouse} className="form">
-          <div className="form-row">
-            <input
-              placeholder="Nombre del almacén"
-              value={warehouseForm.name}
-              onChange={(e) =>
-                setWarehouseForm({ ...warehouseForm, name: e.target.value })
-              }
-            />
-            <input
-              placeholder="Ubicación"
-              value={warehouseForm.location}
-              onChange={(e) =>
-                setWarehouseForm({ ...warehouseForm, location: e.target.value })
-              }
-            />
-          </div>
-          {warehouseError && <div className="error">{warehouseError}</div>}
-          <button className="btn" type="submit">Crear almacén</button>
-        </form>
-      </div>
       <div className="card" style={{ marginTop: 16 }}>
         <form onSubmit={handleCreate} className="form">
           <div className="form-row">

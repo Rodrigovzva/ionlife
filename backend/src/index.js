@@ -705,6 +705,20 @@ app.post(
   res.json({ ok: true });
 });
 
+app.get(
+  "/api/inventory/summary",
+  requireAuth,
+  async (_req, res) => {
+    const rows = await query(
+      `SELECT p.id as product_id, p.nombre as product_name, COALESCE(SUM(i.cantidad), 0) as stock
+       FROM productos p
+       LEFT JOIN inventario i ON i.producto_id = p.id
+       GROUP BY p.id, p.nombre`
+    );
+    res.json(rows);
+  }
+);
+
 app.get("/api/orders", requireRole(ACCESS.orders), async (_req, res) => {
   const rows = await query(
     "SELECT o.id, o.cliente_id as customer_id, o.estado as status, o.metodo_pago as payment_method, o.prioridad as priority, o.notas as notes, o.fecha_programada as scheduled_date, o.fecha_creacion as created_at, c.nombre_completo as customer_name, c.direccion as address, c.zona as zone, cam.placa as truck_plate FROM pedidos o JOIN clientes c ON c.id = o.cliente_id LEFT JOIN entregas e ON e.pedido_id = o.id LEFT JOIN camiones cam ON cam.id = e.camion_id ORDER BY o.id DESC"
@@ -729,6 +743,143 @@ app.get("/api/orders/:id", requireRole(ACCESS.orders), async (req, res) => {
     [req.params.id]
   );
   res.json({ ...order, items, history });
+});
+
+app.put("/api/orders/:id", requireRole(ACCESS.orders), async (req, res) => {
+  const { customer_id, address_id, notes, scheduled_date, items } = req.body || {};
+  if (!address_id || !items || items.length === 0) {
+    return res.status(400).json({ error: "Datos incompletos" });
+  }
+  const [order] = await query(
+    "SELECT id, cliente_id, estado FROM pedidos WHERE id = ?",
+    [req.params.id]
+  );
+  if (!order) {
+    return res.status(404).json({ error: "Pedido no encontrado" });
+  }
+  if (order.estado === "Entregado") {
+    return res.status(409).json({ error: "No se puede editar un pedido entregado" });
+  }
+  const requiredByProduct = new Map();
+  for (const item of items) {
+    if (!item.product_id || !item.quantity || Number(item.quantity) <= 0) {
+      return res.status(400).json({ error: "Cantidad inválida en productos" });
+    }
+    if (item.price_type_id && Number(item.price_type_id) <= 0) {
+      return res.status(400).json({ error: "Tipo de precio inválido" });
+    }
+    const productId = Number(item.product_id);
+    const qty = Number(item.quantity);
+    requiredByProduct.set(productId, (requiredByProduct.get(productId) || 0) + qty);
+  }
+  const productIds = Array.from(requiredByProduct.keys());
+  const placeholders = productIds.map(() => "?").join(", ");
+  const stockRows = await query(
+    `SELECT p.id, p.nombre as name, COALESCE(SUM(i.cantidad), 0) as stock
+     FROM productos p
+     LEFT JOIN inventario i ON i.producto_id = p.id
+     WHERE p.id IN (${placeholders})
+     GROUP BY p.id`,
+    productIds
+  );
+  const stockMap = new Map(stockRows.map((r) => [r.id, r]));
+  const insufficient = [];
+  for (const [productId, required] of requiredByProduct.entries()) {
+    const row = stockMap.get(productId);
+    const stock = row ? Number(row.stock) : 0;
+    if (stock < required) {
+      insufficient.push({
+        product_id: productId,
+        name: row?.name || "Producto",
+        stock,
+        required,
+      });
+    }
+  }
+  if (insufficient.length > 0) {
+    return res.status(400).json({
+      error: "Sin existencias suficientes en almacenes.",
+      details: insufficient,
+    });
+  }
+  const priceTypeItems = items.filter((i) => i.price_type_id);
+  let priceTypeMap = new Map();
+  if (priceTypeItems.length > 0) {
+    const priceTypeIds = Array.from(
+      new Set(priceTypeItems.map((i) => Number(i.price_type_id)))
+    );
+    const productIdsForPrice = Array.from(
+      new Set(priceTypeItems.map((i) => Number(i.product_id)))
+    );
+    const typePlaceholders = priceTypeIds.map(() => "?").join(", ");
+    const productPlaceholders = productIdsForPrice.map(() => "?").join(", ");
+    const rows = await query(
+      `SELECT tpp.producto_id, tpp.tipo_precio_id, tpp.precio
+       FROM tipos_precio_producto tpp
+       JOIN tipos_precio tp ON tp.id = tpp.tipo_precio_id
+       WHERE tpp.activo = 1 AND tp.activo = 1
+       AND tpp.tipo_precio_id IN (${typePlaceholders})
+       AND tpp.producto_id IN (${productPlaceholders})`,
+      [...priceTypeIds, ...productIdsForPrice]
+    );
+    priceTypeMap = new Map(
+      rows.map((r) => [`${r.producto_id}:${r.tipo_precio_id}`, Number(r.precio)])
+    );
+  }
+  const normalizedItems = [];
+  for (const item of items) {
+    const productId = Number(item.product_id);
+    const priceTypeId = item.price_type_id ? Number(item.price_type_id) : null;
+    let basePrice = Number(item.price || 0);
+    if (priceTypeId) {
+      const key = `${productId}:${priceTypeId}`;
+      if (!priceTypeMap.has(key)) {
+        return res.status(400).json({
+          error: "Tipo de precio sin precio definido para el producto.",
+        });
+      }
+      basePrice = priceTypeMap.get(key);
+    }
+    if (!priceTypeId && (!item.price || Number(item.price) <= 0)) {
+      return res.status(400).json({ error: "Precio inválido en productos" });
+    }
+    const discountUnit = Number(item.discount_unit || 0);
+    const finalPrice = Math.max(0, basePrice - discountUnit);
+    normalizedItems.push({
+      product_id: productId,
+      quantity: Number(item.quantity),
+      price: finalPrice,
+      price_type_id: priceTypeId,
+    });
+  }
+  await query(
+    "UPDATE pedidos SET cliente_id = ?, direccion_id = ?, notas = ?, fecha_programada = ?, actualizado_por_usuario_id = ? WHERE id = ?",
+    [
+      customer_id ? Number(customer_id) : order.cliente_id,
+      Number(address_id),
+      notes || null,
+      scheduled_date || null,
+      req.user?.id || null,
+      req.params.id,
+    ]
+  );
+  await query("DELETE FROM items_pedido WHERE pedido_id = ?", [req.params.id]);
+  for (const item of normalizedItems) {
+    await query(
+      "INSERT INTO items_pedido (pedido_id, producto_id, cantidad, precio, tipo_precio_id, creado_por_usuario_id, actualizado_por_usuario_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [
+        req.params.id,
+        item.product_id,
+        item.quantity,
+        item.price,
+        item.price_type_id || null,
+        req.user?.id || null,
+        req.user?.id || null,
+      ]
+    );
+  }
+  await req.audit({ action: "UPDATE", entityId: req.params.id });
+  res.json({ ok: true });
 });
 
 app.post("/api/orders", requireRole(ACCESS.orders), async (req, res) => {

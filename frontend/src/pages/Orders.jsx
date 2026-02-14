@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import api from "../api";
 
 function statusClass(status) {
@@ -12,6 +13,8 @@ function statusClass(status) {
 }
 
 export default function Orders() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
   
   const [statusUpdates, setStatusUpdates] = useState({});
@@ -26,18 +29,17 @@ export default function Orders() {
   const [searchError, setSearchError] = useState("");
   const [orderError, setOrderError] = useState("");
   const [orderSuccess, setOrderSuccess] = useState("");
+  const [editId, setEditId] = useState(null);
+  const [dataLoaded, setDataLoaded] = useState(false);
   const [products, setProducts] = useState([]);
+  const [stockByProduct, setStockByProduct] = useState(new Map());
   const [tiposCliente, setTiposCliente] = useState([]);
   const [tiposPrecio, setTiposPrecio] = useState([]);
   const [preciosProducto, setPreciosProducto] = useState([]);
-  const [orderFilters, setOrderFilters] = useState(() => {
-    const today = new Date();
-    const iso = today.toISOString().slice(0, 10);
-    return {
-      status: "Pendiente|Reprogramado",
-      fecha_registro: iso,
-    };
-  });
+  const [orderFilters, setOrderFilters] = useState(() => ({
+    status: "Pendiente|Reprogramado",
+    fecha_registro: "",
+  }));
   const [addressHint, setAddressHint] = useState("");
   const [form, setForm] = useState({
     customer_id: "",
@@ -60,24 +62,88 @@ export default function Orders() {
   ]);
 
   async function load() {
-    const [resOrders, resProducts, resTipos, resTiposPrecio, resPreciosProducto] =
-      await Promise.all([
+    const results = await Promise.allSettled([
       api.get("/api/orders"),
       api.get("/api/products"),
       api.get("/api/tipos-cliente"),
       api.get("/api/tipos-precio"),
       api.get("/api/precios-producto"),
+      api.get("/api/inventory/summary"),
     ]);
-    setOrders(resOrders.data);
-    setProducts(resProducts.data || []);
-    setTiposCliente(resTipos.data || []);
-    setTiposPrecio(resTiposPrecio.data || []);
-    setPreciosProducto(resPreciosProducto.data || []);
+    const [
+      ordersRes,
+      productsRes,
+      tiposRes,
+      tiposPrecioRes,
+      preciosRes,
+      stockRes,
+    ] = results;
+
+    if (ordersRes.status === "fulfilled") {
+      setOrders(ordersRes.value.data || []);
+    }
+    if (productsRes.status === "fulfilled") {
+      setProducts(productsRes.value.data || []);
+    } else {
+      setProducts([]);
+    }
+    if (tiposRes.status === "fulfilled") {
+      setTiposCliente(tiposRes.value.data || []);
+    }
+    if (tiposPrecioRes.status === "fulfilled") {
+      setTiposPrecio(tiposPrecioRes.value.data || []);
+    }
+    if (preciosRes.status === "fulfilled") {
+      setPreciosProducto(preciosRes.value.data || []);
+    }
+    if (stockRes.status === "fulfilled") {
+      const nextStock = new Map(
+        (stockRes.value.data || []).map((row) => [String(row.product_id), Number(row.stock)])
+      );
+      setStockByProduct(nextStock);
+    } else {
+      setStockByProduct(new Map());
+    }
+    setDataLoaded(true);
   }
+
 
   useEffect(() => {
     load();
   }, []);
+
+  function resetForm() {
+    setForm({
+      customer_id: "",
+      customer_name: "",
+      customer_type: "",
+      address_text: "",
+      address_id: "",
+      scheduled_date: "",
+      notes: "",
+    });
+    setItems([
+      {
+        product_id: "",
+        quantity: 1,
+        price: 0,
+        discount_unit: 0,
+        price_type_id: "",
+        price_type_name: "",
+      },
+    ]);
+    setEditId(null);
+    setAddressHint("");
+  }
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const editParam = params.get("edit");
+    if (!editParam || !dataLoaded) {
+      return;
+    }
+    loadOrderForEdit(editParam);
+  }, [location.search, dataLoaded]);
 
   async function handleSearch(e) {
     e.preventDefault();
@@ -146,6 +212,15 @@ export default function Orders() {
         }
       }
     }
+    const insufficientItems = getInsufficientStock(cleanItems);
+    if (insufficientItems.length > 0) {
+      setOrderError(
+        `Sin existencias suficientes: ${insufficientItems
+          .map((i) => `${i.name} (stock ${i.stock}, requerido ${i.required})`)
+          .join(", ")}`
+      );
+      return;
+    }
     if (cleanItems.length === 0) {
       setOrderError("Agregue al menos un producto.");
       return;
@@ -177,25 +252,7 @@ export default function Orders() {
         items: cleanItems,
       });
       setOrderSuccess("Pedido creado correctamente.");
-      setForm({
-        customer_id: "",
-        customer_name: "",
-        customer_type: "",
-        address_text: "",
-        address_id: "",
-        scheduled_date: "",
-        notes: "",
-      });
-      setItems([
-        {
-          product_id: "",
-          quantity: 1,
-          price: 0,
-          discount_unit: 0,
-          price_type_id: "",
-          price_type_name: "",
-        },
-      ]);
+      resetForm();
       load();
     } catch (err) {
       const data = err?.response?.data;
@@ -206,6 +263,74 @@ export default function Orders() {
         setOrderError(`${data.error} ${detailText}`);
       } else {
         const message = data?.error || "No se pudo crear el pedido.";
+        setOrderError(message);
+      }
+    }
+  }
+
+  async function handleUpdate(e) {
+    e.preventDefault();
+    if (!editId) return;
+    setOrderError("");
+    setOrderSuccess("");
+    const cleanItems = items
+      .filter((i) => i.product_id && Number(i.quantity) > 0)
+      .map((i) => ({
+        product_id: Number(i.product_id),
+        quantity: Number(i.quantity),
+        price: Number(i.price),
+        discount_unit: Number(i.discount_unit || 0),
+        price_type_id: i.price_type_id ? Number(i.price_type_id) : null,
+      }));
+    for (const item of cleanItems) {
+      if (item.price_type_id) {
+        const fixedPrice = getFixedPrice(item.product_id, item.price_type_id);
+        if (fixedPrice === null) {
+          setOrderError(
+            "El tipo de precio seleccionado no tiene precio definido para un producto."
+          );
+          return;
+        }
+      }
+    }
+    const insufficientItems = getInsufficientStock(cleanItems);
+    if (insufficientItems.length > 0) {
+      setOrderError(
+        `Sin existencias suficientes: ${insufficientItems
+          .map((i) => `${i.name} (stock ${i.stock}, requerido ${i.required})`)
+          .join(", ")}`
+      );
+      return;
+    }
+    if (cleanItems.length === 0) {
+      setOrderError("Agregue al menos un producto.");
+      return;
+    }
+    if (!form.address_id) {
+      setOrderError("No hay dirección válida para el cliente.");
+      return;
+    }
+    try {
+      await api.put(`/api/orders/${editId}`, {
+        customer_id: Number(form.customer_id),
+        address_id: Number(form.address_id),
+        scheduled_date: form.scheduled_date || null,
+        notes: form.notes || null,
+        items: cleanItems,
+      });
+      setOrderSuccess("Pedido actualizado correctamente.");
+      resetForm();
+      navigate("/pedidos");
+      load();
+    } catch (err) {
+      const data = err?.response?.data;
+      if (data?.details?.length) {
+        const detailText = data.details
+          .map((d) => `${d.name} (stock ${d.stock}, requerido ${d.required})`)
+          .join(", ");
+        setOrderError(`${data.error} ${detailText}`);
+      } else {
+        const message = data?.error || "No se pudo actualizar el pedido.";
         setOrderError(message);
       }
     }
@@ -276,6 +401,41 @@ export default function Orders() {
     return row ? Number(row.precio) : null;
   }
 
+  function getAvailableStock(productId) {
+    const stock = stockByProduct.get(String(productId));
+    return stock == null ? 0 : Number(stock);
+  }
+
+  function getInsufficientStock(cleanItems) {
+    const requiredByProduct = new Map();
+    cleanItems.forEach((item) => {
+      const key = String(item.product_id);
+      requiredByProduct.set(
+        key,
+        (requiredByProduct.get(key) || 0) + Number(item.quantity || 0)
+      );
+    });
+    const insufficient = [];
+    requiredByProduct.forEach((required, productId) => {
+      const product = products.find((p) => String(p.id) === String(productId));
+      const stock = getAvailableStock(productId);
+      if (stock < required) {
+        insufficient.push({
+          id: productId,
+          name: product?.name || "Producto",
+          stock,
+          required,
+        });
+      }
+    });
+    return insufficient;
+  }
+
+  function getPriceTypeName(priceTypeId) {
+    const row = tiposPrecio.find((t) => String(t.id) === String(priceTypeId));
+    return row ? row.nombre : "";
+  }
+
   function handleProductSelect(index, productId) {
     const product = products.find((p) => String(p.id) === String(productId));
     const basePrice = product ? Number(product.price) : 0;
@@ -340,6 +500,8 @@ export default function Orders() {
     ? totalUnidades * Number(tipo.descuento_unidades || 0)
     : 0;
   const total = subtotal - descuento - descuentoProductos;
+  const activeProducts = products.filter((p) => p.active);
+  const inactiveProducts = products.filter((p) => !p.active);
 
   async function handleUseCustomer(cliente) {
     setAddressHint("");
@@ -367,6 +529,52 @@ export default function Orders() {
       }
     } catch (_err) {
       setAddressHint("No se pudo cargar la dirección del cliente.");
+    }
+  }
+
+  async function loadOrderForEdit(orderId) {
+    setOrderError("");
+    setOrderSuccess("");
+    try {
+      const res = await api.get(`/api/orders/${orderId}`);
+      const order = res.data;
+      const customerRes = await api.get(`/api/customers/${order.cliente_id}`);
+      const customer = customerRes.data || {};
+      const addressMatch =
+        customer.addresses?.find(
+          (addr) => String(addr.id) === String(order.direccion_id)
+        ) || null;
+      setEditId(String(orderId));
+      setForm({
+        customer_id: String(order.cliente_id || ""),
+        customer_name: customer.nombre_completo || "",
+        customer_type: customer.tipo_cliente || "",
+        address_text: addressMatch?.direccion || customer.direccion || "",
+        address_id: order.direccion_id ? String(order.direccion_id) : "",
+        scheduled_date: order.scheduled_date
+          ? new Date(order.scheduled_date).toISOString().slice(0, 10)
+          : "",
+        notes: order.notes || "",
+      });
+      setItems(
+        (order.items || []).map((item) => ({
+          product_id: String(item.producto_id || ""),
+          quantity: Number(item.cantidad || 0),
+          price: Number(item.precio || 0),
+          discount_unit: 0,
+          price_type_id: item.tipo_precio_id ? String(item.tipo_precio_id) : "",
+          price_type_name: item.tipo_precio_id
+            ? getPriceTypeName(item.tipo_precio_id)
+            : "",
+        }))
+      );
+      setAddressHint(
+        addressMatch?.direccion
+          ? `Dirección cargada: ${addressMatch.direccion}`
+          : ""
+      );
+    } catch (_err) {
+      setOrderError("No se pudo cargar el pedido para edición.");
     }
   }
 
@@ -478,7 +686,12 @@ export default function Orders() {
         )}
       </div>
       <div className="card">
-        <form onSubmit={handleCreate} className="form">
+        {editId && (
+          <div className="tag" style={{ marginBottom: 8 }}>
+            Editando pedido #{editId}
+          </div>
+        )}
+        <form onSubmit={editId ? handleUpdate : handleCreate} className="form">
           <div className="form-row">
             <input
               placeholder="Nombre cliente"
@@ -528,71 +741,91 @@ export default function Orders() {
           <div className="card" style={{ background: "var(--bg)" }}>
             <h4>Productos</h4>
             {items.map((item, index) => (
-              <div className="form-row" key={index}>
-                <div className="form-field">
-                  <label>Producto</label>
-                  <select
-                    value={item.product_id}
-                    onChange={(e) => handleProductSelect(index, e.target.value)}
+              <div key={index}>
+                <div className="form-row order-item-row">
+                  <div className="form-field">
+                    <label>Producto</label>
+                    <select
+                      value={item.product_id}
+                      onChange={(e) => handleProductSelect(index, e.target.value)}
+                    >
+                      <option value="">Seleccione producto</option>
+                      {products.length === 0 && (
+                        <option value="">No hay productos registrados</option>
+                      )}
+                      {activeProducts.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                      {activeProducts.length === 0 && inactiveProducts.length > 0 && (
+                        <option value="">No hay productos activos, mostrando inactivos</option>
+                      )}
+                      {inactiveProducts.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name} (Inactivo)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-field">
+                    <label>Cantidad</label>
+                    <input
+                      placeholder="Cantidad"
+                      value={item.quantity}
+                      onChange={(e) =>
+                        handleItemChange(index, "quantity", e.target.value)
+                      }
+                    />
+                  </div>
+                  <div className="form-field">
+                    <label>Tipo de precio</label>
+                    <input
+                      list="tipos-precio"
+                      placeholder="Tipo de precio"
+                      value={item.price_type_name || ""}
+                      onChange={(e) => handlePriceTypeChange(index, e.target.value)}
+                    />
+                  </div>
+                  <div className="form-field">
+                    <label>Precio</label>
+                    <input
+                      placeholder="Precio"
+                      value={item.price}
+                      readOnly
+                      onChange={(e) =>
+                        handleItemChange(index, "price", e.target.value)
+                      }
+                    />
+                  </div>
+                  <div className="form-field">
+                    <label>Desc. unidad</label>
+                    <input
+                      placeholder="Desc. unidad"
+                      value={item.discount_unit}
+                      onChange={(e) =>
+                        handleItemChange(index, "discount_unit", e.target.value)
+                      }
+                    />
+                  </div>
+                  <button
+                    className="btn btn-outline btn-sm btn-icon"
+                    type="button"
+                    onClick={() => handleRemoveItem(index)}
                   >
-                    <option value="">Seleccione producto</option>
-                    {products.length === 0 && (
-                      <option value="">No hay productos activos</option>
+                    ✕
+                  </button>
+                </div>
+                {item.product_id && (
+                  <div className="order-item-stock">
+                    <span className="muted">
+                      Stock disponible: {getAvailableStock(item.product_id)}
+                    </span>
+                    {Number(item.quantity || 0) > getAvailableStock(item.product_id) && (
+                      <span className="error">Stock insuficiente</span>
                     )}
-                    {products.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="form-field">
-                  <label>Cantidad</label>
-                  <input
-                    placeholder="Cantidad"
-                    value={item.quantity}
-                    onChange={(e) =>
-                      handleItemChange(index, "quantity", e.target.value)
-                    }
-                  />
-                </div>
-                <div className="form-field">
-                  <label>Tipo de precio</label>
-                  <input
-                    list="tipos-precio"
-                    placeholder="Tipo de precio"
-                    value={item.price_type_name || ""}
-                    onChange={(e) => handlePriceTypeChange(index, e.target.value)}
-                  />
-                </div>
-                <div className="form-field">
-                  <label>Precio</label>
-                  <input
-                    placeholder="Precio"
-                    value={item.price}
-                    readOnly
-                    onChange={(e) =>
-                      handleItemChange(index, "price", e.target.value)
-                    }
-                  />
-                </div>
-                <div className="form-field">
-                  <label>Desc. unidad</label>
-                  <input
-                    placeholder="Desc. unidad"
-                    value={item.discount_unit}
-                    onChange={(e) =>
-                      handleItemChange(index, "discount_unit", e.target.value)
-                    }
-                  />
-                </div>
-                <button
-                  className="btn btn-outline btn-sm btn-icon"
-                  type="button"
-                  onClick={() => handleRemoveItem(index)}
-                >
-                  ✕
-                </button>
+                  </div>
+                )}
               </div>
             ))}
             <datalist id="tipos-precio">
@@ -613,7 +846,23 @@ export default function Orders() {
               <div>Total Bs. {total.toFixed(2)}</div>
             </div>
           </div>
-          <button className="btn" type="submit">Crear pedido</button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn" type="submit">
+              {editId ? "Actualizar pedido" : "Crear pedido"}
+            </button>
+            {editId && (
+              <button
+                className="btn btn-outline"
+                type="button"
+                onClick={() => {
+                  resetForm();
+                  navigate("/pedidos");
+                }}
+              >
+                Cancelar edición
+              </button>
+            )}
+          </div>
         </form>
       </div>
       <div style={{ marginTop: 16 }}>

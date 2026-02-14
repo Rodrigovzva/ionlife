@@ -14,6 +14,8 @@ export default function Admin() {
   const [driverForm, setDriverForm] = useState({ name: "", phone: "" });
   const [truckError, setTruckError] = useState("");
   const [driverError, setDriverError] = useState("");
+  const [warehouseForm, setWarehouseForm] = useState({ name: "", location: "" });
+  const [warehouseError, setWarehouseError] = useState("");
   const [tipoForm, setTipoForm] = useState({ nombre: "", descuento_unidades: 0 });
   const [editTipoId, setEditTipoId] = useState(null);
   const [editTipoNombre, setEditTipoNombre] = useState("");
@@ -112,6 +114,21 @@ export default function Admin() {
     }
     await api.post("/api/logistics/drivers", driverForm);
     setDriverForm({ name: "", phone: "" });
+    load();
+  }
+
+  async function createWarehouse(e) {
+    e.preventDefault();
+    setWarehouseError("");
+    if (!warehouseForm.name.trim()) {
+      setWarehouseError("Nombre requerido.");
+      return;
+    }
+    await api.post("/api/warehouses", {
+      name: warehouseForm.name.trim(),
+      location: warehouseForm.location?.trim() || "",
+    });
+    setWarehouseForm({ name: "", location: "" });
     load();
   }
 
@@ -509,6 +526,29 @@ export default function Admin() {
           </form>
           {driverError && <div className="error">{driverError}</div>}
         </div>
+      </div>
+      <div className="card" style={{ marginTop: 16 }}>
+        <h4>Crear almacén</h4>
+        <form onSubmit={createWarehouse} className="form">
+          <div className="form-row">
+            <input
+              placeholder="Nombre del almacén"
+              value={warehouseForm.name}
+              onChange={(e) =>
+                setWarehouseForm({ ...warehouseForm, name: e.target.value })
+              }
+            />
+            <input
+              placeholder="Ubicación"
+              value={warehouseForm.location}
+              onChange={(e) =>
+                setWarehouseForm({ ...warehouseForm, location: e.target.value })
+              }
+            />
+          </div>
+          {warehouseError && <div className="error">{warehouseError}</div>}
+          <button className="btn" type="submit">Crear almacén</button>
+        </form>
       </div>
       <div className="card" style={{ marginTop: 16 }}>
         <h4>Usuarios registrados</h4>
