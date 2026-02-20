@@ -262,6 +262,12 @@ textarea {
   background: white;
 }
 
+.orders-form-compact input,
+.orders-form-compact select,
+.orders-form-compact textarea {
+  padding: 8px 10px;
+}
+
 .table {
   width: 100%;
   border-collapse: collapse;

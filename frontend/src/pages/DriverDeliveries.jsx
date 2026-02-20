@@ -14,7 +14,12 @@ function statusClass(status) {
 
 export default function DriverDeliveries() {
   const navigate = useNavigate();
+  const today = new Date();
+  const todayIso = new Date(today.getTime() - today.getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 10);
   const [deliveries, setDeliveries] = useState([]);
+  const [filterDate, setFilterDate] = useState(todayIso);
   const [sales, setSales] = useState([]);
   const [statusUpdates, setStatusUpdates] = useState({});
   const [loading, setLoading] = useState(false);
@@ -22,21 +27,25 @@ export default function DriverDeliveries() {
   const [salesError, setSalesError] = useState("");
   const [salesLoading, setSalesLoading] = useState(false);
 
-  async function load() {
+  async function load(dateValue) {
     setError("");
     try {
-      const res = await api.get("/api/driver/entregas");
+      const res = await api.get("/api/driver/entregas", {
+        params: { date: dateValue || filterDate || undefined },
+      });
       setDeliveries(res.data || []);
     } catch (_err) {
       setError("No se pudo cargar las entregas.");
     }
   }
 
-  async function loadSales() {
+  async function loadSales(dateValue) {
     setSalesError("");
     setSalesLoading(true);
     try {
-      const res = await api.get("/api/driver/ventas");
+      const res = await api.get("/api/driver/ventas", {
+        params: { date: dateValue || filterDate || undefined },
+      });
       setSales(res.data || []);
     } catch (_err) {
       setSalesError("No se pudo cargar las ventas.");
@@ -46,9 +55,9 @@ export default function DriverDeliveries() {
   }
 
   useEffect(() => {
-    load();
-    loadSales();
-  }, []);
+    load(filterDate);
+    loadSales(filterDate);
+  }, [filterDate]);
 
   async function updateStatus(deliveryId) {
     const status = statusUpdates[deliveryId];
@@ -70,6 +79,16 @@ export default function DriverDeliveries() {
       <h2>Mis entregas</h2>
       <div className="card">
         {error && <div className="error" style={{ marginBottom: 8 }}>{error}</div>}
+        <div className="form-row" style={{ marginBottom: 8 }}>
+          <div className="form-field">
+            <label>Fecha</label>
+            <input
+              type="date"
+              value={filterDate}
+              onChange={(e) => setFilterDate(e.target.value)}
+            />
+          </div>
+        </div>
         <div className="table-scroll">
           <table className="table table-deliveries">
             <thead>

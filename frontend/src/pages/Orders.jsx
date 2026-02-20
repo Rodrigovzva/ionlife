@@ -691,7 +691,7 @@ export default function Orders() {
             Editando pedido #{editId}
           </div>
         )}
-        <form onSubmit={editId ? handleUpdate : handleCreate} className="form">
+        <form onSubmit={editId ? handleUpdate : handleCreate} className="form orders-form-compact">
           <div className="form-row">
             <input
               placeholder="Nombre cliente"
@@ -720,7 +720,6 @@ export default function Orders() {
             />
             <input
               type="date"
-              placeholder="Fecha programada"
               value={form.scheduled_date}
               onChange={(e) =>
                 setForm({ ...form, scheduled_date: e.target.value })
@@ -916,6 +915,7 @@ export default function Orders() {
               <th>Dirección</th>
               <th>Zona</th>
               <th>Fecha</th>
+              <th>Programada</th>
               <th>Estado</th>
               <th>Camión</th>
               <th>Actualizar</th>
@@ -929,6 +929,11 @@ export default function Orders() {
                 <td>{o.address || "-"}</td>
                 <td>{o.zone || "-"}</td>
                 <td>{o.created_at ? new Date(o.created_at).toLocaleDateString() : "-"}</td>
+                <td>
+                  {o.scheduled_date
+                    ? new Date(o.scheduled_date.slice(0, 10) + "T12:00:00").toLocaleDateString("es")
+                    : "-"}
+                </td>
                 <td><span className={statusClass(o.status)}>{o.status}</span></td>
                 <td>{o.status === "Despachado" ? (o.truck_plate || "-") : "-"}</td>
                 <td>

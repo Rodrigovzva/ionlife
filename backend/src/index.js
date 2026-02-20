@@ -281,41 +281,22 @@ app.use("/api/reports", requireAuth, auditMiddleware("reports"));
 app.use("/api/admin", requireAuth, auditMiddleware("admin"));
 
 app.get("/api/driver/entregas", requireAuth, async (req, res) => {
+  const { date } = req.query || {};
   const roles = req.user?.roles || [];
   const isAdmin = roles.includes("Administrador del sistema");
   const isDriver = roles.includes("Repartidor");
   const baseQuery =
     "SELECT e.id, e.estado, e.programado_en, e.entregado_en, p.id as pedido_id, p.fecha_programada as fecha_programada, c.nombre_completo as cliente, COALESCE(dc.direccion, c.direccion) as direccion, r.nombre as repartidor, cam.placa as camion, GROUP_CONCAT(CONCAT(pr.nombre, ' x', oi.cantidad) SEPARATOR ', ') as pedido_detalle FROM entregas e JOIN pedidos p ON p.id = e.pedido_id JOIN clientes c ON c.id = p.cliente_id LEFT JOIN direcciones_clientes dc ON dc.id = p.direccion_id JOIN repartidores r ON r.id = e.repartidor_id JOIN camiones cam ON cam.id = e.camion_id JOIN items_pedido oi ON oi.pedido_id = p.id JOIN productos pr ON pr.id = oi.producto_id";
-  if (isAdmin) {
-    const rows = await query(`${baseQuery} GROUP BY e.id, e.estado, e.programado_en, e.entregado_en, p.id, p.fecha_programada, c.nombre_completo, direccion, r.nombre, cam.placa ORDER BY e.id DESC`);
-    return res.json(rows);
-  }
-  if (!isDriver) {
-    return res.json([]);
-  }
-  const driverId = req.user?.driver_id;
-  const driverName = req.user?.name;
-  const rows = driverId
-    ? await query(
-        `${baseQuery} WHERE r.id = ? GROUP BY e.id, e.estado, e.programado_en, e.entregado_en, p.id, p.fecha_programada, c.nombre_completo, direccion, r.nombre, cam.placa ORDER BY e.id DESC`,
-        [driverId]
-      )
-    : await query(
-        `${baseQuery} WHERE r.nombre = ? GROUP BY e.id, e.estado, e.programado_en, e.entregado_en, p.id, p.fecha_programada, c.nombre_completo, direccion, r.nombre, cam.placa ORDER BY e.id DESC`,
-        [driverName]
-      );
-  res.json(rows);
-});
-
-app.get("/api/driver/ventas", requireAuth, async (req, res) => {
-  const roles = req.user?.roles || [];
-  const isAdmin = roles.includes("Administrador del sistema");
-  const isDriver = roles.includes("Repartidor");
-  const baseQuery =
-    "SELECT p.id as pedido_id, c.nombre_completo as cliente, cam.placa as camion, r.nombre as repartidor, e.estado as estado_entrega, e.entregado_en, SUM(oi.cantidad * oi.precio) as total FROM entregas e JOIN pedidos p ON p.id = e.pedido_id JOIN clientes c ON c.id = p.cliente_id JOIN items_pedido oi ON oi.pedido_id = p.id JOIN repartidores r ON r.id = e.repartidor_id JOIN camiones cam ON cam.id = e.camion_id WHERE (e.estado = 'Entregado' OR p.estado = 'Entregado')";
+  const todayClause =
+    "DATE(CONVERT_TZ(p.fecha_creacion,'+00:00','-04:00')) = DATE(CONVERT_TZ(NOW(),'+00:00','-04:00'))";
+  const dateClause = date
+    ? "DATE(CONVERT_TZ(p.fecha_creacion,'+00:00','-04:00')) = ?"
+    : todayClause;
+  const dateParams = date ? [date] : [];
   if (isAdmin) {
     const rows = await query(
-      `${baseQuery} GROUP BY p.id, c.nombre_completo, cam.placa, r.nombre, e.estado, e.entregado_en ORDER BY p.id DESC`
+      `${baseQuery} WHERE ${dateClause} GROUP BY e.id, e.estado, e.programado_en, e.entregado_en, p.id, p.fecha_programada, c.nombre_completo, direccion, r.nombre, cam.placa ORDER BY e.id DESC`,
+      dateParams
     );
     return res.json(rows);
   }
@@ -326,12 +307,49 @@ app.get("/api/driver/ventas", requireAuth, async (req, res) => {
   const driverName = req.user?.name;
   const rows = driverId
     ? await query(
-        `${baseQuery} AND r.id = ? GROUP BY p.id, c.nombre_completo, cam.placa, r.nombre, e.estado, e.entregado_en ORDER BY p.id DESC`,
-        [driverId]
+        `${baseQuery} WHERE r.id = ? AND ${dateClause} GROUP BY e.id, e.estado, e.programado_en, e.entregado_en, p.id, p.fecha_programada, c.nombre_completo, direccion, r.nombre, cam.placa ORDER BY e.id DESC`,
+        [driverId, ...dateParams]
       )
     : await query(
-        `${baseQuery} AND r.nombre = ? GROUP BY p.id, c.nombre_completo, cam.placa, r.nombre, e.estado, e.entregado_en ORDER BY p.id DESC`,
-        [driverName]
+        `${baseQuery} WHERE r.nombre = ? AND ${dateClause} GROUP BY e.id, e.estado, e.programado_en, e.entregado_en, p.id, p.fecha_programada, c.nombre_completo, direccion, r.nombre, cam.placa ORDER BY e.id DESC`,
+        [driverName, ...dateParams]
+      );
+  res.json(rows);
+});
+
+app.get("/api/driver/ventas", requireAuth, async (req, res) => {
+  const { date } = req.query || {};
+  const roles = req.user?.roles || [];
+  const isAdmin = roles.includes("Administrador del sistema");
+  const isDriver = roles.includes("Repartidor");
+  const baseQuery =
+    "SELECT p.id as pedido_id, c.nombre_completo as cliente, cam.placa as camion, r.nombre as repartidor, e.estado as estado_entrega, e.entregado_en, SUM(oi.cantidad * oi.precio) as total FROM entregas e JOIN pedidos p ON p.id = e.pedido_id JOIN clientes c ON c.id = p.cliente_id JOIN items_pedido oi ON oi.pedido_id = p.id JOIN repartidores r ON r.id = e.repartidor_id JOIN camiones cam ON cam.id = e.camion_id WHERE (e.estado = 'Entregado' OR p.estado = 'Entregado')";
+  const todayClause =
+    "DATE(CONVERT_TZ(e.entregado_en,'+00:00','-04:00')) = DATE(CONVERT_TZ(NOW(),'+00:00','-04:00'))";
+  const dateClause = date
+    ? "DATE(CONVERT_TZ(e.entregado_en,'+00:00','-04:00')) = ?"
+    : todayClause;
+  const dateParams = date ? [date] : [];
+  if (isAdmin) {
+    const rows = await query(
+      `${baseQuery} AND ${dateClause} GROUP BY p.id, c.nombre_completo, cam.placa, r.nombre, e.estado, e.entregado_en ORDER BY p.id DESC`,
+      dateParams
+    );
+    return res.json(rows);
+  }
+  if (!isDriver) {
+    return res.json([]);
+  }
+  const driverId = req.user?.driver_id;
+  const driverName = req.user?.name;
+  const rows = driverId
+    ? await query(
+        `${baseQuery} AND r.id = ? AND ${dateClause} GROUP BY p.id, c.nombre_completo, cam.placa, r.nombre, e.estado, e.entregado_en ORDER BY p.id DESC`,
+        [driverId, ...dateParams]
+      )
+    : await query(
+        `${baseQuery} AND r.nombre = ? AND ${dateClause} GROUP BY p.id, c.nombre_completo, cam.placa, r.nombre, e.estado, e.entregado_en ORDER BY p.id DESC`,
+        [driverName, ...dateParams]
       );
   res.json(rows);
 });
@@ -1244,6 +1262,22 @@ app.patch(
         );
       }
     }
+    if (status === "Cancelado") {
+      const [delivery] = await query(
+        "SELECT pedido_id FROM entregas WHERE id = ?",
+        [req.params.id]
+      );
+      if (delivery) {
+        await query(
+          "UPDATE pedidos SET estado = 'Cancelado', actualizado_por_usuario_id = ? WHERE id = ?",
+          [req.user?.id || null, delivery.pedido_id]
+        );
+        await query(
+          "INSERT INTO historial_estado_pedido (pedido_id, estado, nota) VALUES (?, 'Cancelado', 'Entrega cancelada')",
+          [delivery.pedido_id]
+        );
+      }
+    }
     await req.audit({
       action: "DELIVERY_STATUS",
       entityId: req.params.id,
@@ -1283,13 +1317,17 @@ app.get("/api/logistics/truck-summary", requireRole(ACCESS.logistics), async (re
 });
 
 app.get("/api/logistics/truck-orders", requireRole(ACCESS.logistics), async (req, res) => {
-  const { truck_id, delivered_to } = req.query || {};
+  const { truck_id, delivered_to, scheduled_date } = req.query || {};
   if (!truck_id) {
     return res.status(400).json({ error: "truck_id requerido" });
   }
   const deliveredTo = delivered_to ? `${delivered_to} 23:59:59` : null;
-  const deliveredClause = deliveredTo ? " AND e.entregado_en <= ?" : "";
-  const deliveredParams = deliveredTo ? [deliveredTo] : [];
+  const dateClause = scheduled_date
+    ? " AND DATE(p.fecha_programada) = ?"
+    : deliveredTo
+    ? " AND e.entregado_en <= ?"
+    : "";
+  const dateParams = scheduled_date ? [scheduled_date] : deliveredTo ? [deliveredTo] : [];
   const rows = await query(
     `SELECT
       p.id,
@@ -1321,10 +1359,10 @@ app.get("/api/logistics/truck-orders", requireRole(ACCESS.logistics), async (req
      JOIN productos pr ON pr.id = oi.producto_id
      JOIN camiones cam ON cam.id = e.camion_id
      JOIN repartidores r ON r.id = e.repartidor_id
-     WHERE e.camion_id = ?${deliveredClause}
+     WHERE e.camion_id = ?${dateClause}
      GROUP BY p.id, p.estado, c.nombre_completo, c.telefono_principal, c.telefono_secundario, c.zona, address, p.fecha_creacion, cam.placa, r.nombre
      ORDER BY p.id DESC`,
-    [truck_id, ...deliveredParams]
+    [truck_id, ...dateParams]
   );
   res.json(rows);
 });
@@ -1513,8 +1551,10 @@ app.get(
         rangeTo = `${year}-${String(m).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
       }
     }
-    const where = ["DATE(p.fecha_creacion) BETWEEN ? AND ?"];
-    const params = [rangeFrom, rangeTo];
+    const sameDate = rangeFrom && rangeTo && rangeFrom === rangeTo;
+    const dateExpr = "DATE(CONVERT_TZ(p.fecha_creacion,'+00:00','-04:00'))";
+    const where = [sameDate ? `${dateExpr} = ?` : `${dateExpr} BETWEEN ? AND ?`];
+    const params = sameDate ? [rangeFrom] : [rangeFrom, rangeTo];
     if (truck_id) {
       where.push("e.camion_id = ?");
       params.push(truck_id);
@@ -1527,12 +1567,14 @@ app.get(
       where.push("p.creado_por_usuario_id = ?");
       params.push(seller_id);
     }
+    const statusExpr =
+      "CASE WHEN e.estado IN ('Entregado','Cancelado') THEN e.estado ELSE p.estado END";
     const rows = await query(
-      `SELECT p.estado as status, COUNT(*) as total
+      `SELECT ${statusExpr} as status, COUNT(*) as total
        FROM pedidos p
        LEFT JOIN entregas e ON e.pedido_id = p.id
        WHERE ${where.join(" AND ")}
-       GROUP BY p.estado
+       GROUP BY ${statusExpr}
        ORDER BY total DESC`,
       params
     );
@@ -1547,20 +1589,24 @@ app.get(
     const { from, to, truck_id, status } = req.query || {};
     const rangeFrom = from || "1970-01-01";
     const rangeTo = to || "2999-12-31";
-    const where = ["DATE(p.fecha_creacion) BETWEEN ? AND ?"];
-    const params = [rangeFrom, rangeTo];
+    const sameDate = rangeFrom && rangeTo && rangeFrom === rangeTo;
+    const dateExpr = "DATE(CONVERT_TZ(p.fecha_creacion,'+00:00','-04:00'))";
+    const where = [sameDate ? `${dateExpr} = ?` : `${dateExpr} BETWEEN ? AND ?`];
+    const params = sameDate ? [rangeFrom] : [rangeFrom, rangeTo];
     if (truck_id) {
       where.push("e.camion_id = ?");
       params.push(truck_id);
     }
     if (status) {
-      where.push("p.estado = ?");
+      where.push(
+        "CASE WHEN e.estado IN ('Entregado','Cancelado') THEN e.estado ELSE p.estado END = ?"
+      );
       params.push(status);
     }
     const rows = await query(
       `SELECT
         p.id as order_id,
-        p.estado as status,
+        CASE WHEN e.estado IN ('Entregado','Cancelado') THEN e.estado ELSE p.estado END as status,
         p.fecha_creacion as created_at,
         c.nombre_completo as customer_name,
         COALESCE(dc.direccion, c.direccion) as address,

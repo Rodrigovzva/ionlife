@@ -180,7 +180,7 @@ export default function Logistics({ user }) {
       const res = await api.get("/api/logistics/truck-orders", {
         params: {
           truck_id: printTruckId,
-          delivered_to: printDateFilter || undefined,
+          scheduled_date: printDateFilter || undefined,
         },
       });
       const orders = res.data || [];
@@ -305,7 +305,7 @@ export default function Logistics({ user }) {
       const res = await api.get("/api/logistics/truck-orders", {
         params: {
           truck_id: printTruckId,
-          delivered_to: printDateFilter || undefined,
+          scheduled_date: printDateFilter || undefined,
         },
       });
       setPreviewOrders(res.data || []);
@@ -462,7 +462,7 @@ export default function Logistics({ user }) {
               type="date"
               value={printDateFilter}
               onChange={(e) => setPrintDateFilter(e.target.value)}
-              placeholder="Hasta fecha de entrega"
+              placeholder="Fecha programada"
             />
             <button className="btn btn-outline" type="button" onClick={loadPreview} disabled={previewLoading}>
               {previewLoading ? "Cargando..." : "Previsualizar"}
