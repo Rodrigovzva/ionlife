@@ -1437,19 +1437,34 @@ app.post("/api/logistics/returns", requireRole(ACCESS.logistics), async (req, re
 });
 
 app.get("/api/reports/sales", requireRole(ACCESS.reports), async (req, res) => {
-  const { from, to, status } = req.query;
-  const fromDate = from || "1970-01-01";
-  const toDate = to || "2999-12-31";
-  const where = ["DATE(o.fecha_creacion) BETWEEN ? AND ?"];
-  const params = [fromDate, toDate];
-  if (status && status !== "all") {
-    where.push("o.estado = ?");
-    params.push(status);
+  const { from, to, status, truck_id } = req.query;
+  const rangeFrom = from || "1970-01-01";
+  const rangeTo = to || "2999-12-31";
+  const sameDate = rangeFrom && rangeTo && rangeFrom === rangeTo;
+  const dateExpr =
+    "DATE(CONVERT_TZ(COALESCE(e.entregado_en, o.fecha_creacion),'+00:00','-04:00'))";
+  const where = [sameDate ? `${dateExpr} = ?` : `${dateExpr} BETWEEN ? AND ?`];
+  const params = sameDate ? [rangeFrom] : [rangeFrom, rangeTo];
+  const statusExpr =
+    "CASE WHEN e.estado IN ('Entregado','Cancelado') THEN e.estado ELSE o.estado END";
+  const normalizedStatus = status && status !== "all" ? status : "";
+  if (normalizedStatus) {
+    if (normalizedStatus !== "Entregado") {
+      return res.json([]);
+    }
+    where.push(`${statusExpr} = ?`);
+    params.push(normalizedStatus);
   }
+  if (truck_id) {
+    where.push("e.camion_id = ?");
+    params.push(truck_id);
+  }
+  where.push("e.estado = 'Entregado'");
   const rows = await query(
-    `SELECT DATE(o.fecha_creacion) as day, SUM(oi.cantidad * oi.precio) as total
+    `SELECT ${dateExpr} as day, SUM(oi.cantidad * oi.precio) as total
      FROM pedidos o
      JOIN items_pedido oi ON oi.pedido_id = o.id
+     JOIN entregas e ON e.pedido_id = o.id
      WHERE ${where.join(" AND ")}
      GROUP BY day
      ORDER BY day`,
@@ -1458,16 +1473,69 @@ app.get("/api/reports/sales", requireRole(ACCESS.reports), async (req, res) => {
   res.json(rows);
 });
 
-app.get("/api/reports/orders-by-status", requireRole(ACCESS.reports), async (_req, res) => {
+app.get("/api/reports/orders-by-status", requireRole(ACCESS.reports), async (req, res) => {
+  const { from, to, truck_id, status } = req.query || {};
+  const rangeFrom = from || "1970-01-01";
+  const rangeTo = to || "2999-12-31";
+  const sameDate = rangeFrom && rangeTo && rangeFrom === rangeTo;
+  const dateExpr = "DATE(CONVERT_TZ(p.fecha_creacion,'+00:00','-04:00'))";
+  const where = [sameDate ? `${dateExpr} = ?` : `${dateExpr} BETWEEN ? AND ?`];
+  const params = sameDate ? [rangeFrom] : [rangeFrom, rangeTo];
+  const statusExpr =
+    "CASE WHEN e.estado IN ('Entregado','Cancelado') THEN e.estado ELSE p.estado END";
+  if (truck_id) {
+    where.push("e.camion_id = ?");
+    params.push(truck_id);
+  }
+  if (status && status !== "all") {
+    where.push(`${statusExpr} = ?`);
+    params.push(status);
+  }
   const rows = await query(
-    "SELECT estado as status, COUNT(*) as total FROM pedidos GROUP BY estado"
+    `SELECT s.status, COALESCE(c.total, 0) as total
+     FROM (
+       SELECT 'Pendiente' as status
+       UNION ALL SELECT 'Despachado'
+       UNION ALL SELECT 'Entregado'
+       UNION ALL SELECT 'Cancelado'
+       UNION ALL SELECT 'Reprogramado'
+     ) s
+     LEFT JOIN (
+       SELECT ${statusExpr} as status, COUNT(*) as total
+       FROM pedidos p
+       LEFT JOIN entregas e ON e.pedido_id = p.id
+       WHERE ${where.join(" AND ")}
+       GROUP BY ${statusExpr}
+     ) c ON c.status = s.status
+     ORDER BY s.status`,
+    params
   );
   res.json(rows);
 });
 
-app.get("/api/reports/deliveries", requireRole(ACCESS.reports), async (_req, res) => {
+app.get("/api/reports/deliveries", requireRole(ACCESS.reports), async (req, res) => {
+  const { from, to, truck_id, status } = req.query || {};
+  const rangeFrom = from || "1970-01-01";
+  const rangeTo = to || "2999-12-31";
+  const sameDate = rangeFrom && rangeTo && rangeFrom === rangeTo;
+  const dateExpr = "DATE(CONVERT_TZ(p.fecha_creacion,'+00:00','-04:00'))";
+  const where = [sameDate ? `${dateExpr} = ?` : `${dateExpr} BETWEEN ? AND ?`];
+  const params = sameDate ? [rangeFrom] : [rangeFrom, rangeTo];
+  if (truck_id) {
+    where.push("d.camion_id = ?");
+    params.push(truck_id);
+  }
+  if (status && status !== "all") {
+    where.push("d.estado = ?");
+    params.push(status);
+  }
   const rows = await query(
-    "SELECT d.estado as status, COUNT(*) as total FROM entregas d GROUP BY d.estado"
+    `SELECT d.estado as status, COUNT(*) as total
+     FROM entregas d
+     JOIN pedidos p ON p.id = d.pedido_id
+     WHERE ${where.join(" AND ")}
+     GROUP BY d.estado`,
+    params
   );
   res.json(rows);
 });
@@ -1612,7 +1680,9 @@ app.get(
         COALESCE(dc.direccion, c.direccion) as address,
         cam.placa as truck_plate,
         rep.nombre as driver_name,
-        u.nombre as seller_name
+        u.nombre as seller_name,
+        GROUP_CONCAT(CONCAT(pr.nombre, ' x', oi.cantidad) SEPARATOR ', ') as order_detail,
+        SUM(oi.cantidad * oi.precio) as total
        FROM pedidos p
        JOIN clientes c ON c.id = p.cliente_id
        LEFT JOIN direcciones_clientes dc ON dc.id = p.direccion_id
@@ -1620,7 +1690,10 @@ app.get(
        LEFT JOIN camiones cam ON cam.id = e.camion_id
        LEFT JOIN repartidores rep ON rep.id = e.repartidor_id
        LEFT JOIN usuarios u ON u.id = p.creado_por_usuario_id
+       JOIN items_pedido oi ON oi.pedido_id = p.id
+       JOIN productos pr ON pr.id = oi.producto_id
        WHERE ${where.join(" AND ")}
+       GROUP BY p.id, CASE WHEN e.estado IN ('Entregado','Cancelado') THEN e.estado ELSE p.estado END, p.fecha_creacion, c.nombre_completo, address, cam.placa, rep.nombre, u.nombre
        ORDER BY p.id DESC`,
       params
     );
@@ -1631,17 +1704,58 @@ app.get(
 app.get(
   "/api/reports/stock-by-warehouse",
   requireRole(ACCESS.reports),
-  async (_req, res) => {
+  async (req, res) => {
+    const { from, to } = req.query || {};
+    const rangeTo = to || from || "";
+    if (!rangeTo) {
+      const rows = await query(
+        "SELECT w.nombre as warehouse, p.nombre as product, i.cantidad as quantity, i.stock_minimo as min_stock FROM inventario i JOIN almacenes w ON w.id = i.almacen_id JOIN productos p ON p.id = i.producto_id ORDER BY w.nombre"
+      );
+      return res.json(rows);
+    }
+    const dateExpr = "DATE(CONVERT_TZ(m.fecha_creacion,'+00:00','-04:00'))";
     const rows = await query(
-      "SELECT w.nombre as warehouse, p.nombre as product, i.cantidad as quantity, i.stock_minimo as min_stock FROM inventario i JOIN almacenes w ON w.id = i.almacen_id JOIN productos p ON p.id = i.producto_id ORDER BY w.nombre"
+      `SELECT
+         w.nombre as warehouse,
+         p.nombre as product,
+         (i.cantidad - COALESCE(SUM(CASE WHEN ${dateExpr} > ? THEN
+           CASE WHEN m.tipo IN ('SALIDA') THEN m.cantidad * -1 ELSE m.cantidad END
+         ELSE 0 END), 0)) as quantity,
+         i.stock_minimo as min_stock
+       FROM inventario i
+       JOIN almacenes w ON w.id = i.almacen_id
+       JOIN productos p ON p.id = i.producto_id
+       LEFT JOIN movimientos_inventario m ON m.almacen_id = i.almacen_id AND m.producto_id = i.producto_id
+       GROUP BY i.id, w.nombre, p.nombre, i.cantidad, i.stock_minimo
+       ORDER BY w.nombre`,
+      [rangeTo]
     );
     res.json(rows);
   }
 );
 
-app.get("/api/reports/performance", requireRole(ACCESS.reports), async (_req, res) => {
+app.get("/api/reports/performance", requireRole(ACCESS.reports), async (req, res) => {
+  const { from, to, truck_id } = req.query || {};
+  const rangeFrom = from || "1970-01-01";
+  const rangeTo = to || "2999-12-31";
+  const sameDate = rangeFrom && rangeTo && rangeFrom === rangeTo;
+  const dateExpr = "DATE(CONVERT_TZ(p.fecha_creacion,'+00:00','-04:00'))";
+  const where = [sameDate ? `${dateExpr} = ?` : `${dateExpr} BETWEEN ? AND ?`];
+  const params = sameDate ? [rangeFrom] : [rangeFrom, rangeTo];
+  if (truck_id) {
+    where.push("del.camion_id = ?");
+    params.push(truck_id);
+  }
   const rows = await query(
-    "SELECT t.placa as plate, d.nombre as driver, COUNT(del.id) as total_deliveries FROM entregas del JOIN camiones t ON t.id = del.camion_id JOIN repartidores d ON d.id = del.repartidor_id GROUP BY t.placa, d.nombre ORDER BY total_deliveries DESC"
+    `SELECT t.placa as plate, d.nombre as driver, COUNT(del.id) as total_deliveries
+     FROM entregas del
+     JOIN camiones t ON t.id = del.camion_id
+     JOIN repartidores d ON d.id = del.repartidor_id
+     JOIN pedidos p ON p.id = del.pedido_id
+     WHERE ${where.join(" AND ")}
+     GROUP BY t.placa, d.nombre
+     ORDER BY total_deliveries DESC`,
+    params
   );
   res.json(rows);
 });

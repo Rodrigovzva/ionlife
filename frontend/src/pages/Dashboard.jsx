@@ -61,7 +61,9 @@ export default function Dashboard({ user }) {
   }, []);
 
   const salesChart = {
-    labels: sales.map((s) => s.day),
+    labels: sales.map((s) =>
+      s.day ? new Date(`${String(s.day).slice(0, 10)}T12:00:00`).toLocaleDateString("es") : "-"
+    ),
     datasets: [
       {
         label: "Ventas (Bs.)",

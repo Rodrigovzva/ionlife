@@ -19,14 +19,6 @@ export default function Reports() {
   const [performance, setPerformance] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [range, setRange] = useState(() => {
-    const to = new Date();
-    const from = new Date();
-    from.setDate(to.getDate() - 30);
-    const toIso = to.toISOString().slice(0, 10);
-    const fromIso = from.toISOString().slice(0, 10);
-    return { from: fromIso, to: toIso, sales_status: "all" };
-  });
   const [summaryRows, setSummaryRows] = useState([]);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryError, setSummaryError] = useState("");
@@ -37,17 +29,28 @@ export default function Reports() {
     status: "",
   });
 
-  async function load(nextRange) {
+  function buildReportParams(filters) {
+    const params = filters || summaryFilters;
+    const dateValue = params.date || "";
+    return {
+      from: dateValue,
+      to: dateValue,
+      status: params.status || "all",
+      truck_id: params.truck_id || "",
+    };
+  }
+
+  async function loadReports(nextFilters) {
     setLoading(true);
     setError("");
     try {
-      const params = nextRange || range;
+      const params = buildReportParams(nextFilters);
       const [s, o, d, st, p] = await Promise.all([
         api.get("/api/reports/sales", { params }),
-        api.get("/api/reports/orders-by-status"),
-        api.get("/api/reports/deliveries"),
-        api.get("/api/reports/stock-by-warehouse"),
-        api.get("/api/reports/performance"),
+        api.get("/api/reports/orders-by-status", { params }),
+        api.get("/api/reports/deliveries", { params }),
+        api.get("/api/reports/stock-by-warehouse", { params }),
+        api.get("/api/reports/performance", { params }),
       ]);
       setSales(s.data || []);
       setOrdersByStatus(o.data || []);
@@ -62,9 +65,9 @@ export default function Reports() {
   }
 
   useEffect(() => {
-    load();
+    loadReports(summaryFilters);
     loadSummaryOptions();
-    loadSummary();
+    loadSummary(summaryFilters);
   }, []);
 
   async function loadSummaryOptions() {
@@ -98,18 +101,23 @@ export default function Reports() {
     }
   }
 
+  function applySummaryFilters() {
+    loadSummary(summaryFilters);
+    loadReports(summaryFilters);
+  }
+
   const salesTotal = sales.reduce((sum, item) => sum + Number(item.total || 0), 0);
   const summaryTotal = summaryRows.length;
 
   function printReport() {
     const now = new Date().toLocaleString();
     const summaryFilterText = `Filtro: fecha=${summaryFilters.date || "-"}, estado=${summaryFilters.status || "-"}, camión=${summaryFilters.truck_id || "-"}`;
-    const summaryRowsHtml = summaryRows
+  const summaryRowsHtml = summaryRows
       .map(
         (s) =>
           `<tr><td>${s.order_id}</td><td>${s.customer_name}</td><td>${s.address || "-"}</td><td>${s.status}</td><td>${
             s.created_at ? new Date(s.created_at).toLocaleString() : "-"
-          }</td><td>${s.truck_plate || "-"}</td><td>${s.driver_name || "-"}</td><td>${s.seller_name || "-"}</td></tr>`
+          }</td><td>${s.truck_plate || "-"}</td><td>${s.driver_name || "-"}</td><td>${s.seller_name || "-"}</td><td>${s.order_detail || "-"}</td><td>Bs. ${Number(s.total || 0).toFixed(2)}</td></tr>`
       )
       .join("");
 
@@ -134,9 +142,9 @@ export default function Reports() {
           <div class="meta">${summaryFilterText}</div>
           <table>
             <thead>
-              <tr><th>Pedido</th><th>Nombre</th><th>Dirección</th><th>Estado</th><th>Fecha</th><th>Camión</th><th>Repartidor</th><th>Vendedor</th></tr>
+              <tr><th>Pedido</th><th>Nombre</th><th>Dirección</th><th>Estado</th><th>Fecha</th><th>Camión</th><th>Repartidor</th><th>Vendedor</th><th>Detalle</th><th>Total</th></tr>
             </thead>
-            <tbody>${summaryRowsHtml || "<tr><td colspan='8'>Sin datos.</td></tr>"}</tbody>
+            <tbody>${summaryRowsHtml || "<tr><td colspan='10'>Sin datos.</td></tr>"}</tbody>
           </table>
         </body>
       </html>
@@ -190,7 +198,7 @@ export default function Reports() {
               className="btn"
               type="button"
               disabled={summaryLoading}
-              onClick={() => loadSummary(summaryFilters)}
+              onClick={applySummaryFilters}
             >
               {summaryLoading ? "Cargando..." : "Aplicar"}
             </button>
@@ -214,6 +222,8 @@ export default function Reports() {
               <th>Camión</th>
               <th>Repartidor</th>
               <th>Vendedor</th>
+              <th>Detalle</th>
+              <th>Total</th>
             </tr>
           </thead>
           <tbody>
@@ -227,52 +237,17 @@ export default function Reports() {
                 <td>{s.truck_plate || "-"}</td>
                 <td>{s.driver_name || "-"}</td>
                 <td>{s.seller_name || "-"}</td>
+                <td>{s.order_detail || "-"}</td>
+                <td>Bs. {Number(s.total || 0).toFixed(2)}</td>
               </tr>
             ))}
             {summaryRows.length === 0 && (
               <tr>
-                <td colSpan={8}>Sin datos.</td>
+                <td colSpan={10}>Sin datos.</td>
               </tr>
             )}
           </tbody>
         </table>
-      </div>
-      <div className="card" style={{ marginBottom: 16 }}>
-        <div className="form-row">
-          <input
-            type="date"
-            value={range.from}
-            onChange={(e) => setRange({ ...range, from: e.target.value })}
-          />
-          <input
-            type="date"
-            value={range.to}
-            onChange={(e) => setRange({ ...range, to: e.target.value })}
-          />
-          <select
-            value={range.sales_status}
-            onChange={(e) =>
-              setRange({ ...range, sales_status: e.target.value })
-            }
-          >
-            <option value="all">Ventas: Todos</option>
-            <option value="Entregado">Ventas: Entregado</option>
-            <option value="Confirmado">Ventas: Confirmado</option>
-            <option value="Despachado">Ventas: Despachado</option>
-            <option value="En ruta">Ventas: En ruta</option>
-            <option value="Creado">Ventas: Creado</option>
-            <option value="Cancelado">Ventas: Cancelado</option>
-          </select>
-          <button
-            className="btn"
-            type="button"
-            disabled={loading}
-            onClick={() => load(range)}
-          >
-            {loading ? "Cargando..." : "Aplicar"}
-          </button>
-        </div>
-        {error && <div className="error">{error}</div>}
       </div>
       <div className="grid grid-2">
         <div className="card">
@@ -290,7 +265,7 @@ export default function Reports() {
             <tbody>
               {sales.map((s) => (
                 <tr key={s.day}>
-                  <td>{s.day}</td>
+                  <td>{s.day ? new Date(s.day).toLocaleDateString("es") : "-"}</td>
                   <td>Bs. {Number(s.total || 0).toFixed(2)}</td>
                 </tr>
               ))}
