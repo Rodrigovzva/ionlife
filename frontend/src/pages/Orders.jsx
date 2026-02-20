@@ -914,7 +914,7 @@ export default function Orders() {
               <th>Cliente</th>
               <th>Dirección</th>
               <th>Zona</th>
-              <th>Fecha</th>
+              <th>Creado</th>
               <th>Programada</th>
               <th>Estado</th>
               <th>Camión</th>

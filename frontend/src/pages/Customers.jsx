@@ -103,6 +103,15 @@ export default function Customers() {
     "OVEJUYO",
   ];
   const [customers, setCustomers] = useState([]);
+  const [search, setSearch] = useState({
+    nombre: "",
+    telefono: "",
+    direccion: "",
+    zona: "",
+  });
+  const [results, setResults] = useState([]);
+  const [searchError, setSearchError] = useState("");
+  const [searchActive, setSearchActive] = useState(false);
   const [tiposCliente, setTiposCliente] = useState([]);
   const [form, setForm] = useState({
     nombre_completo: "",
@@ -151,7 +160,7 @@ export default function Customers() {
 
   async function load() {
     const [resCustomers, resTipos] = await Promise.all([
-      api.get("/api/customers"),
+      api.get("/api/customers", { params: { limit: 25 } }),
       api.get("/api/tipos-cliente"),
     ]);
     setCustomers(resCustomers.data);
@@ -161,6 +170,34 @@ export default function Customers() {
   useEffect(() => {
     load();
   }, []);
+
+  async function handleSearch(e) {
+    e.preventDefault();
+    setSearchError("");
+    setSearchActive(true);
+    try {
+      const res = await api.get("/api/customers/search", {
+        params: {
+          nombre: search.nombre || undefined,
+          telefono: search.telefono || undefined,
+          direccion: search.direccion || undefined,
+          zona: search.zona || undefined,
+        },
+      });
+      setResults(res.data || []);
+    } catch (_err) {
+      setResults([]);
+      setSearchError("No se pudo buscar clientes.");
+    }
+  }
+
+  function clearSearch() {
+    setSearch({ nombre: "", telefono: "", direccion: "", zona: "" });
+    setResults([]);
+    setSearchError("");
+    setSearchActive(false);
+    load();
+  }
 
   async function handleCreate(e) {
     e.preventDefault();
@@ -375,6 +412,42 @@ export default function Customers() {
           </div>
         </form>
       </div>
+      <div className="card" style={{ marginTop: 16 }}>
+        <h4>Buscar cliente</h4>
+        <form onSubmit={handleSearch} className="form">
+          <div className="form-row">
+            <input
+              placeholder="Nombre"
+              value={search.nombre}
+              onChange={(e) => setSearch({ ...search, nombre: e.target.value })}
+            />
+            <input
+              placeholder="Teléfono"
+              value={search.telefono}
+              onChange={(e) => setSearch({ ...search, telefono: e.target.value })}
+            />
+            <input
+              placeholder="Dirección"
+              value={search.direccion}
+              onChange={(e) =>
+                setSearch({ ...search, direccion: e.target.value })
+              }
+            />
+            <input
+              placeholder="Zona"
+              value={search.zona}
+              onChange={(e) => setSearch({ ...search, zona: e.target.value })}
+            />
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn" type="submit">Buscar</button>
+            <button className="btn btn-outline" type="button" onClick={clearSearch}>
+              Limpiar
+            </button>
+          </div>
+        </form>
+        {searchError && <div className="error" style={{ marginTop: 8 }}>{searchError}</div>}
+      </div>
       <div style={{ marginTop: 16 }}>
         <table className="table">
         <thead>
@@ -392,7 +465,7 @@ export default function Customers() {
           </tr>
         </thead>
         <tbody>
-          {customers.map((c) => (
+          {(searchActive ? results : customers).map((c) => (
             <tr key={c.id}>
               <td>{c.id}</td>
               <td>{c.nombre_completo}</td>
@@ -414,6 +487,11 @@ export default function Customers() {
               </td>
             </tr>
           ))}
+          {searchActive && results.length === 0 && (
+            <tr>
+              <td colSpan={10}>Sin resultados.</td>
+            </tr>
+          )}
         </tbody>
         </table>
       </div>

@@ -210,9 +210,7 @@ export default function Logistics({ user }) {
               <td>${Number(o.kit_completo || 0)}</td>
               <td>${Number(o.botellon_purificada || 0)}</td>
               <td>Bs. ${Number(o.total || 0).toFixed(2)}</td>
-              <td class="center">
-                <input type="checkbox" ${o.status === "Entregado" ? "checked" : ""} />
-              </td>
+              <td class="center"></td>
               <td class="obs"></td>
             </tr>
           `
@@ -239,7 +237,6 @@ export default function Logistics({ user }) {
               th { background: #f2f4f7; font-size: 10px; }
               .center { text-align: center; }
               .obs { min-width: 120px; }
-              input[type="checkbox"] { width: 11px; height: 11px; }
             </style>
           </head>
           <body>

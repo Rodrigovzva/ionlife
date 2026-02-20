@@ -379,14 +379,20 @@ app.get("/api/precios-producto", requireAuth, async (_req, res) => {
   res.json(rows);
 });
 
-app.get("/api/customers", requireRole(ACCESS.customers), async (_req, res) => {
+app.get("/api/customers", requireRole(ACCESS.customers), async (req, res) => {
+  const limit = Number(req.query?.limit);
+  const hasLimit = Number.isFinite(limit) && limit > 0;
+  const safeLimit = hasLimit ? Math.min(Math.floor(limit), 200) : null;
   const rows = await query(
-    "SELECT c.*, u.nombre as creado_por_nombre FROM clientes c LEFT JOIN usuarios u ON u.id = c.creado_por_usuario_id ORDER BY c.id DESC"
+    `SELECT c.*, u.nombre as creado_por_nombre
+     FROM clientes c
+     LEFT JOIN usuarios u ON u.id = c.creado_por_usuario_id
+     ORDER BY c.id DESC${safeLimit ? ` LIMIT ${safeLimit}` : ""}`
   );
   res.json(rows);
 });
 
-app.get("/api/customers/search", requireRole(ACCESS.orders), async (req, res) => {
+app.get("/api/customers/search", requireAuth, async (req, res) => {
   const { nombre, telefono, direccion, zona } = req.query || {};
   const conditions = [];
   const params = [];
@@ -413,9 +419,12 @@ app.get("/api/customers/search", requireRole(ACCESS.orders), async (req, res) =>
   }
 
   const rows = await query(
-    `SELECT id, nombre_completo, telefono_principal, nit, zona, direccion, tipo_cliente, notas FROM clientes WHERE ${conditions.join(
-      " AND "
-    )} ORDER BY nombre_completo LIMIT 20`,
+    `SELECT c.*, u.nombre as creado_por_nombre
+     FROM clientes c
+     LEFT JOIN usuarios u ON u.id = c.creado_por_usuario_id
+     WHERE ${conditions.join(" AND ")}
+     ORDER BY c.nombre_completo
+     LIMIT 20`,
     params
   );
   res.json(rows);
