@@ -1346,6 +1346,7 @@ app.get("/api/logistics/truck-orders", requireRole(ACCESS.logistics), async (req
       c.telefono_secundario as phone_secondary,
       c.zona,
       COALESCE(dc.direccion, c.direccion) as address,
+      p.notas as notes,
       p.fecha_creacion as created_at,
       GROUP_CONCAT(CONCAT(pr.nombre, " x", oi.cantidad) SEPARATOR ", ") as items,
       COALESCE(SUM(oi.cantidad * oi.precio), 0) as total,

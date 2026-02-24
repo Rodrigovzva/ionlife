@@ -663,6 +663,54 @@ export default function Admin() {
           </tbody>
         </table>
       </div>
+      <div className="grid grid-2" style={{ marginTop: 16 }}>
+        <div className="card">
+          <h4>Camiones registrados</h4>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Placa</th>
+                <th>Capacidad</th>
+                <th>Activo</th>
+              </tr>
+            </thead>
+            <tbody>
+              {trucks.map((t) => (
+                <tr key={t.id}>
+                  <td>{t.id}</td>
+                  <td>{t.plate}</td>
+                  <td>{t.capacity ?? "-"}</td>
+                  <td>{t.active ? "Sí" : "No"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="card">
+          <h4>Repartidores registrados</h4>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Nombre</th>
+                <th>Teléfono</th>
+                <th>Activo</th>
+              </tr>
+            </thead>
+            <tbody>
+              {drivers.map((d) => (
+                <tr key={d.id}>
+                  <td>{d.id}</td>
+                  <td>{d.name}</td>
+                  <td>{d.phone || "-"}</td>
+                  <td>{d.active ? "Sí" : "No"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
       <div className="card" style={{ marginTop: 16 }}>
         <h4>Tipos de cliente</h4>
         <form onSubmit={handleCreateTipo} className="form">

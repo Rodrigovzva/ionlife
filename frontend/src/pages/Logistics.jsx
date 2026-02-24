@@ -186,7 +186,9 @@ export default function Logistics({ user }) {
       const orders = res.data || [];
       const truck = trucks.find((t) => String(t.id) === String(printTruckId));
       const title = "Hoja de ruta";
-      const now = new Date().toLocaleString();
+      const scheduledLabel = printDateFilter
+        ? new Date(`${printDateFilter}T12:00:00`).toLocaleDateString("es")
+        : "-";
       const driverName = orders[0]?.driver_name || "-";
       const printerName = user?.email || user?.name || "-";
       const truckName = orders[0]?.truck_plate || truck?.plate || "-";
@@ -211,7 +213,57 @@ export default function Logistics({ user }) {
               <td>${Number(o.botellon_purificada || 0)}</td>
               <td>Bs. ${Number(o.total || 0).toFixed(2)}</td>
               <td class="center"></td>
-              <td class="obs"></td>
+              <td class="obs">${o.notes || "-"}</td>
+            </tr>
+          `
+        )
+        .join("");
+      const summaryByTruck = orders.reduce((acc, order) => {
+        const plate = order.truck_plate || truckName || "-";
+        if (!acc[plate]) {
+          acc[plate] = {
+            orders: 0,
+            packs_600: 0,
+            packs_1lt: 0,
+            packs_2lt: 0,
+            bidon_5: 0,
+            recarga: 0,
+            base: 0,
+            botellon: 0,
+            kit_completo: 0,
+            botellon_purificada: 0,
+            total: 0,
+          };
+        }
+        acc[plate].orders += 1;
+        acc[plate].packs_600 += Number(order.packs_600 || 0);
+        acc[plate].packs_1lt += Number(order.packs_1lt || 0);
+        acc[plate].packs_2lt += Number(order.packs_2lt || 0);
+        acc[plate].bidon_5 += Number(order.bidon_5 || 0);
+        acc[plate].recarga += Number(order.recarga || 0);
+        acc[plate].base += Number(order.base || 0);
+        acc[plate].botellon += Number(order.botellon || 0);
+        acc[plate].kit_completo += Number(order.kit_completo || 0);
+        acc[plate].botellon_purificada += Number(order.botellon_purificada || 0);
+        acc[plate].total += Number(order.total || 0);
+        return acc;
+      }, {});
+      const summaryRowsHtml = Object.entries(summaryByTruck)
+        .map(
+          ([plate, s]) => `
+            <tr>
+              <td>${plate}</td>
+              <td>${s.orders}</td>
+              <td>${s.packs_600}</td>
+              <td>${s.packs_1lt}</td>
+              <td>${s.packs_2lt}</td>
+              <td>${s.bidon_5}</td>
+              <td>${s.recarga}</td>
+              <td>${s.base}</td>
+              <td>${s.botellon}</td>
+              <td>${s.kit_completo}</td>
+              <td>${s.botellon_purificada}</td>
+              <td>Bs. ${s.total.toFixed(2)}</td>
             </tr>
           `
         )
@@ -221,13 +273,14 @@ export default function Logistics({ user }) {
         setPrintError("No se pudo abrir la ventana de impresión.");
         return;
       }
+      win.document.title = title;
       win.document.write(`
         <html>
           <head>
             <title>${title}</title>
             <style>
-              @page { size: landscape; margin: 16mm; }
-              body { font-family: Arial, sans-serif; padding: 12px; }
+              @page { size: landscape; margin: 8mm; }
+              body { font-family: Arial, sans-serif; padding: 6px; }
               h2 { margin: 0 0 4px; font-size: 16px; }
               .meta { color: #555; margin-bottom: 8px; font-size: 11px; }
               .meta-grid { display: grid; grid-template-columns: repeat(2, minmax(220px, 1fr)); gap: 6px 16px; margin-bottom: 10px; font-size: 11px; }
@@ -237,13 +290,14 @@ export default function Logistics({ user }) {
               th { background: #f2f4f7; font-size: 10px; }
               .center { text-align: center; }
               .obs { min-width: 120px; }
+              .summary { margin-top: 10px; font-size: 11px; }
+              .summary table { width: 100%; border-collapse: collapse; }
+              .summary th, .summary td { border: 1px solid #ccc; padding: 3px 4px; font-size: 10px; }
             </style>
           </head>
           <body>
-            <h2>${title}</h2>
-            <div class="meta">Fecha: ${now}</div>
+            <div class="meta"><strong>Fecha programada:</strong> ${scheduledLabel}</div>
             <div class="meta-grid">
-              <div><strong>Usuario:</strong> ${printerName}</div>
               <div><strong>Camión:</strong> ${truckName}</div>
               <div><strong>Distribuidor:</strong> ${driverName}</div>
               <div><strong>Ayudante:</strong> <span class="line"></span></div>
@@ -278,6 +332,30 @@ export default function Logistics({ user }) {
                 ${rowsHtml || "<tr><td colspan='18'>No hay pedidos asignados.</td></tr>"}
               </tbody>
             </table>
+            <div class="summary">
+              <div><strong>Resumen</strong></div>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Camión</th>
+                    <th>Nro pedidos</th>
+                    <th>Packs 600cc</th>
+                    <th>Packs 1 LT</th>
+                    <th>Packs 2 LT</th>
+                    <th>Bidón 5 LT</th>
+                    <th>Recarga</th>
+                    <th>Base</th>
+                    <th>Botellón</th>
+                    <th>Kit completo</th>
+                    <th>Botellón purificada</th>
+                    <th>Precio</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${summaryRowsHtml || "<tr><td colspan='12'>-</td></tr>"}
+                </tbody>
+              </table>
+            </div>
           </body>
         </html>
       `);
@@ -313,6 +391,40 @@ export default function Logistics({ user }) {
       setPreviewLoading(false);
     }
   }
+
+  const previewSummaryByTruck = previewOrders.reduce((acc, order) => {
+    const plate =
+      order.truck_plate ||
+      trucks.find((t) => String(t.id) === String(printTruckId))?.plate ||
+      "-";
+    if (!acc[plate]) {
+      acc[plate] = {
+        orders: 0,
+        packs_600: 0,
+        packs_1lt: 0,
+        packs_2lt: 0,
+        bidon_5: 0,
+        recarga: 0,
+        base: 0,
+        botellon: 0,
+        kit_completo: 0,
+        botellon_purificada: 0,
+        total: 0,
+      };
+    }
+    acc[plate].orders += 1;
+    acc[plate].packs_600 += Number(order.packs_600 || 0);
+    acc[plate].packs_1lt += Number(order.packs_1lt || 0);
+    acc[plate].packs_2lt += Number(order.packs_2lt || 0);
+    acc[plate].bidon_5 += Number(order.bidon_5 || 0);
+    acc[plate].recarga += Number(order.recarga || 0);
+    acc[plate].base += Number(order.base || 0);
+    acc[plate].botellon += Number(order.botellon || 0);
+    acc[plate].kit_completo += Number(order.kit_completo || 0);
+    acc[plate].botellon_purificada += Number(order.botellon_purificada || 0);
+    acc[plate].total += Number(order.total || 0);
+    return acc;
+  }, {});
 
   return (
     <div className="container page">
@@ -533,6 +645,54 @@ export default function Logistics({ user }) {
                   </tbody>
                 </table>
               </div>
+              <div style={{ marginTop: 8 }}>
+                <div style={{ fontSize: 13, marginBottom: 6 }}>
+                  <strong>Resumen</strong>
+                </div>
+                <div className="table-scroll">
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Camión</th>
+                        <th>Nro pedidos</th>
+                        <th>Packs 600cc</th>
+                        <th>Packs 1 LT</th>
+                        <th>Packs 2 LT</th>
+                        <th>Bidón 5 LT</th>
+                        <th>Recarga</th>
+                        <th>Base</th>
+                        <th>Botellón</th>
+                        <th>Kit completo</th>
+                        <th>Botellón purificada</th>
+                        <th>Precio</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.entries(previewSummaryByTruck).map(([plate, s]) => (
+                        <tr key={plate}>
+                          <td>{plate}</td>
+                          <td>{s.orders}</td>
+                          <td>{s.packs_600}</td>
+                          <td>{s.packs_1lt}</td>
+                          <td>{s.packs_2lt}</td>
+                          <td>{s.bidon_5}</td>
+                          <td>{s.recarga}</td>
+                          <td>{s.base}</td>
+                          <td>{s.botellon}</td>
+                          <td>{s.kit_completo}</td>
+                          <td>{s.botellon_purificada}</td>
+                          <td>Bs. {s.total.toFixed(2)}</td>
+                        </tr>
+                      ))}
+                      {Object.keys(previewSummaryByTruck).length === 0 && (
+                        <tr>
+                          <td colSpan={12}>-</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -590,54 +750,6 @@ export default function Logistics({ user }) {
             </li>
           ))}
         </ul>
-      </div>
-      <div className="grid grid-2" style={{ marginTop: 16 }}>
-        <div className="card">
-          <h4>Camiones registrados</h4>
-          <table className="table">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Placa</th>
-                <th>Capacidad</th>
-                <th>Activo</th>
-              </tr>
-            </thead>
-            <tbody>
-              {trucks.map((t) => (
-                <tr key={t.id}>
-                  <td>{t.id}</td>
-                  <td>{t.plate}</td>
-                  <td>{t.capacity ?? "-"}</td>
-                  <td>{t.active ? "Sí" : "No"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div className="card">
-          <h4>Repartidores registrados</h4>
-          <table className="table">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Nombre</th>
-                <th>Teléfono</th>
-                <th>Activo</th>
-              </tr>
-            </thead>
-            <tbody>
-              {drivers.map((d) => (
-                <tr key={d.id}>
-                  <td>{d.id}</td>
-                  <td>{d.name}</td>
-                  <td>{d.phone || "-"}</td>
-                  <td>{d.active ? "Sí" : "No"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
       </div>
     </div>
   );
