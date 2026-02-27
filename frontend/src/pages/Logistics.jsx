@@ -12,6 +12,11 @@ function statusClass(status) {
 }
 
 export default function Logistics({ user }) {
+  const today = new Date();
+  const todayIso = new Date(today.getTime() - today.getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 10);
+  const isDriver = user?.roles?.includes("Repartidor");
   const [trucks, setTrucks] = useState([]);
   const [drivers, setDrivers] = useState([]);
   const [deliveries, setDeliveries] = useState([]);
@@ -37,6 +42,9 @@ export default function Logistics({ user }) {
     order_id: "",
     cash_amount: "",
   });
+  const [returnSelection, setReturnSelection] = useState({});
+  const [returnDate, setReturnDate] = useState(todayIso);
+  const [returnDeliveredTotal, setReturnDeliveredTotal] = useState(0);
   const [truckOrders, setTruckOrders] = useState([]);
   const [returnError, setReturnError] = useState("");
   const [printTruckId, setPrintTruckId] = useState("");
@@ -90,15 +98,23 @@ export default function Logistics({ user }) {
     }
   }
 
-  async function loadTruckOrders(truckId) {
+  async function loadTruckOrders(truckId, dateValue) {
     if (!truckId) {
       setTruckOrders([]);
+      setReturnDeliveredTotal(0);
       return;
     }
+    const dateFilter = dateValue || returnDate || todayIso;
     const res = await api.get("/api/logistics/truck-orders", {
-      params: { truck_id: truckId },
+      params: { truck_id: truckId, scheduled_date: dateFilter },
     });
-    setTruckOrders(res.data || []);
+    const rows = res.data || [];
+    const deliveredTotal = rows
+      .filter((order) => order.status === "Entregado")
+      .reduce((sum, order) => sum + Number(order.total || 0), 0);
+    setReturnDeliveredTotal(deliveredTotal);
+    setTruckOrders(rows.filter((order) => order.status !== "Entregado"));
+    setReturnSelection({});
   }
 
   useEffect(() => {
@@ -159,14 +175,28 @@ export default function Logistics({ user }) {
       setReturnError("Seleccione camión y pedido.");
       return;
     }
+    if (!returnSelection[returnForm.order_id]) {
+      setReturnError("Seleccione el pedido en la tabla para devolución.");
+      return;
+    }
+    const expectedTotal = Number(returnDeliveredTotal || 0);
+    const cashValue = Number(returnForm.cash_amount || 0);
+    if (Number(cashValue.toFixed(2)) !== Number(expectedTotal.toFixed(2))) {
+      setReturnError(
+        `El monto debe ser igual a las ventas entregadas: Bs. ${expectedTotal.toFixed(2)}`
+      );
+      return;
+    }
     await api.post("/api/logistics/returns", {
       truck_id: Number(returnForm.truck_id),
       order_id: Number(returnForm.order_id),
       cash_amount: returnForm.cash_amount ? Number(returnForm.cash_amount) : 0,
     });
     setReturnForm({ truck_id: returnForm.truck_id, order_id: "", cash_amount: "" });
+    setReturnSelection({});
     loadTruckSummary(returnForm.truck_id);
     loadTruckOrders(returnForm.truck_id);
+    loadPendingOrders();
   }
 
   async function printRouteSheet() {
@@ -369,6 +399,101 @@ export default function Logistics({ user }) {
     }
   }
 
+  async function printReturnSummary() {
+    setReturnError("");
+    if (!returnForm.truck_id) {
+      setReturnError("Seleccione un camión.");
+      return;
+    }
+    const dateFilter = returnDate || todayIso;
+    try {
+      const res = await api.get("/api/logistics/truck-orders", {
+        params: { truck_id: returnForm.truck_id, scheduled_date: dateFilter },
+      });
+      const orders = res.data || [];
+      const truck = trucks.find((t) => String(t.id) === String(returnForm.truck_id));
+      const truckName = orders[0]?.truck_plate || truck?.plate || "-";
+      const driverName = orders[0]?.driver_name || "-";
+      const dateLabel = dateFilter
+        ? new Date(`${dateFilter}T12:00:00`).toLocaleDateString("es")
+        : "-";
+      const totalOrders = orders.length;
+      const uniqueCustomers = new Set(orders.map((o) => o.customer_name)).size;
+      const deliveredOrders = orders.filter((o) => o.status === "Entregado");
+      const deliveredTotal = deliveredOrders.reduce(
+        (sum, o) => sum + Number(o.total || 0),
+        0
+      );
+      const reprogrammedOrders = orders.filter((o) => o.status === "Reprogramado");
+      const rowsHtml = orders
+        .map(
+          (o) => `
+            <tr>
+              <td>${o.id || "-"}</td>
+              <td>${o.customer_name || "-"}</td>
+              <td>${o.status || "-"}</td>
+              <td>${o.items || "-"}</td>
+              <td>Bs. ${Number(o.total || 0).toFixed(2)}</td>
+            </tr>
+          `
+        )
+        .join("");
+      const win = window.open("", "_blank", "width=900,height=700");
+      if (!win) {
+        setReturnError("No se pudo abrir la ventana de impresión.");
+        return;
+      }
+      win.document.title = "Resumen de devolución";
+      win.document.write(`
+        <html>
+          <head>
+            <title>Resumen de devolución</title>
+            <style>
+              @page { margin: 10mm; }
+              body { font-family: Arial, sans-serif; padding: 8px; color: #1b2a3a; }
+              h2 { margin: 0 0 6px; font-size: 16px; }
+              .meta { color: #555; margin-bottom: 8px; font-size: 11px; }
+              table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+              th, td { border: 1px solid #ccc; padding: 4px 6px; text-align: left; font-size: 10px; vertical-align: top; line-height: 1.2; }
+              th { background: #f2f4f7; }
+              .summary { margin-top: 10px; font-size: 11px; }
+            </style>
+          </head>
+          <body>
+            <h2>Resumen de devolución</h2>
+            <div class="meta"><strong>Fecha:</strong> ${dateLabel}</div>
+            <div class="meta"><strong>Camión:</strong> ${truckName} | <strong>Repartidor:</strong> ${driverName}</div>
+            <div class="summary">
+              <div><strong>Pedidos:</strong> ${totalOrders}</div>
+              <div><strong>Clientes:</strong> ${uniqueCustomers}</div>
+              <div><strong>Pedidos entregados:</strong> ${deliveredOrders.length} | <strong>Total Bs.:</strong> ${deliveredTotal.toFixed(2)}</div>
+              <div><strong>Pedidos reprogramados:</strong> ${reprogrammedOrders.length}</div>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Cliente</th>
+                  <th>Estado</th>
+                  <th>Detalle</th>
+                  <th>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rowsHtml || "<tr><td colspan='5'>Sin pedidos.</td></tr>"}
+              </tbody>
+            </table>
+          </body>
+        </html>
+      `);
+      win.document.close();
+      win.focus();
+      win.print();
+    } catch (_err) {
+      setReturnError("No se pudo generar la impresión de devolución.");
+    }
+  }
+
   async function loadPreview() {
     setPreviewError("");
     if (!printTruckId) {
@@ -426,10 +551,123 @@ export default function Logistics({ user }) {
     return acc;
   }, {});
 
+  const returnCard = (
+    <div className="card">
+      <h4>Devolución a almacén y caja</h4>
+      <form onSubmit={handleReturn} className="form">
+        <div className="form-row">
+          <select
+            value={returnForm.truck_id}
+            onChange={(e) => {
+              const nextId = e.target.value;
+              setReturnForm((prev) => ({ ...prev, truck_id: nextId, order_id: "" }));
+              loadTruckOrders(nextId, returnDate);
+            }}
+          >
+            <option value="">Seleccione camión</option>
+            {trucks.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.plate}
+              </option>
+            ))}
+          </select>
+          <input
+            type="date"
+            value={returnDate}
+            onChange={(e) => {
+              const nextDate = e.target.value;
+              setReturnDate(nextDate);
+              if (returnForm.truck_id) {
+                loadTruckOrders(returnForm.truck_id, nextDate);
+              }
+            }}
+          />
+          <input type="hidden" value={returnForm.order_id} readOnly />
+          <input
+            placeholder="Monto entregado a caja (Bs.)"
+            value={returnForm.cash_amount}
+            onChange={(e) =>
+              setReturnForm((prev) => ({ ...prev, cash_amount: e.target.value }))
+            }
+          />
+        </div>
+        <div style={{ marginTop: 8, color: "#6b7a8c", fontSize: 13 }}>
+          {returnForm.order_id ? (
+            <>Monto a entregar a caja: <strong>Bs. {Number(returnDeliveredTotal || 0).toFixed(2)}</strong></>
+          ) : (
+            <>Seleccione un pedido para ver el monto a entregar.</>
+          )}
+        </div>
+        <div className="table-scroll" style={{ marginTop: 8 }}>
+          <table className="table">
+            <thead>
+              <tr>
+                <th></th>
+                <th>ID</th>
+                <th>Cliente</th>
+                <th>Estado</th>
+                <th>Dirección</th>
+                <th>Zona</th>
+                <th>Detalle</th>
+                <th>Observaciones</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {truckOrders.map((o) => (
+                <tr key={o.id}>
+                  <td>
+                    <input
+                      type="checkbox"
+                      checked={!!returnSelection[o.id]}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setReturnSelection((prev) => ({
+                          ...prev,
+                          [o.id]: checked,
+                        }));
+                        setReturnForm((prev) => ({
+                          ...prev,
+                          order_id: checked ? String(o.id) : "",
+                        }));
+                      }}
+                    />
+                  </td>
+                  <td>{o.id}</td>
+                  <td>{o.customer_name || "-"}</td>
+                  <td><span className={statusClass(o.status)}>{o.status}</span></td>
+                  <td>{o.address || "-"}</td>
+                  <td>{o.zona || "-"}</td>
+                  <td>{o.items || "-"}</td>
+                  <td>{o.notes || "-"}</td>
+                  <td>Bs. {Number(o.total || 0).toFixed(2)}</td>
+                </tr>
+              ))}
+              {truckOrders.length === 0 && (
+                <tr>
+                  <td colSpan={9}>No hay pedidos disponibles.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn" type="submit">Registrar devolución</button>
+          <button className="btn btn-outline" type="button" onClick={printReturnSummary}>
+            Imprimir devolución
+          </button>
+        </div>
+      </form>
+      {returnError && <div className="error">{returnError}</div>}
+    </div>
+  );
+
   return (
     <div className="container page">
       <h2>Logística</h2>
       <div className="grid">
+        {isDriver ? returnCard : (
+          <>
         <div className="card">
           <h4>Asignar pedidos pendientes (masivo)</h4>
           <div className="form-row">
@@ -498,6 +736,7 @@ export default function Logistics({ user }) {
                 <th>Estado</th>
                 <th>Zona</th>
                 <th>Dirección</th>
+                <th>Observaciones</th>
                 <th>Tel. principal</th>
               </tr>
             </thead>
@@ -516,12 +755,13 @@ export default function Logistics({ user }) {
                   <td><span className={statusClass(p.status)}>{p.status}</span></td>
                   <td>{p.zona || "-"}</td>
                   <td>{p.direccion || "-"}</td>
+                  <td>{p.notes || "-"}</td>
                   <td>{p.phone || "-"}</td>
                 </tr>
               ))}
               {pendingOrders.length === 0 && (
                 <tr>
-                  <td colSpan={7}>No hay pedidos pendientes.</td>
+                  <td colSpan={8}>No hay pedidos pendientes.</td>
                 </tr>
               )}
             </tbody>
@@ -696,61 +936,22 @@ export default function Logistics({ user }) {
             </div>
           )}
         </div>
-        <div className="card">
-          <h4>Devolución a almacén y caja</h4>
-          <form onSubmit={handleReturn} className="form">
-            <div className="form-row">
-              <select
-                value={returnForm.truck_id}
-                onChange={(e) => {
-                  const nextId = e.target.value;
-                  setReturnForm((prev) => ({ ...prev, truck_id: nextId, order_id: "" }));
-                  loadTruckOrders(nextId);
-                }}
-              >
-                <option value="">Seleccione camión</option>
-                {trucks.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.plate}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={returnForm.order_id}
-                onChange={(e) =>
-                  setReturnForm((prev) => ({ ...prev, order_id: e.target.value }))
-                }
-              >
-                <option value="">Seleccione pedido</option>
-                {truckOrders.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    #{o.id} - {o.customer_name} ({o.status})
-                  </option>
-                ))}
-              </select>
-              <input
-                placeholder="Monto entregado a caja"
-                value={returnForm.cash_amount}
-                onChange={(e) =>
-                  setReturnForm((prev) => ({ ...prev, cash_amount: e.target.value }))
-                }
-              />
-            </div>
-            <button className="btn" type="submit">Registrar devolución</button>
-          </form>
-          {returnError && <div className="error">{returnError}</div>}
+        {returnCard}
+          </>
+        )}
+      </div>
+      {!isDriver && (
+        <div className="card" style={{ marginTop: 16 }}>
+          <h4>Entregas por estado</h4>
+          <ul>
+            {deliveries.map((d) => (
+              <li key={d.status}>
+                <span className={statusClass(d.status)}>{d.status}</span> {d.total}
+              </li>
+            ))}
+          </ul>
         </div>
-      </div>
-      <div className="card" style={{ marginTop: 16 }}>
-        <h4>Entregas por estado</h4>
-        <ul>
-          {deliveries.map((d) => (
-            <li key={d.status}>
-              <span className={statusClass(d.status)}>{d.status}</span> {d.total}
-            </li>
-          ))}
-        </ul>
-      </div>
+      )}
     </div>
   );
 }

@@ -23,10 +23,16 @@ export default function Reports() {
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryError, setSummaryError] = useState("");
   const [trucks, setTrucks] = useState([]);
-  const [summaryFilters, setSummaryFilters] = useState({
-    date: "",
-    truck_id: "",
-    status: "",
+  const [summaryFilters, setSummaryFilters] = useState(() => {
+    const now = new Date();
+    const todayIso = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+      .toISOString()
+      .slice(0, 10);
+    return {
+      date: todayIso,
+      truck_id: "",
+      status: "",
+    };
   });
 
   function buildReportParams(filters) {
@@ -108,16 +114,24 @@ export default function Reports() {
 
   const salesTotal = sales.reduce((sum, item) => sum + Number(item.total || 0), 0);
   const summaryTotal = summaryRows.length;
+  const sortedSummaryRows = [...summaryRows].sort((a, b) => {
+    const zoneA = (a.zone || "").trim().toLowerCase();
+    const zoneB = (b.zone || "").trim().toLowerCase();
+    if (zoneA === zoneB) return 0;
+    if (!zoneA) return 1;
+    if (!zoneB) return -1;
+    return zoneA.localeCompare(zoneB, "es");
+  });
 
   function printReport() {
     const now = new Date().toLocaleString();
     const summaryFilterText = `Filtro: fecha=${summaryFilters.date || "-"}, estado=${summaryFilters.status || "-"}, camión=${summaryFilters.truck_id || "-"}`;
-  const summaryRowsHtml = summaryRows
+    const summaryRowsHtml = sortedSummaryRows
       .map(
         (s) =>
           `<tr><td>${s.order_id}</td><td>${s.customer_name}</td><td>${s.address || "-"}</td><td>${s.status}</td><td>${
             s.created_at ? new Date(s.created_at).toLocaleString() : "-"
-          }</td><td>${s.truck_plate || "-"}</td><td>${s.driver_name || "-"}</td><td>${s.seller_name || "-"}</td><td>${s.order_detail || "-"}</td><td>Bs. ${Number(s.total || 0).toFixed(2)}</td></tr>`
+          }</td><td>${s.truck_plate || "-"}</td><td>${s.driver_name || "-"}</td><td>${s.zone || "-"}</td><td>${s.order_detail || "-"}</td><td>Bs. ${Number(s.total || 0).toFixed(2)}</td></tr>`
       )
       .join("");
 
@@ -142,7 +156,7 @@ export default function Reports() {
           <div class="meta">${summaryFilterText}</div>
           <table>
             <thead>
-              <tr><th>Pedido</th><th>Nombre</th><th>Dirección</th><th>Estado</th><th>Fecha</th><th>Camión</th><th>Repartidor</th><th>Vendedor</th><th>Detalle</th><th>Total</th></tr>
+              <tr><th>Pedido</th><th>Nombre</th><th>Dirección</th><th>Estado</th><th>Fecha</th><th>Camión</th><th>Repartidor</th><th>Zona</th><th>Detalle</th><th>Total</th></tr>
             </thead>
             <tbody>${summaryRowsHtml || "<tr><td colspan='10'>Sin datos.</td></tr>"}</tbody>
           </table>
@@ -221,13 +235,13 @@ export default function Reports() {
               <th>Fecha</th>
               <th>Camión</th>
               <th>Repartidor</th>
-              <th>Vendedor</th>
+              <th>Zona</th>
               <th>Detalle</th>
               <th>Total</th>
             </tr>
           </thead>
           <tbody>
-            {summaryRows.map((s) => (
+            {sortedSummaryRows.map((s) => (
               <tr key={s.order_id}>
                 <td>{s.order_id}</td>
                 <td>{s.customer_name}</td>
@@ -236,7 +250,7 @@ export default function Reports() {
                 <td>{s.created_at ? new Date(s.created_at).toLocaleString() : "-"}</td>
                 <td>{s.truck_plate || "-"}</td>
                 <td>{s.driver_name || "-"}</td>
-                <td>{s.seller_name || "-"}</td>
+                <td>{s.zone || "-"}</td>
                 <td>{s.order_detail || "-"}</td>
                 <td>Bs. {Number(s.total || 0).toFixed(2)}</td>
               </tr>
@@ -326,35 +340,48 @@ export default function Reports() {
           </table>
         </div>
         <div className="card">
-          <h4>Stock por almacén</h4>
+          <h4>Totales por estado</h4>
           <div className="table-scroll">
             <table className="table">
               <thead>
                 <tr>
-                  <th>Almacén</th>
-                  <th>Producto</th>
-                  <th>Cantidad</th>
                   <th>Estado</th>
+                  <th>Pedidos</th>
+                  <th>Monto (Bs.)</th>
                 </tr>
               </thead>
               <tbody>
-                {stock.map((s, idx) => (
-                  <tr key={`${s.warehouse}-${idx}`}>
-                    <td>{s.warehouse}</td>
-                    <td>{s.product}</td>
-                    <td>{s.quantity}</td>
-                    <td>
-                      {Number(s.quantity) <= Number(s.min_stock) ? (
-                        <span className="tag">Bajo stock</span>
-                      ) : (
-                        "-"
-                      )}
-                    </td>
-                  </tr>
-                ))}
-                {stock.length === 0 && (
+                {[
+                  {
+                    label: "Ventas (Entregado)",
+                    status: "Entregado",
+                  },
+                  {
+                    label: "Pendientes",
+                    status: "Pendiente",
+                  },
+                  {
+                    label: "Despachados",
+                    status: "Despachado",
+                  },
+                ].map((row) => {
+                  const rows = summaryRows.filter((s) => s.status === row.status);
+                  const count = rows.length;
+                  const total = rows.reduce(
+                    (sum, s) => sum + Number(s.total || 0),
+                    0
+                  );
+                  return (
+                    <tr key={row.status}>
+                      <td>{row.label}</td>
+                      <td>{count}</td>
+                      <td>Bs. {total.toFixed(2)}</td>
+                    </tr>
+                  );
+                })}
+                {summaryRows.length === 0 && (
                   <tr>
-                    <td colSpan={4}>Sin datos.</td>
+                    <td colSpan={3}>Sin datos.</td>
                   </tr>
                 )}
               </tbody>

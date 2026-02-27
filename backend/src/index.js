@@ -54,6 +54,7 @@ const ACCESS = {
     "Administrador del sistema",
     "Supervisor de call center",
     "Jefe de logística",
+    "Repartidor",
   ],
   admin: ["Administrador del sistema"],
 };
@@ -254,7 +255,7 @@ app.post("/api/auth/login", async (req, res) => {
   );
   const roleNames = roles.map((r) => r.name);
   const [driver] = await query(
-    "SELECT id FROM repartidores WHERE nombre = ? LIMIT 1",
+    "SELECT id FROM repartidores WHERE LOWER(nombre) = LOWER(?) LIMIT 1",
     [user.name]
   );
   const token = jwt.sign(
@@ -311,7 +312,7 @@ app.get("/api/driver/entregas", requireAuth, async (req, res) => {
         [driverId, ...dateParams]
       )
     : await query(
-        `${baseQuery} WHERE r.nombre = ? AND ${dateClause} GROUP BY e.id, e.estado, e.programado_en, e.entregado_en, p.id, p.fecha_programada, c.nombre_completo, direccion, r.nombre, cam.placa ORDER BY e.id DESC`,
+        `${baseQuery} WHERE LOWER(r.nombre) = LOWER(?) AND ${dateClause} GROUP BY e.id, e.estado, e.programado_en, e.entregado_en, p.id, p.fecha_programada, c.nombre_completo, direccion, r.nombre, cam.placa ORDER BY e.id DESC`,
         [driverName, ...dateParams]
       );
   res.json(rows);
@@ -348,7 +349,7 @@ app.get("/api/driver/ventas", requireAuth, async (req, res) => {
         [driverId, ...dateParams]
       )
     : await query(
-        `${baseQuery} AND r.nombre = ? AND ${dateClause} GROUP BY p.id, c.nombre_completo, cam.placa, r.nombre, e.estado, e.entregado_en ORDER BY p.id DESC`,
+        `${baseQuery} AND LOWER(r.nombre) = LOWER(?) AND ${dateClause} GROUP BY p.id, c.nombre_completo, cam.placa, r.nombre, e.estado, e.entregado_en ORDER BY p.id DESC`,
         [driverName, ...dateParams]
       );
   res.json(rows);
@@ -473,7 +474,44 @@ app.post("/api/customers", requireRole(ACCESS.customers), async (req, res) => {
   res.status(201).json({ id: result.insertId });
 });
 
-app.get("/api/customers/:id", requireRole(ACCESS.customers), async (req, res) => {
+app.get("/api/customers/:id", requireAuth, async (req, res) => {
+  const roles = req.user?.roles || [];
+  const isAdmin = roles.includes("Administrador del sistema");
+  const canCustomers = roles.some((role) => ACCESS.customers.includes(role));
+  const isDriver = roles.includes("Repartidor");
+  if (!isAdmin && !canCustomers) {
+    if (!isDriver) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    const { order_id } = req.query || {};
+    if (!order_id) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    const driverId = req.user?.driver_id;
+    const driverName = req.user?.name;
+    const assigned = driverId
+      ? await query(
+          `SELECT e.id
+           FROM entregas e
+           JOIN pedidos p ON p.id = e.pedido_id
+           JOIN repartidores r ON r.id = e.repartidor_id
+           WHERE e.pedido_id = ? AND p.cliente_id = ? AND r.id = ?
+           LIMIT 1`,
+          [order_id, req.params.id, driverId]
+        )
+      : await query(
+          `SELECT e.id
+           FROM entregas e
+           JOIN pedidos p ON p.id = e.pedido_id
+           JOIN repartidores r ON r.id = e.repartidor_id
+           WHERE e.pedido_id = ? AND p.cliente_id = ? AND LOWER(r.nombre) = LOWER(?)
+           LIMIT 1`,
+          [order_id, req.params.id, driverName]
+        );
+    if (assigned.length === 0) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+  }
   const [customer] = await query(
     "SELECT c.*, u.nombre as creado_por_nombre FROM clientes c LEFT JOIN usuarios u ON u.id = c.creado_por_usuario_id WHERE c.id = ?",
     [req.params.id]
@@ -746,14 +784,58 @@ app.get(
   }
 );
 
-app.get("/api/orders", requireRole(ACCESS.orders), async (_req, res) => {
-  const rows = await query(
-    "SELECT o.id, o.cliente_id as customer_id, o.estado as status, o.metodo_pago as payment_method, o.prioridad as priority, o.notas as notes, o.fecha_programada as scheduled_date, o.fecha_creacion as created_at, c.nombre_completo as customer_name, c.direccion as address, c.zona as zone, cam.placa as truck_plate FROM pedidos o JOIN clientes c ON c.id = o.cliente_id LEFT JOIN entregas e ON e.pedido_id = o.id LEFT JOIN camiones cam ON cam.id = e.camion_id ORDER BY o.id DESC"
-  );
+app.get("/api/orders", requireAuth, async (req, res) => {
+  const roles = req.user?.roles || [];
+  const isAdmin = roles.includes("Administrador del sistema");
+  const canOrders = roles.some((role) => ACCESS.orders.includes(role));
+  const isDriver = roles.includes("Repartidor");
+  if (!isAdmin && !canOrders && !isDriver) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  if (isAdmin || canOrders) {
+    const rows = await query(
+      "SELECT o.id, o.cliente_id as customer_id, o.estado as status, o.metodo_pago as payment_method, o.prioridad as priority, o.notas as notes, o.fecha_programada as scheduled_date, o.fecha_creacion as created_at, c.nombre_completo as customer_name, c.direccion as address, c.zona as zone, cam.placa as truck_plate FROM pedidos o JOIN clientes c ON c.id = o.cliente_id LEFT JOIN entregas e ON e.pedido_id = o.id LEFT JOIN camiones cam ON cam.id = e.camion_id ORDER BY o.id DESC"
+    );
+    return res.json(rows);
+  }
+  const driverId = req.user?.driver_id;
+  const driverName = req.user?.name;
+  const rows = driverId
+    ? await query(
+        "SELECT o.id, o.cliente_id as customer_id, o.estado as status, o.metodo_pago as payment_method, o.prioridad as priority, o.notas as notes, o.fecha_programada as scheduled_date, o.fecha_creacion as created_at, c.nombre_completo as customer_name, c.direccion as address, c.zona as zone, cam.placa as truck_plate FROM pedidos o JOIN clientes c ON c.id = o.cliente_id JOIN entregas e ON e.pedido_id = o.id JOIN repartidores r ON r.id = e.repartidor_id LEFT JOIN camiones cam ON cam.id = e.camion_id WHERE r.id = ? ORDER BY o.id DESC",
+        [driverId]
+      )
+    : await query(
+        "SELECT o.id, o.cliente_id as customer_id, o.estado as status, o.metodo_pago as payment_method, o.prioridad as priority, o.notas as notes, o.fecha_programada as scheduled_date, o.fecha_creacion as created_at, c.nombre_completo as customer_name, c.direccion as address, c.zona as zone, cam.placa as truck_plate FROM pedidos o JOIN clientes c ON c.id = o.cliente_id JOIN entregas e ON e.pedido_id = o.id JOIN repartidores r ON r.id = e.repartidor_id LEFT JOIN camiones cam ON cam.id = e.camion_id WHERE LOWER(r.nombre) = LOWER(?) ORDER BY o.id DESC",
+        [driverName]
+      );
   res.json(rows);
 });
 
-app.get("/api/orders/:id", requireRole(ACCESS.orders), async (req, res) => {
+app.get("/api/orders/:id", requireAuth, async (req, res) => {
+  const roles = req.user?.roles || [];
+  const isAdmin = roles.includes("Administrador del sistema");
+  const canOrders = roles.some((role) => ACCESS.orders.includes(role));
+  const isDriver = roles.includes("Repartidor");
+  if (!isAdmin && !canOrders && !isDriver) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  if (isDriver && !isAdmin && !canOrders) {
+    const driverId = req.user?.driver_id;
+    const driverName = req.user?.name;
+    const assigned = driverId
+      ? await query(
+          "SELECT e.id FROM entregas e JOIN repartidores r ON r.id = e.repartidor_id WHERE e.pedido_id = ? AND r.id = ? LIMIT 1",
+          [req.params.id, driverId]
+        )
+      : await query(
+          "SELECT e.id FROM entregas e JOIN repartidores r ON r.id = e.repartidor_id WHERE e.pedido_id = ? AND LOWER(r.nombre) = LOWER(?) LIMIT 1",
+          [req.params.id, driverName]
+        );
+    if (assigned.length === 0) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+  }
   const [order] = await query(
     "SELECT id, cliente_id, direccion_id, estado as status, metodo_pago as payment_method, prioridad as priority, notas as notes, fecha_programada as scheduled_date, fecha_creacion as created_at FROM pedidos WHERE id = ?",
     [req.params.id]
@@ -772,7 +854,30 @@ app.get("/api/orders/:id", requireRole(ACCESS.orders), async (req, res) => {
   res.json({ ...order, items, history });
 });
 
-app.put("/api/orders/:id", requireRole(ACCESS.orders), async (req, res) => {
+app.put("/api/orders/:id", requireAuth, async (req, res) => {
+  const roles = req.user?.roles || [];
+  const isAdmin = roles.includes("Administrador del sistema");
+  const canOrders = roles.some((role) => ACCESS.orders.includes(role));
+  const isDriver = roles.includes("Repartidor");
+  if (!isAdmin && !canOrders && !isDriver) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  if (isDriver && !isAdmin && !canOrders) {
+    const driverId = req.user?.driver_id;
+    const driverName = req.user?.name;
+    const assigned = driverId
+      ? await query(
+          "SELECT e.id FROM entregas e JOIN repartidores r ON r.id = e.repartidor_id WHERE e.pedido_id = ? AND r.id = ? LIMIT 1",
+          [req.params.id, driverId]
+        )
+      : await query(
+          "SELECT e.id FROM entregas e JOIN repartidores r ON r.id = e.repartidor_id WHERE e.pedido_id = ? AND LOWER(r.nombre) = LOWER(?) LIMIT 1",
+          [req.params.id, driverName]
+        );
+    if (assigned.length === 0) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+  }
   const { customer_id, address_id, notes, scheduled_date, items } = req.body || {};
   if (!address_id || !items || items.length === 0) {
     return res.status(400).json({ error: "Datos incompletos" });
@@ -1120,7 +1225,7 @@ app.get("/api/logistics/trucks", requireRole(ACCESS.logistics), async (_req, res
 
 app.get("/api/logistics/pending-orders", requireRole(ACCESS.logistics), async (_req, res) => {
   const rows = await query(
-    "SELECT p.id, p.estado as status, c.nombre_completo as customer_name, c.zona, c.direccion, c.telefono_principal as phone, p.fecha_creacion as created_at FROM pedidos p JOIN clientes c ON c.id = p.cliente_id WHERE p.estado IN ('Pendiente', 'Reprogramado', 'Creado') ORDER BY p.id DESC"
+    "SELECT p.id, p.estado as status, p.notas as notes, c.nombre_completo as customer_name, c.zona, c.direccion, c.telefono_principal as phone, p.fecha_creacion as created_at FROM pedidos p JOIN clientes c ON c.id = p.cliente_id WHERE p.estado IN ('Pendiente', 'Reprogramado', 'Creado') ORDER BY p.id DESC"
   );
   res.json(rows);
 });
@@ -1378,9 +1483,31 @@ app.get("/api/logistics/truck-orders", requireRole(ACCESS.logistics), async (req
 });
 
 app.post("/api/logistics/returns", requireRole(ACCESS.logistics), async (req, res) => {
-  const { order_id, truck_id, cash_amount } = req.body || {};
+  const { order_id, truck_id, cash_amount, return_date } = req.body || {};
   if (!order_id || !truck_id) {
     return res.status(400).json({ error: "Datos incompletos" });
+  }
+  const expectedDate = return_date || new Date().toISOString().slice(0, 10);
+  const [deliveredTotalRow] = await query(
+    `SELECT COALESCE(SUM(oi.cantidad * oi.precio), 0) as total
+     FROM entregas e
+     JOIN pedidos p ON p.id = e.pedido_id
+     JOIN items_pedido oi ON oi.pedido_id = p.id
+     WHERE e.camion_id = ?
+       AND e.estado = 'Entregado'
+       AND DATE(COALESCE(e.entregado_en, p.fecha_creacion)) = ?`,
+    [truck_id, expectedDate]
+  );
+  const expectedTotal = Number(deliveredTotalRow?.total || 0);
+  const cashValue = Number(cash_amount || 0);
+  if (Number.isNaN(cashValue) || cashValue <= 0) {
+    return res.status(400).json({ error: "Monto entregado inválido" });
+  }
+  if (Number(cashValue.toFixed(2)) !== Number(expectedTotal.toFixed(2))) {
+    return res.status(400).json({
+      error: "El monto entregado no coincide con las ventas entregadas del día",
+      expected_total: expectedTotal,
+    });
   }
   const warehouseId = await getCentralWarehouseId();
   if (!warehouseId) {
@@ -1431,6 +1558,10 @@ app.post("/api/logistics/returns", requireRole(ACCESS.logistics), async (req, re
   await query(
     "UPDATE entregas SET estado = 'Reprogramado', actualizado_por_usuario_id = ? WHERE pedido_id = ? AND camion_id = ?",
     [req.user?.id || null, order_id, truck_id]
+  );
+  await query(
+    "INSERT INTO historial_estado_pedido (pedido_id, estado, nota) VALUES (?, 'Reprogramado', 'Devolución registrada')",
+    [order_id]
   );
   if (cash_amount && Number(cash_amount) > 0) {
     await query(
@@ -1688,6 +1819,7 @@ app.get(
         p.fecha_creacion as created_at,
         c.nombre_completo as customer_name,
         COALESCE(dc.direccion, c.direccion) as address,
+        c.zona as zone,
         cam.placa as truck_plate,
         rep.nombre as driver_name,
         u.nombre as seller_name,

@@ -37,18 +37,22 @@ export default function Dashboard({ user }) {
     setLoading(true);
     setError("");
     try {
-      const [s, o, st, sct, dt] = await Promise.all([
+      const results = await Promise.allSettled([
         api.get("/api/reports/sales", { params: range }),
         api.get("/api/reports/orders-by-status"),
         api.get("/api/reports/stock-by-warehouse"),
         api.get("/api/reports/sales-by-client-type", { params: range }),
         api.get("/api/reports/deliveries-by-truck", { params: range }),
       ]);
-      setSales(s.data || []);
-      setOrdersByStatus(o.data || []);
-      setStock(st.data || []);
-      setSalesByType(sct.data || []);
-      setDeliveriesByTruck(dt.data || []);
+      const [s, o, st, sct, dt] = results;
+      if (s.status === "fulfilled") setSales(s.value.data || []);
+      if (o.status === "fulfilled") setOrdersByStatus(o.value.data || []);
+      if (st.status === "fulfilled") setStock(st.value.data || []);
+      if (sct.status === "fulfilled") setSalesByType(sct.value.data || []);
+      if (dt.status === "fulfilled") setDeliveriesByTruck(dt.value.data || []);
+      if (results.every((r) => r.status === "rejected")) {
+        setError("No se pudieron cargar las gráficas.");
+      }
     } catch (_err) {
       setError("No se pudieron cargar las gráficas.");
     } finally {

@@ -18,17 +18,26 @@ export default function Nav({ user, onLogout }) {
         <Link className="nav-brand" to="/">Ionlife</Link>
         <div className="nav-links">
           <NavLink className="nav-link" to="/">Inicio</NavLink>
-          <NavLink className="nav-link" to="/clientes">Clientes</NavLink>
-          <NavLink className="nav-link" to="/productos">Productos</NavLink>
-          <NavLink className="nav-link" to="/almacenes">Almacenes</NavLink>
-          <NavLink className="nav-link" to="/pedidos">Pedidos</NavLink>
-          <NavLink className="nav-link" to="/logistica">Logística</NavLink>
-          <NavLink className="nav-link" to="/reportes">Reportes</NavLink>
-          {showDeliveries && (
-            <NavLink className="nav-link" to="/mis-entregas">Mis entregas</NavLink>
-          )}
-          {isAdmin && (
-            <NavLink className="nav-link" to="/admin">Administración</NavLink>
+          {isDriver ? (
+            <>
+              <NavLink className="nav-link" to="/logistica">Logística</NavLink>
+              <NavLink className="nav-link" to="/mis-entregas">Mis entregas</NavLink>
+            </>
+          ) : (
+            <>
+              <NavLink className="nav-link" to="/clientes">Clientes</NavLink>
+              <NavLink className="nav-link" to="/productos">Productos</NavLink>
+              <NavLink className="nav-link" to="/almacenes">Almacenes</NavLink>
+              <NavLink className="nav-link" to="/pedidos">Pedidos</NavLink>
+              <NavLink className="nav-link" to="/logistica">Logística</NavLink>
+              <NavLink className="nav-link" to="/reportes">Reportes</NavLink>
+              {showDeliveries && (
+                <NavLink className="nav-link" to="/mis-entregas">Mis entregas</NavLink>
+              )}
+              {isAdmin && (
+                <NavLink className="nav-link" to="/admin">Administración</NavLink>
+              )}
+            </>
           )}
         </div>
         <div className="nav-user">

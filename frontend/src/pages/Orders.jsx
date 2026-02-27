@@ -36,10 +36,16 @@ export default function Orders() {
   const [tiposCliente, setTiposCliente] = useState([]);
   const [tiposPrecio, setTiposPrecio] = useState([]);
   const [preciosProducto, setPreciosProducto] = useState([]);
-  const [orderFilters, setOrderFilters] = useState(() => ({
-    status: "Pendiente|Reprogramado",
-    fecha_registro: "",
-  }));
+  const [orderFilters, setOrderFilters] = useState(() => {
+    const now = new Date();
+    const todayIso = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+      .toISOString()
+      .slice(0, 10);
+    return {
+      status: "",
+      fecha_registro: todayIso,
+    };
+  });
   const [addressHint, setAddressHint] = useState("");
   const [form, setForm] = useState({
     customer_id: "",
@@ -505,6 +511,7 @@ export default function Orders() {
 
   async function handleUseCustomer(cliente) {
     setAddressHint("");
+    setOrderSuccess(`Cliente seleccionado: ${cliente.nombre_completo}`);
     setForm((prev) => ({
       ...prev,
       customer_id: String(cliente.id),
@@ -538,7 +545,9 @@ export default function Orders() {
     try {
       const res = await api.get(`/api/orders/${orderId}`);
       const order = res.data;
-      const customerRes = await api.get(`/api/customers/${order.cliente_id}`);
+      const customerRes = await api.get(`/api/customers/${order.cliente_id}`, {
+        params: { order_id: orderId },
+      });
       const customer = customerRes.data || {};
       const addressMatch =
         customer.addresses?.find(
@@ -916,6 +925,7 @@ export default function Orders() {
               <th>Zona</th>
               <th>Creado</th>
               <th>Programada</th>
+              <th>Observaciones</th>
               <th>Estado</th>
               <th>Camión</th>
               <th>Actualizar</th>
@@ -934,6 +944,7 @@ export default function Orders() {
                     ? new Date(o.scheduled_date.slice(0, 10) + "T12:00:00").toLocaleDateString("es")
                     : "-"}
                 </td>
+                <td>{o.notes || "-"}</td>
                 <td><span className={statusClass(o.status)}>{o.status}</span></td>
                 <td>{o.status === "Despachado" ? (o.truck_plate || "-") : "-"}</td>
                 <td>
