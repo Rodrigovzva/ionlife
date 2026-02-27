@@ -57,6 +57,11 @@ export default function DriverDeliveries() {
   useEffect(() => {
     load(filterDate);
     loadSales(filterDate);
+    const intervalId = setInterval(() => {
+      load(filterDate);
+      loadSales(filterDate);
+    }, 15000);
+    return () => clearInterval(intervalId);
   }, [filterDate]);
 
   async function updateStatus(deliveryId) {
