@@ -25,6 +25,47 @@ const ROLE_NAMES = [
   "Jefe de logística",
 ];
 
+async function getAllowedTruckIdsForDriver(req) {
+  const roles = req.user?.roles || [];
+  const isDriver = roles.includes("Repartidor");
+  const isAdmin = roles.includes("Administrador del sistema");
+  const isJefe = roles.includes("Jefe de logística");
+  const isSupervisor = roles.includes("Supervisor de call center");
+  if (!isDriver || isAdmin || isJefe || isSupervisor) return null;
+  const driverId = req.user?.driver_id;
+  const driverName = req.user?.name;
+  let truckIds = [];
+  if (driverId) {
+    const rows = await query(
+      "SELECT DISTINCT camion_id FROM entregas WHERE repartidor_id = ? ORDER BY camion_id",
+      [driverId]
+    );
+    truckIds = rows.map((r) => r.camion_id).filter(Boolean);
+  }
+  if (truckIds.length === 0 && driverName) {
+    const rows = await query(
+      `SELECT DISTINCT e.camion_id FROM entregas e
+       JOIN repartidores r ON r.id = e.repartidor_id
+       WHERE LOWER(r.nombre) = LOWER(?)
+       ORDER BY e.camion_id`,
+      [driverName]
+    );
+    truckIds = rows.map((r) => r.camion_id).filter(Boolean);
+  }
+  if (truckIds.length === 0 && driverName && driverName.length > 1) {
+    const suffix = driverName.substring(1).toLowerCase();
+    const rows = await query(
+      `SELECT DISTINCT e.camion_id FROM entregas e
+       JOIN repartidores r ON r.id = e.repartidor_id
+       WHERE LOWER(r.nombre) LIKE ?
+       ORDER BY e.camion_id`,
+      [`%${suffix}%`]
+    );
+    truckIds = rows.map((r) => r.camion_id).filter(Boolean);
+  }
+  return truckIds;
+}
+
 const ACCESS = {
   customers: [
     "Administrador del sistema",
@@ -42,6 +83,7 @@ const ACCESS = {
   ],
   orders: [
     "Administrador del sistema",
+    "Jefe de logística",
     "Supervisor de call center",
     "Operador de call center",
   ],
@@ -49,6 +91,7 @@ const ACCESS = {
     "Administrador del sistema",
     "Jefe de logística",
     "Repartidor",
+    "Supervisor de call center",
   ],
   reports: [
     "Administrador del sistema",
@@ -58,6 +101,14 @@ const ACCESS = {
   ],
   admin: ["Administrador del sistema"],
 };
+
+function toDateOnly(value) {
+  if (value == null || value === "") return null;
+  const s = String(value).trim();
+  const match = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) return match[0];
+  return s.length >= 10 ? s.slice(0, 10) : null;
+}
 
 const app = express();
 app.use(cors());
@@ -227,6 +278,27 @@ async function ensureOrderItemPriceTypeColumn() {
   }
 }
 
+async function ensureDevolucionesRegistroTable() {
+  await query(
+    `CREATE TABLE IF NOT EXISTS devoluciones_registro (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      fecha DATE NOT NULL,
+      camion_id INT NOT NULL,
+      repartidor_id INT NULL,
+      pedido_id INT NULL,
+      monto_ventas DECIMAL(10,2) NOT NULL DEFAULT 0,
+      gastos_gasolina DECIMAL(10,2) NOT NULL DEFAULT 0,
+      gastos_almuerzo DECIMAL(10,2) NOT NULL DEFAULT 0,
+      gastos_otros DECIMAL(10,2) NOT NULL DEFAULT 0,
+      monto_neto_caja DECIMAL(10,2) NOT NULL DEFAULT 0,
+      usuario_id INT NULL,
+      creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      KEY idx_fecha (fecha),
+      KEY idx_camion (camion_id)
+    )`
+  );
+}
+
 app.post("/api/auth/login", async (req, res) => {
   const { email, password } = req.body || {};
   const emailTrim = (email && typeof email === "string" ? email : "").trim();
@@ -254,12 +326,21 @@ app.post("/api/auth/login", async (req, res) => {
     [user.id]
   );
   const roleNames = roles.map((r) => r.name);
-  const [driver] = await query(
+  let driver = null;
+  const [driverExact] = await query(
     "SELECT id FROM repartidores WHERE LOWER(nombre) = LOWER(?) LIMIT 1",
     [user.name]
   );
+  if (driverExact) driver = driverExact;
+  if (!driver && user.name && user.name.length > 1) {
+    const [driverLike] = await query(
+      "SELECT id FROM repartidores WHERE LOWER(nombre) LIKE CONCAT('%', LOWER(SUBSTRING(?, 2)), '%') LIMIT 1",
+      [user.name]
+    );
+    if (driverLike) driver = driverLike;
+  }
   const token = jwt.sign(
-    { id: user.id, email: user.email, roles: roleNames, driver_id: driver?.id || null },
+    { id: user.id, email: user.email, name: user.name, roles: roleNames, driver_id: driver?.id || null },
     JWT_SECRET,
     { expiresIn: "8h" }
   );
@@ -287,16 +368,17 @@ app.get("/api/driver/entregas", requireAuth, async (req, res) => {
   const isAdmin = roles.includes("Administrador del sistema");
   const isDriver = roles.includes("Repartidor");
   const baseQuery =
-    "SELECT e.id, e.estado, e.programado_en, e.entregado_en, p.id as pedido_id, p.fecha_programada as fecha_programada, c.nombre_completo as cliente, COALESCE(dc.direccion, c.direccion) as direccion, r.nombre as repartidor, cam.placa as camion, GROUP_CONCAT(CONCAT(pr.nombre, ' x', oi.cantidad) SEPARATOR ', ') as pedido_detalle FROM entregas e JOIN pedidos p ON p.id = e.pedido_id JOIN clientes c ON c.id = p.cliente_id LEFT JOIN direcciones_clientes dc ON dc.id = p.direccion_id JOIN repartidores r ON r.id = e.repartidor_id JOIN camiones cam ON cam.id = e.camion_id JOIN items_pedido oi ON oi.pedido_id = p.id JOIN productos pr ON pr.id = oi.producto_id";
+    "SELECT e.id, e.estado, e.programado_en, e.entregado_en, p.id as pedido_id, p.fecha_programada as fecha_programada, p.fecha_creacion as fecha_creacion_pedido, c.nombre_completo as cliente, c.zona as zona, COALESCE(dc.direccion, c.direccion) as direccion, r.nombre as repartidor, cam.placa as camion, COALESCE(SUM(oi.cantidad * oi.precio), 0) as total_bs, GROUP_CONCAT(CONCAT(pr.nombre, ' x', oi.cantidad) SEPARATOR ', ') as pedido_detalle FROM entregas e JOIN pedidos p ON p.id = e.pedido_id JOIN clientes c ON c.id = p.cliente_id LEFT JOIN direcciones_clientes dc ON dc.id = p.direccion_id JOIN repartidores r ON r.id = e.repartidor_id JOIN camiones cam ON cam.id = e.camion_id JOIN items_pedido oi ON oi.pedido_id = p.id JOIN productos pr ON pr.id = oi.producto_id";
+  const groupByClause = "GROUP BY e.id, e.estado, e.programado_en, e.entregado_en, p.id, p.fecha_programada, p.fecha_creacion, c.nombre_completo, c.zona, direccion, r.nombre, cam.placa ORDER BY c.zona ASC, e.id DESC";
   const todayClause =
-    "DATE(CONVERT_TZ(p.fecha_creacion,'+00:00','-04:00')) = DATE(CONVERT_TZ(NOW(),'+00:00','-04:00'))";
+    "DATE(COALESCE(e.programado_en, p.fecha_programada)) = DATE(CONVERT_TZ(NOW(),'+00:00','-04:00'))";
   const dateClause = date
-    ? "DATE(CONVERT_TZ(p.fecha_creacion,'+00:00','-04:00')) = ?"
+    ? "DATE(COALESCE(e.programado_en, p.fecha_programada)) = ?"
     : todayClause;
   const dateParams = date ? [date] : [];
   if (isAdmin) {
     const rows = await query(
-      `${baseQuery} WHERE ${dateClause} GROUP BY e.id, e.estado, e.programado_en, e.entregado_en, p.id, p.fecha_programada, c.nombre_completo, direccion, r.nombre, cam.placa ORDER BY e.id DESC`,
+      `${baseQuery} WHERE ${dateClause} ${groupByClause}`,
       dateParams
     );
     return res.json(rows);
@@ -308,11 +390,11 @@ app.get("/api/driver/entregas", requireAuth, async (req, res) => {
   const driverName = req.user?.name;
   const rows = driverId
     ? await query(
-        `${baseQuery} WHERE r.id = ? AND ${dateClause} GROUP BY e.id, e.estado, e.programado_en, e.entregado_en, p.id, p.fecha_programada, c.nombre_completo, direccion, r.nombre, cam.placa ORDER BY e.id DESC`,
+        `${baseQuery} WHERE r.id = ? AND ${dateClause} ${groupByClause}`,
         [driverId, ...dateParams]
       )
     : await query(
-        `${baseQuery} WHERE LOWER(r.nombre) = LOWER(?) AND ${dateClause} GROUP BY e.id, e.estado, e.programado_en, e.entregado_en, p.id, p.fecha_programada, c.nombre_completo, direccion, r.nombre, cam.placa ORDER BY e.id DESC`,
+        `${baseQuery} WHERE LOWER(r.nombre) = LOWER(?) AND ${dateClause} ${groupByClause}`,
         [driverName, ...dateParams]
       );
   res.json(rows);
@@ -794,7 +876,9 @@ app.get("/api/orders", requireAuth, async (req, res) => {
   }
   if (isAdmin || canOrders) {
     const rows = await query(
-      "SELECT o.id, o.cliente_id as customer_id, o.estado as status, o.metodo_pago as payment_method, o.prioridad as priority, o.notas as notes, o.fecha_programada as scheduled_date, o.fecha_creacion as created_at, c.nombre_completo as customer_name, c.direccion as address, c.zona as zone, cam.placa as truck_plate FROM pedidos o JOIN clientes c ON c.id = o.cliente_id LEFT JOIN entregas e ON e.pedido_id = o.id LEFT JOIN camiones cam ON cam.id = e.camion_id ORDER BY o.id DESC"
+      `SELECT o.id, o.cliente_id as customer_id, o.estado as status, o.metodo_pago as payment_method, o.prioridad as priority, o.notas as notes, o.fecha_programada as scheduled_date, o.fecha_creacion as created_at, c.nombre_completo as customer_name, c.direccion as address, c.zona as zone, cam.placa as truck_plate,
+       (SELECT GROUP_CONCAT(CONCAT(p.nombre, ' x', oi.cantidad) SEPARATOR ', ') FROM items_pedido oi JOIN productos p ON p.id = oi.producto_id WHERE oi.pedido_id = o.id) as order_detail
+       FROM pedidos o JOIN clientes c ON c.id = o.cliente_id LEFT JOIN entregas e ON e.pedido_id = o.id LEFT JOIN camiones cam ON cam.id = e.camion_id ORDER BY o.id DESC`
     );
     return res.json(rows);
   }
@@ -802,11 +886,15 @@ app.get("/api/orders", requireAuth, async (req, res) => {
   const driverName = req.user?.name;
   const rows = driverId
     ? await query(
-        "SELECT o.id, o.cliente_id as customer_id, o.estado as status, o.metodo_pago as payment_method, o.prioridad as priority, o.notas as notes, o.fecha_programada as scheduled_date, o.fecha_creacion as created_at, c.nombre_completo as customer_name, c.direccion as address, c.zona as zone, cam.placa as truck_plate FROM pedidos o JOIN clientes c ON c.id = o.cliente_id JOIN entregas e ON e.pedido_id = o.id JOIN repartidores r ON r.id = e.repartidor_id LEFT JOIN camiones cam ON cam.id = e.camion_id WHERE r.id = ? ORDER BY o.id DESC",
+        `SELECT o.id, o.cliente_id as customer_id, o.estado as status, o.metodo_pago as payment_method, o.prioridad as priority, o.notas as notes, o.fecha_programada as scheduled_date, o.fecha_creacion as created_at, c.nombre_completo as customer_name, c.direccion as address, c.zona as zone, cam.placa as truck_plate,
+         (SELECT GROUP_CONCAT(CONCAT(p.nombre, ' x', oi.cantidad) SEPARATOR ', ') FROM items_pedido oi JOIN productos p ON p.id = oi.producto_id WHERE oi.pedido_id = o.id) as order_detail
+         FROM pedidos o JOIN clientes c ON c.id = o.cliente_id JOIN entregas e ON e.pedido_id = o.id JOIN repartidores r ON r.id = e.repartidor_id LEFT JOIN camiones cam ON cam.id = e.camion_id WHERE r.id = ? ORDER BY o.id DESC`,
         [driverId]
       )
     : await query(
-        "SELECT o.id, o.cliente_id as customer_id, o.estado as status, o.metodo_pago as payment_method, o.prioridad as priority, o.notas as notes, o.fecha_programada as scheduled_date, o.fecha_creacion as created_at, c.nombre_completo as customer_name, c.direccion as address, c.zona as zone, cam.placa as truck_plate FROM pedidos o JOIN clientes c ON c.id = o.cliente_id JOIN entregas e ON e.pedido_id = o.id JOIN repartidores r ON r.id = e.repartidor_id LEFT JOIN camiones cam ON cam.id = e.camion_id WHERE LOWER(r.nombre) = LOWER(?) ORDER BY o.id DESC",
+        `SELECT o.id, o.cliente_id as customer_id, o.estado as status, o.metodo_pago as payment_method, o.prioridad as priority, o.notas as notes, o.fecha_programada as scheduled_date, o.fecha_creacion as created_at, c.nombre_completo as customer_name, c.direccion as address, c.zona as zone, cam.placa as truck_plate,
+         (SELECT GROUP_CONCAT(CONCAT(p.nombre, ' x', oi.cantidad) SEPARATOR ', ') FROM items_pedido oi JOIN productos p ON p.id = oi.producto_id WHERE oi.pedido_id = o.id) as order_detail
+         FROM pedidos o JOIN clientes c ON c.id = o.cliente_id JOIN entregas e ON e.pedido_id = o.id JOIN repartidores r ON r.id = e.repartidor_id LEFT JOIN camiones cam ON cam.id = e.camion_id WHERE LOWER(r.nombre) = LOWER(?) ORDER BY o.id DESC`,
         [driverName]
       );
   res.json(rows);
@@ -990,7 +1078,7 @@ app.put("/api/orders/:id", requireAuth, async (req, res) => {
       customer_id ? Number(customer_id) : order.cliente_id,
       Number(address_id),
       notes || null,
-      scheduled_date || null,
+      toDateOnly(scheduled_date) || null,
       req.user?.id || null,
       req.params.id,
     ]
@@ -1128,7 +1216,7 @@ app.post("/api/orders", requireRole(ACCESS.orders), async (req, res) => {
       payment_method || null,
       priority || "Normal",
       notes || null,
-      scheduled_date || null,
+      toDateOnly(scheduled_date) || null,
       req.user?.id || null,
       req.user?.id || null,
     ]
@@ -1157,17 +1245,31 @@ app.post("/api/orders", requireRole(ACCESS.orders), async (req, res) => {
 });
 
 app.patch("/api/orders/:id/status", requireRole(ACCESS.orders), async (req, res) => {
-  const { status, note, warehouse_id } = req.body || {};
+  const { status, note, warehouse_id, scheduled_date } = req.body || {};
   if (!status) {
     return res.status(400).json({ error: "Estado requerido" });
   }
-  await query(
-    "UPDATE pedidos SET estado = ?, actualizado_por_usuario_id = ? WHERE id = ?",
-    [status, req.user?.id || null, req.params.id]
-  );
+  if (status === "Reprogramado") {
+    if (!scheduled_date || String(scheduled_date).trim().length < 10) {
+      return res.status(400).json({ error: "La fecha programada es obligatoria al reprogramar" });
+    }
+    const dateOnly = toDateOnly(scheduled_date);
+    if (!dateOnly) {
+      return res.status(400).json({ error: "Fecha programada inválida" });
+    }
+    await query(
+      "UPDATE pedidos SET estado = ?, fecha_programada = ?, actualizado_por_usuario_id = ? WHERE id = ?",
+      [status, dateOnly, req.user?.id || null, req.params.id]
+    );
+  } else {
+    await query(
+      "UPDATE pedidos SET estado = ?, actualizado_por_usuario_id = ? WHERE id = ?",
+      [status, req.user?.id || null, req.params.id]
+    );
+  }
   await query(
     "INSERT INTO historial_estado_pedido (pedido_id, estado, nota) VALUES (?, ?, ?)",
-    [req.params.id, status, note || null]
+    [req.params.id, status, note || (status === "Reprogramado" ? `Fecha programada: ${toDateOnly(scheduled_date)}` : null)]
   );
   if (status === "Entregado") {
     const existing = await query(
@@ -1216,14 +1318,34 @@ app.patch("/api/orders/:id/status", requireRole(ACCESS.orders), async (req, res)
   res.json({ ok: true });
 });
 
-app.get("/api/logistics/trucks", requireRole(ACCESS.logistics), async (_req, res) => {
+app.get("/api/logistics/trucks", requireRole(ACCESS.logistics), async (req, res) => {
+  const allowedTrucks = await getAllowedTruckIdsForDriver(req);
+  if (allowedTrucks === null) {
+    const rows = await query(
+      "SELECT id, placa as plate, capacidad as capacity, activo as active FROM camiones ORDER BY id DESC"
+    );
+    return res.json(rows);
+  }
+  if (allowedTrucks.length === 0) {
+    const rows = await query(
+      "SELECT id, placa as plate, capacidad as capacity, activo as active FROM camiones ORDER BY id DESC"
+    );
+    return res.json(rows);
+  }
+  const placeholders = allowedTrucks.map(() => "?").join(",");
   const rows = await query(
-    "SELECT id, placa as plate, capacidad as capacity, activo as active FROM camiones ORDER BY id DESC"
+    `SELECT id, placa as plate, capacidad as capacity, activo as active
+     FROM camiones WHERE id IN (${placeholders}) ORDER BY placa`,
+    allowedTrucks
   );
   res.json(rows);
 });
 
-app.get("/api/logistics/pending-orders", requireRole(ACCESS.logistics), async (_req, res) => {
+app.get("/api/logistics/pending-orders", requireRole(ACCESS.logistics), async (req, res) => {
+  const allowedTrucks = await getAllowedTruckIdsForDriver(req);
+  if (allowedTrucks !== null) {
+    return res.json([]);
+  }
   const rows = await query(
     "SELECT p.id, p.estado as status, p.notas as notes, c.nombre_completo as customer_name, c.zona, c.direccion, c.telefono_principal as phone, p.fecha_creacion as created_at FROM pedidos p JOIN clientes c ON c.id = p.cliente_id WHERE p.estado IN ('Pendiente', 'Reprogramado', 'Creado') ORDER BY p.id DESC"
   );
@@ -1286,13 +1408,34 @@ app.post("/api/logistics/deliveries", requireRole(ACCESS.logistics), async (req,
   if (!order_id || !truck_id || !driver_id) {
     return res.status(400).json({ error: "Datos incompletos" });
   }
+  const existing = await query(
+    "SELECT id FROM entregas WHERE pedido_id = ? LIMIT 1",
+    [order_id]
+  );
+  if (existing.length > 0) {
+    const programadoEn = toDateOnly(scheduled_at) ? `${toDateOnly(scheduled_at)} 12:00:00` : null;
+    await query(
+      "UPDATE entregas SET camion_id = ?, repartidor_id = ?, estado = 'Despachado', programado_en = ?, actualizado_por_usuario_id = ? WHERE pedido_id = ?",
+      [truck_id, driver_id, programadoEn, req.user?.id || null, order_id]
+    );
+    await query(
+      "UPDATE pedidos SET estado = 'Despachado', fecha_programada = COALESCE(?, fecha_programada), actualizado_por_usuario_id = ? WHERE id = ?",
+      [toDateOnly(scheduled_at), req.user?.id || null, order_id]
+    );
+    await query(
+      "INSERT INTO historial_estado_pedido (pedido_id, estado, nota) VALUES (?, 'Despachado', 'Reasignado a camión')",
+      [order_id]
+    );
+    await req.audit({ action: "REASSIGN_DELIVERY", entityId: existing[0].id });
+    return res.status(200).json({ id: existing[0].id, updated: true });
+  }
   const result = await query(
     "INSERT INTO entregas (pedido_id, camion_id, repartidor_id, estado, programado_en, creado_por_usuario_id, actualizado_por_usuario_id) VALUES (?, ?, ?, 'Despachado', ?, ?, ?)",
-    [order_id, truck_id, driver_id, scheduled_at || null, req.user?.id || null, req.user?.id || null]
+    [order_id, truck_id, driver_id, toDateOnly(scheduled_at) ? `${toDateOnly(scheduled_at)} 12:00:00` : null, req.user?.id || null, req.user?.id || null]
   );
   await query(
-    "UPDATE pedidos SET estado = 'Despachado', actualizado_por_usuario_id = ? WHERE id = ?",
-    [req.user?.id || null, order_id]
+    "UPDATE pedidos SET estado = 'Despachado', fecha_programada = COALESCE(?, fecha_programada), actualizado_por_usuario_id = ? WHERE id = ?",
+    [toDateOnly(scheduled_at), req.user?.id || null, order_id]
   );
   await query(
     "INSERT INTO historial_estado_pedido (pedido_id, estado, nota) VALUES (?, 'Despachado', 'Asignado a camión')",
@@ -1308,6 +1451,7 @@ app.post("/api/logistics/deliveries/bulk", requireRole(ACCESS.logistics), async 
     return res.status(400).json({ error: "Datos incompletos" });
   }
   let assigned = 0;
+  let updated = 0;
   let skipped = 0;
   for (const rawId of order_ids) {
     const orderId = Number(rawId);
@@ -1317,7 +1461,20 @@ app.post("/api/logistics/deliveries/bulk", requireRole(ACCESS.logistics), async 
       [orderId]
     );
     if (existing.length > 0) {
-      skipped += 1;
+      await query(
+        "UPDATE entregas SET camion_id = ?, repartidor_id = ?, estado = 'Despachado', programado_en = NULL, actualizado_por_usuario_id = ? WHERE pedido_id = ?",
+        [truck_id, driver_id, req.user?.id || null, orderId]
+      );
+      await query(
+        "UPDATE pedidos SET estado = 'Despachado', actualizado_por_usuario_id = ? WHERE id = ?",
+        [req.user?.id || null, orderId]
+      );
+      await query(
+        "INSERT INTO historial_estado_pedido (pedido_id, estado, nota) VALUES (?, 'Despachado', 'Reasignado a camión (masivo)')",
+        [orderId]
+      );
+      await req.audit({ action: "REASSIGN_DELIVERY_BULK", entityId: existing[0].id });
+      updated += 1;
       continue;
     }
     const result = await query(
@@ -1335,7 +1492,7 @@ app.post("/api/logistics/deliveries/bulk", requireRole(ACCESS.logistics), async 
     await req.audit({ action: "ASSIGN_DELIVERY_BULK", entityId: result.insertId });
     assigned += 1;
   }
-  res.json({ ok: true, assigned, skipped });
+  res.json({ ok: true, assigned, updated, skipped });
 });
 
 app.patch(
@@ -1415,6 +1572,10 @@ app.get("/api/logistics/truck-summary", requireRole(ACCESS.logistics), async (re
   if (!truck_id) {
     return res.status(400).json({ error: "truck_id requerido" });
   }
+  const allowedTrucks = await getAllowedTruckIdsForDriver(req);
+  if (allowedTrucks !== null && (allowedTrucks.length === 0 || !allowedTrucks.map(Number).includes(Number(truck_id)))) {
+    return res.status(403).json({ error: "Solo puede ver el resumen de sus propios camiones." });
+  }
   const rows = await query(
     `SELECT
       COUNT(DISTINCT p.id) as total_orders,
@@ -1431,21 +1592,34 @@ app.get("/api/logistics/truck-summary", requireRole(ACCESS.logistics), async (re
 });
 
 app.get("/api/logistics/truck-orders", requireRole(ACCESS.logistics), async (req, res) => {
-  const { truck_id, delivered_to, scheduled_date } = req.query || {};
+  const { truck_id, delivered_to, scheduled_date, delivery_date } = req.query || {};
   if (!truck_id) {
     return res.status(400).json({ error: "truck_id requerido" });
   }
+  const allowedTrucks = await getAllowedTruckIdsForDriver(req);
+  if (allowedTrucks !== null && (allowedTrucks.length === 0 || !allowedTrucks.map(Number).includes(Number(truck_id)))) {
+    return res.status(403).json({ error: "Solo puede ver pedidos de sus propios camiones." });
+  }
   const deliveredTo = delivered_to ? `${delivered_to} 23:59:59` : null;
-  const dateClause = scheduled_date
-    ? " AND DATE(p.fecha_programada) = ?"
-    : deliveredTo
-    ? " AND e.entregado_en <= ?"
-    : "";
-  const dateParams = scheduled_date ? [scheduled_date] : deliveredTo ? [deliveredTo] : [];
+  let dateClause = "";
+  let dateParams = [];
+  if (delivery_date) {
+    dateClause =
+      " AND (DATE(CONVERT_TZ(COALESCE(e.entregado_en, p.fecha_programada), '+00:00', '-04:00')) = ? OR (e.estado = 'Entregado' AND DATE(CONVERT_TZ(e.entregado_en, '+00:00', '-04:00')) = ?))";
+    dateParams = [delivery_date, delivery_date];
+  } else if (scheduled_date) {
+    dateClause =
+      " AND (DATE(CONVERT_TZ(p.fecha_programada, '+00:00', '-04:00')) = ? OR (e.estado = 'Entregado' AND DATE(CONVERT_TZ(e.entregado_en, '+00:00', '-04:00')) = ?))";
+    dateParams = [scheduled_date, scheduled_date];
+  } else if (deliveredTo) {
+    dateClause = " AND e.entregado_en <= ?";
+    dateParams = [deliveredTo];
+  }
   const rows = await query(
     `SELECT
       p.id,
       p.estado as status,
+      p.fecha_programada as scheduled_date,
       c.nombre_completo as customer_name,
       c.telefono_principal as phone,
       c.telefono_secundario as phone_secondary,
@@ -1475,7 +1649,7 @@ app.get("/api/logistics/truck-orders", requireRole(ACCESS.logistics), async (req
      JOIN camiones cam ON cam.id = e.camion_id
      JOIN repartidores r ON r.id = e.repartidor_id
      WHERE e.camion_id = ?${dateClause}
-     GROUP BY p.id, p.estado, c.nombre_completo, c.telefono_principal, c.telefono_secundario, c.zona, address, p.fecha_creacion, cam.placa, r.nombre
+     GROUP BY p.id, p.estado, p.fecha_programada, c.nombre_completo, c.telefono_principal, c.telefono_secundario, c.zona, address, p.fecha_creacion, cam.placa, r.nombre
      ORDER BY p.id DESC`,
     [truck_id, ...dateParams]
   );
@@ -1483,9 +1657,13 @@ app.get("/api/logistics/truck-orders", requireRole(ACCESS.logistics), async (req
 });
 
 app.post("/api/logistics/returns", requireRole(ACCESS.logistics), async (req, res) => {
-  const { order_id, truck_id, cash_amount, return_date } = req.body || {};
+  const { order_id, truck_id, cash_amount, return_date, gastos_gasolina, gastos_almuerzo, gastos_otros } = req.body || {};
   if (!order_id || !truck_id) {
     return res.status(400).json({ error: "Datos incompletos" });
+  }
+  const allowedTrucks = await getAllowedTruckIdsForDriver(req);
+  if (allowedTrucks !== null && (allowedTrucks.length === 0 || !allowedTrucks.map(Number).includes(Number(truck_id)))) {
+    return res.status(403).json({ error: "Solo puede registrar devoluciones de sus propios camiones." });
   }
   const expectedDate = return_date || new Date().toISOString().slice(0, 10);
   const [deliveredTotalRow] = await query(
@@ -1495,18 +1673,25 @@ app.post("/api/logistics/returns", requireRole(ACCESS.logistics), async (req, re
      JOIN items_pedido oi ON oi.pedido_id = p.id
      WHERE e.camion_id = ?
        AND e.estado = 'Entregado'
-       AND DATE(COALESCE(e.entregado_en, p.fecha_creacion)) = ?`,
+       AND DATE(CONVERT_TZ(COALESCE(e.entregado_en, p.fecha_creacion), '+00:00', '-04:00')) = ?`,
     [truck_id, expectedDate]
   );
-  const expectedTotal = Number(deliveredTotalRow?.total || 0);
+  const ventasTotal = Number(deliveredTotalRow?.total || 0);
+  const gastosGas = Number(gastos_gasolina || 0);
+  const gastosAlm = Number(gastos_almuerzo || 0);
+  const gastosOtros = Number(gastos_otros || 0);
+  const totalGastos = gastosGas + gastosAlm + gastosOtros;
+  const expectedTotal = Math.max(0, ventasTotal - totalGastos);
   const cashValue = Number(cash_amount || 0);
-  if (Number.isNaN(cashValue) || cashValue <= 0) {
+  if (Number.isNaN(cashValue) || cashValue < 0) {
     return res.status(400).json({ error: "Monto entregado inválido" });
   }
   if (Number(cashValue.toFixed(2)) !== Number(expectedTotal.toFixed(2))) {
     return res.status(400).json({
-      error: "El monto entregado no coincide con las ventas entregadas del día",
+      error: "El monto a caja no coincide con ventas menos gastos",
       expected_total: expectedTotal,
+      ventas_total: ventasTotal,
+      gastos_total: totalGastos,
     });
   }
   const warehouseId = await getCentralWarehouseId();
@@ -1569,12 +1754,88 @@ app.post("/api/logistics/returns", requireRole(ACCESS.logistics), async (req, re
       [order_id, Number(cash_amount), req.user?.id || null, req.user?.id || null]
     );
   }
+  const despachados = await query(
+    `SELECT e.pedido_id FROM entregas e
+     JOIN pedidos p ON p.id = e.pedido_id
+     WHERE e.camion_id = ?
+       AND e.estado = 'Despachado'
+       AND (DATE(CONVERT_TZ(COALESCE(e.programado_en, p.fecha_programada), '+00:00', '-04:00')) = ?
+            OR DATE(CONVERT_TZ(p.fecha_programada, '+00:00', '-04:00')) = ?)`,
+    [truck_id, expectedDate, expectedDate]
+  );
+  for (const row of despachados) {
+    const pid = row.pedido_id;
+    await query(
+      "UPDATE pedidos SET estado = 'Reprogramado', actualizado_por_usuario_id = ? WHERE id = ?",
+      [req.user?.id || null, pid]
+    );
+    await query(
+      "UPDATE entregas SET estado = 'Reprogramado', actualizado_por_usuario_id = ? WHERE pedido_id = ? AND camion_id = ?",
+      [req.user?.id || null, pid, truck_id]
+    );
+  await query(
+    "INSERT INTO historial_estado_pedido (pedido_id, estado, nota) VALUES (?, 'Reprogramado', 'Devolución: pedidos no entregados del día')",
+    [pid]
+  );
+  }
+  const [repartidorRow] = await query(
+    "SELECT repartidor_id FROM entregas WHERE camion_id = ? AND pedido_id = ? LIMIT 1",
+    [truck_id, order_id]
+  );
+  const repartidorId = repartidorRow?.repartidor_id || null;
+  await query(
+    `INSERT INTO devoluciones_registro (fecha, camion_id, repartidor_id, pedido_id, monto_ventas, gastos_gasolina, gastos_almuerzo, gastos_otros, monto_neto_caja, usuario_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      expectedDate,
+      truck_id,
+      repartidorId,
+      order_id,
+      ventasTotal,
+      gastosGas,
+      gastosAlm,
+      gastosOtros,
+      expectedTotal,
+      req.user?.id || null,
+    ]
+  );
   await req.audit({
     action: "RETURN_TO_WAREHOUSE",
     entityId: order_id,
     detail: `camion:${truck_id}`,
   });
   res.json({ ok: true });
+});
+
+app.get("/api/logistics/returns-history", requireRole(ACCESS.logistics), async (req, res) => {
+  const roles = req.user?.roles || [];
+  const isAdmin = roles.includes("Administrador del sistema");
+  const isJefe = roles.includes("Jefe de logística");
+  if (!isAdmin && !isJefe) {
+    return res.status(403).json({ error: "Solo el administrador o jefe de logística puede ver el historial." });
+  }
+  const { from, to } = req.query || {};
+  let fromDate = from && String(from).trim().slice(0, 10);
+  let toDate = to && String(to).trim().slice(0, 10);
+  if (!fromDate || !/^\d{4}-\d{2}-\d{2}$/.test(fromDate)) fromDate = "1970-01-01";
+  if (!toDate || !/^\d{4}-\d{2}-\d{2}$/.test(toDate)) toDate = "2999-12-31";
+  if (fromDate > toDate) {
+    const tmp = fromDate;
+    fromDate = toDate;
+    toDate = tmp;
+  }
+  const rows = await query(
+    `SELECT d.id, d.fecha, d.camion_id, d.pedido_id, d.monto_ventas, d.gastos_gasolina, d.gastos_almuerzo, d.gastos_otros, d.monto_neto_caja, d.creado_en,
+      cam.placa as camion_placa, r.nombre as repartidor_nombre, u.nombre as usuario_nombre
+     FROM devoluciones_registro d
+     LEFT JOIN camiones cam ON cam.id = d.camion_id
+     LEFT JOIN repartidores r ON r.id = d.repartidor_id
+     LEFT JOIN usuarios u ON u.id = d.usuario_id
+     WHERE d.fecha BETWEEN ? AND ?
+     ORDER BY d.fecha DESC, d.creado_en DESC`,
+    [fromDate, toDate]
+  );
+  res.json(rows);
 });
 
 app.get("/api/reports/sales", requireRole(ACCESS.reports), async (req, res) => {
@@ -2134,6 +2395,7 @@ async function start() {
   await ensurePriceTypes();
   await ensureProductPriceTypes();
   await ensureOrderItemPriceTypeColumn();
+  await ensureDevolucionesRegistroTable();
   const traceTables = [
     "clientes",
     "direcciones_clientes",

@@ -19,6 +19,8 @@ export default function Orders() {
   
   const [statusUpdates, setStatusUpdates] = useState({});
   const [statusLoading, setStatusLoading] = useState({});
+  const [reprogramOrderId, setReprogramOrderId] = useState(null);
+  const [reprogramDate, setReprogramDate] = useState("");
   const [search, setSearch] = useState({
     nombre: "",
     telefono: "",
@@ -163,7 +165,8 @@ export default function Orders() {
           zona: search.zona || undefined,
         },
       });
-      setResults(res.data);
+      const list = res.data || [];
+      setResults(list.filter((c) => c.estado !== "Inactivo"));
     } catch (err) {
       setSearchError("No se pudo buscar clientes.");
     }
@@ -345,16 +348,38 @@ export default function Orders() {
   async function handleUpdateStatus(orderId) {
     const nextStatus = statusUpdates[orderId];
     if (!nextStatus) return;
+    if (nextStatus === "Reprogramado") {
+      const today = new Date();
+      const defaultDate = new Date(today.getTime() - today.getTimezoneOffset() * 60000)
+        .toISOString()
+        .slice(0, 10);
+      setReprogramDate(defaultDate);
+      setReprogramOrderId(orderId);
+      return;
+    }
+    await sendStatusUpdate(orderId, nextStatus);
+  }
+
+  async function sendStatusUpdate(orderId, nextStatus, scheduledDate = null) {
     setStatusLoading((prev) => ({ ...prev, [orderId]: true }));
     try {
-      await api.patch(`/api/orders/${orderId}/status`, {
-        status: nextStatus,
-      });
+      const body = { status: nextStatus };
+      if (nextStatus === "Reprogramado" && scheduledDate) {
+        body.scheduled_date = scheduledDate;
+      }
+      await api.patch(`/api/orders/${orderId}/status`, body);
       setStatusUpdates((prev) => ({ ...prev, [orderId]: "" }));
+      setReprogramOrderId(null);
+      setReprogramDate("");
       load();
     } finally {
       setStatusLoading((prev) => ({ ...prev, [orderId]: false }));
     }
+  }
+
+  function handleConfirmReprogram() {
+    if (!reprogramOrderId || !reprogramDate) return;
+    sendStatusUpdate(reprogramOrderId, "Reprogramado", reprogramDate);
   }
 
   function handleAddItem() {
@@ -561,7 +586,7 @@ export default function Orders() {
         address_text: addressMatch?.direccion || customer.direccion || "",
         address_id: order.direccion_id ? String(order.direccion_id) : "",
         scheduled_date: order.scheduled_date
-          ? new Date(order.scheduled_date).toISOString().slice(0, 10)
+          ? String(order.scheduled_date).slice(0, 10)
           : "",
         notes: order.notes || "",
       });
@@ -923,6 +948,7 @@ export default function Orders() {
               <th>Cliente</th>
               <th>Dirección</th>
               <th>Zona</th>
+              <th>Detalle del pedido</th>
               <th>Creado</th>
               <th>Programada</th>
               <th>Observaciones</th>
@@ -938,6 +964,7 @@ export default function Orders() {
                 <td>{o.customer_name}</td>
                 <td>{o.address || "-"}</td>
                 <td>{o.zone || "-"}</td>
+                <td className="order-detail-cell">{o.order_detail || "-"}</td>
                 <td>{o.created_at ? new Date(o.created_at).toLocaleDateString() : "-"}</td>
                 <td>
                   {o.scheduled_date
@@ -979,6 +1006,46 @@ export default function Orders() {
           </tbody>
         </table>
       </div>
+      {reprogramOrderId && (
+        <div className="card" style={{ marginTop: 16, maxWidth: 400 }}>
+          <h4>Reprogramar pedido #{reprogramOrderId}</h4>
+          <p style={{ margin: "0 0 12px", color: "var(--muted)" }}>
+            Indique la nueva fecha programada para la entrega:
+          </p>
+          <div className="form-row">
+            <div className="form-field">
+              <label htmlFor="reprogram-date">Fecha programada</label>
+              <input
+                id="reprogram-date"
+                type="date"
+                value={reprogramDate}
+                onChange={(e) => setReprogramDate(e.target.value)}
+              />
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+            <button
+              className="btn"
+              type="button"
+              onClick={handleConfirmReprogram}
+              disabled={!reprogramDate || statusLoading[reprogramOrderId]}
+            >
+              {statusLoading[reprogramOrderId] ? "Guardando..." : "Confirmar"}
+            </button>
+            <button
+              className="btn btn-outline"
+              type="button"
+              onClick={() => {
+                setReprogramOrderId(null);
+                setReprogramDate("");
+                setStatusUpdates((prev) => ({ ...prev, [reprogramOrderId]: "" }));
+              }}
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -11,12 +11,25 @@ function statusClass(status) {
   return `tag status-${normalized}`;
 }
 
+function formatScheduledDate(value) {
+  if (value == null || value === "") return "-";
+  const s = String(value).trim();
+  const datePart = s.slice(0, 10);
+  if (datePart.length < 10 || !/^\d{4}-\d{2}-\d{2}$/.test(datePart)) return "-";
+  const d = new Date(datePart + "T12:00:00");
+  if (Number.isNaN(d.getTime())) return "-";
+  return d.toLocaleDateString("es");
+}
+
 export default function Logistics({ user }) {
   const today = new Date();
   const todayIso = new Date(today.getTime() - today.getTimezoneOffset() * 60000)
     .toISOString()
     .slice(0, 10);
   const isDriver = user?.roles?.includes("Repartidor");
+  const isAdmin = user?.roles?.includes("Administrador del sistema");
+  const isJefeLogistica = user?.roles?.includes("Jefe de logística");
+  const canSeeReturnsHistory = isAdmin || isJefeLogistica;
   const [trucks, setTrucks] = useState([]);
   const [drivers, setDrivers] = useState([]);
   const [deliveries, setDeliveries] = useState([]);
@@ -41,10 +54,14 @@ export default function Logistics({ user }) {
     truck_id: "",
     order_id: "",
     cash_amount: "",
+    gastos_gasolina: "",
+    gastos_almuerzo: "",
+    gastos_otros: "",
   });
   const [returnSelection, setReturnSelection] = useState({});
   const [returnDate, setReturnDate] = useState(todayIso);
   const [returnDeliveredTotal, setReturnDeliveredTotal] = useState(0);
+  const [returnDeliveredOrders, setReturnDeliveredOrders] = useState([]);
   const [truckOrders, setTruckOrders] = useState([]);
   const [returnError, setReturnError] = useState("");
   const [printTruckId, setPrintTruckId] = useState("");
@@ -55,6 +72,35 @@ export default function Logistics({ user }) {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState("");
   const [showPreview, setShowPreview] = useState(false);
+  const [returnsHistory, setReturnsHistory] = useState([]);
+  const [historyFrom, setHistoryFrom] = useState(() => {
+    const d = new Date();
+    d.setDate(1);
+    return d.toISOString().slice(0, 10);
+  });
+  const [historyTo, setHistoryTo] = useState(todayIso);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState("");
+  const canChangeReprogramedStatus = canSeeReturnsHistory;
+  const [statusChangeNewStatus, setStatusChangeNewStatus] = useState({});
+  const [statusChangeDate, setStatusChangeDate] = useState({});
+  const [statusChangeLoading, setStatusChangeLoading] = useState(null);
+
+  async function loadReturnsHistory() {
+    if (!canSeeReturnsHistory) return;
+    setHistoryError("");
+    setHistoryLoading(true);
+    try {
+      const res = await api.get("/api/logistics/returns-history", {
+        params: { from: historyFrom, to: historyTo },
+      });
+      setReturnsHistory(res.data || []);
+    } catch (_err) {
+      setHistoryError("No se pudo cargar el historial.");
+    } finally {
+      setHistoryLoading(false);
+    }
+  }
 
   async function load() {
     const [t, d, p] = await Promise.all([
@@ -102,6 +148,7 @@ export default function Logistics({ user }) {
     if (!truckId) {
       setTruckOrders([]);
       setReturnDeliveredTotal(0);
+      setReturnDeliveredOrders([]);
       return;
     }
     const dateFilter = dateValue || returnDate || todayIso;
@@ -113,8 +160,49 @@ export default function Logistics({ user }) {
       .filter((order) => order.status === "Entregado")
       .reduce((sum, order) => sum + Number(order.total || 0), 0);
     setReturnDeliveredTotal(deliveredTotal);
-    setTruckOrders(rows.filter((order) => order.status !== "Entregado"));
+    setReturnDeliveredOrders(rows.filter((order) => order.status === "Entregado"));
+    setTruckOrders(rows);
     setReturnSelection({});
+  }
+
+  async function submitStatusChange(orderId) {
+    const newStatus = statusChangeNewStatus[orderId];
+    if (!newStatus) {
+      setReturnError("Seleccione un estado.");
+      return;
+    }
+    if (newStatus === "Reprogramado") {
+      const d = statusChangeDate[orderId];
+      if (!d || String(d).trim().length < 10) {
+        setReturnError("Al elegir Reprogramado indique la fecha programada.");
+        return;
+      }
+    }
+    setReturnError("");
+    setStatusChangeLoading(orderId);
+    try {
+      const body = { status: newStatus };
+      if (newStatus === "Reprogramado") body.scheduled_date = statusChangeDate[orderId];
+      await api.patch(`/api/orders/${orderId}/status`, body);
+      setStatusChangeNewStatus((prev) => {
+        const next = { ...prev };
+        delete next[orderId];
+        return next;
+      });
+      setStatusChangeDate((prev) => {
+        const next = { ...prev };
+        delete next[orderId];
+        return next;
+      });
+      if (returnForm.truck_id) {
+        await loadTruckOrders(returnForm.truck_id, returnDate);
+      }
+    } catch (err) {
+      const msg = err.response?.data?.error || "No se pudo actualizar el estado.";
+      setReturnError(msg);
+    } finally {
+      setStatusChangeLoading(null);
+    }
   }
 
   useEffect(() => {
@@ -122,6 +210,17 @@ export default function Logistics({ user }) {
     loadDeliveries();
     loadPendingOrders();
   }, []);
+
+  useEffect(() => {
+    if (canSeeReturnsHistory) loadReturnsHistory();
+  }, [canSeeReturnsHistory]);
+
+  useEffect(() => {
+    if (!isDriver || trucks.length !== 1) return;
+    const truckId = trucks[0].id;
+    setReturnForm((prev) => (prev.truck_id ? prev : { ...prev, truck_id: String(truckId) }));
+    loadTruckOrders(truckId, returnDate);
+  }, [trucks, isDriver, returnDate]);
 
   function toggleBulkSelection(orderId) {
     setBulkSelection((prev) => ({
@@ -179,11 +278,16 @@ export default function Logistics({ user }) {
       setReturnError("Seleccione el pedido en la tabla para devolución.");
       return;
     }
-    const expectedTotal = Number(returnDeliveredTotal || 0);
+    const ventasTotal = Number(returnDeliveredTotal || 0);
+    const gastosGas = Number(returnForm.gastos_gasolina || 0);
+    const gastosAlm = Number(returnForm.gastos_almuerzo || 0);
+    const gastosOtros = Number(returnForm.gastos_otros || 0);
+    const totalGastos = gastosGas + gastosAlm + gastosOtros;
+    const expectedTotal = Math.max(0, ventasTotal - totalGastos);
     const cashValue = Number(returnForm.cash_amount || 0);
     if (Number(cashValue.toFixed(2)) !== Number(expectedTotal.toFixed(2))) {
       setReturnError(
-        `El monto debe ser igual a las ventas entregadas: Bs. ${expectedTotal.toFixed(2)}`
+        `El monto a caja debe ser igual a ventas menos gastos: Bs. ${expectedTotal.toFixed(2)} (Ventas Bs. ${ventasTotal.toFixed(2)} − Gastos Bs. ${totalGastos.toFixed(2)})`
       );
       return;
     }
@@ -191,8 +295,19 @@ export default function Logistics({ user }) {
       truck_id: Number(returnForm.truck_id),
       order_id: Number(returnForm.order_id),
       cash_amount: returnForm.cash_amount ? Number(returnForm.cash_amount) : 0,
+      return_date: returnDate || undefined,
+      gastos_gasolina: gastosGas,
+      gastos_almuerzo: gastosAlm,
+      gastos_otros: gastosOtros,
     });
-    setReturnForm({ truck_id: returnForm.truck_id, order_id: "", cash_amount: "" });
+    setReturnForm({
+      truck_id: returnForm.truck_id,
+      order_id: "",
+      cash_amount: "",
+      gastos_gasolina: "",
+      gastos_almuerzo: "",
+      gastos_otros: "",
+    });
     setReturnSelection({});
     loadTruckSummary(returnForm.truck_id);
     loadTruckOrders(returnForm.truck_id);
@@ -224,9 +339,9 @@ export default function Logistics({ user }) {
       const truckName = orders[0]?.truck_plate || truck?.plate || "-";
       const rowsHtml = orders
         .map(
-          (o) => `
+          (o, idx) => `
             <tr>
-              <td>${o.id || "-"}</td>
+              <td>${idx + 1}</td>
               <td>${o.customer_name || "-"}</td>
               <td>${o.zona || "-"}</td>
               <td>${o.address || "-"}</td>
@@ -338,7 +453,7 @@ export default function Logistics({ user }) {
             <table>
               <thead>
                 <tr>
-                  <th>Nro pedido</th>
+                  <th>Nº</th>
                   <th>Nombre cliente</th>
                   <th>Zona</th>
                   <th>Dirección</th>
@@ -425,17 +540,31 @@ export default function Logistics({ user }) {
         0
       );
       const reprogrammedOrders = orders.filter((o) => o.status === "Reprogramado");
+      const gastosGas = Number(returnForm.gastos_gasolina || 0);
+      const gastosAlm = Number(returnForm.gastos_almuerzo || 0);
+      const gastosOtros = Number(returnForm.gastos_otros || 0);
+      const totalGastos = gastosGas + gastosAlm + gastosOtros;
+      const montoNeto = Math.max(0, deliveredTotal - totalGastos);
+      const resumenMontoEntregado = deliveredTotal.toFixed(2);
+      const resumenGastos = totalGastos > 0
+        ? `Gasolina Bs. ${gastosGas.toFixed(2)} | Almuerzo Bs. ${gastosAlm.toFixed(2)} | Otros Bs. ${gastosOtros.toFixed(2)} = Total gastos Bs. ${totalGastos.toFixed(2)}`
+        : "—";
+      const resumenDevolucion = `${reprogrammedOrders.length} pedido(s) no entregado(s) → Reprogramado`;
       const rowsHtml = orders
         .map(
-          (o) => `
+          (o, idx) => {
+            const progDate = formatScheduledDate(o.scheduled_date);
+            return `
             <tr>
-              <td>${o.id || "-"}</td>
+              <td>${idx + 1}</td>
               <td>${o.customer_name || "-"}</td>
               <td>${o.status || "-"}</td>
+              <td>${progDate}</td>
               <td>${o.items || "-"}</td>
               <td>Bs. ${Number(o.total || 0).toFixed(2)}</td>
             </tr>
-          `
+          `;
+          }
         )
         .join("");
       const win = window.open("", "_blank", "width=900,height=700");
@@ -457,12 +586,24 @@ export default function Logistics({ user }) {
               th, td { border: 1px solid #ccc; padding: 4px 6px; text-align: left; font-size: 10px; vertical-align: top; line-height: 1.2; }
               th { background: #f2f4f7; }
               .summary { margin-top: 10px; font-size: 11px; }
+              .resumen-box { margin: 12px 0; padding: 10px; border: 1px solid #333; background: #f8f9fa; }
+              .resumen-box h3 { margin: 0 0 8px; font-size: 13px; }
+              .resumen-box .line { margin: 4px 0; }
+              .resumen-box .total { font-size: 14px; font-weight: bold; margin-top: 6px; }
             </style>
           </head>
           <body>
             <h2>Resumen de devolución</h2>
             <div class="meta"><strong>Fecha:</strong> ${dateLabel}</div>
             <div class="meta"><strong>Camión:</strong> ${truckName} | <strong>Repartidor:</strong> ${driverName}</div>
+            <div class="resumen-box">
+              <h3>Resumen del monto entregado y devolución</h3>
+              <div class="line"><strong>Ventas entregadas:</strong> ${deliveredOrders.length} pedido(s) — Total Bs. ${resumenMontoEntregado}</div>
+              <div class="line"><strong>Gastos:</strong> ${resumenGastos}</div>
+              <div class="line"><strong>Monto neto entregado a caja:</strong> Bs. ${montoNeto.toFixed(2)}</div>
+              <div class="line"><strong>Devolución:</strong> ${resumenDevolucion}</div>
+              <div class="line">Pedidos en hoja: ${totalOrders} (${deliveredOrders.length} entregados, ${reprogrammedOrders.length} reprogramados)</div>
+            </div>
             <div class="summary">
               <div><strong>Pedidos:</strong> ${totalOrders}</div>
               <div><strong>Clientes:</strong> ${uniqueCustomers}</div>
@@ -472,15 +613,16 @@ export default function Logistics({ user }) {
             <table>
               <thead>
                 <tr>
-                  <th>ID</th>
+                  <th>Nº</th>
                   <th>Cliente</th>
                   <th>Estado</th>
+                  <th>Programado</th>
                   <th>Detalle</th>
                   <th>Total</th>
                 </tr>
               </thead>
               <tbody>
-                ${rowsHtml || "<tr><td colspan='5'>Sin pedidos.</td></tr>"}
+                ${rowsHtml || "<tr><td colspan='6'>Sin pedidos.</td></tr>"}
               </tbody>
             </table>
           </body>
@@ -591,30 +733,90 @@ export default function Logistics({ user }) {
             }
           />
         </div>
+        <div className="form-row" style={{ marginTop: 8 }}>
+          <input
+            type="number"
+            step="0.01"
+            min="0"
+            placeholder="Gastos gasolina (Bs.)"
+            value={returnForm.gastos_gasolina}
+            onChange={(e) =>
+              setReturnForm((prev) => ({ ...prev, gastos_gasolina: e.target.value }))
+            }
+          />
+          <input
+            type="number"
+            step="0.01"
+            min="0"
+            placeholder="Gastos almuerzo (Bs.)"
+            value={returnForm.gastos_almuerzo}
+            onChange={(e) =>
+              setReturnForm((prev) => ({ ...prev, gastos_almuerzo: e.target.value }))
+            }
+          />
+          <input
+            type="number"
+            step="0.01"
+            min="0"
+            placeholder="Gastos otros (Bs.)"
+            value={returnForm.gastos_otros}
+            onChange={(e) =>
+              setReturnForm((prev) => ({ ...prev, gastos_otros: e.target.value }))
+            }
+          />
+        </div>
         <div style={{ marginTop: 8, color: "#6b7a8c", fontSize: 13 }}>
           {returnForm.order_id ? (
-            <>Monto a entregar a caja: <strong>Bs. {Number(returnDeliveredTotal || 0).toFixed(2)}</strong></>
+            <span>
+              Ventas entregadas: <strong>Bs. {(Number(returnDeliveredTotal || 0)).toFixed(2)}</strong>
+              {(Number(returnForm.gastos_gasolina || 0) + Number(returnForm.gastos_almuerzo || 0) + Number(returnForm.gastos_otros || 0)) > 0 && (
+                <> — Gastos: <strong>Bs. {(Number(returnForm.gastos_gasolina || 0) + Number(returnForm.gastos_almuerzo || 0) + Number(returnForm.gastos_otros || 0)).toFixed(2)}</strong></>
+              )}
+              <br />
+              Monto neto a entregar a caja: <strong>Bs. {Math.max(0, Number(returnDeliveredTotal || 0) - (Number(returnForm.gastos_gasolina || 0) + Number(returnForm.gastos_almuerzo || 0) + Number(returnForm.gastos_otros || 0))).toFixed(2)}</strong>
+            </span>
           ) : (
-            <>Seleccione un pedido para ver el monto a entregar.</>
+            <span>Seleccione un pedido para ver el monto a entregar.</span>
           )}
         </div>
+        {returnDeliveredOrders.length > 0 && (
+          <div style={{ marginTop: 8, marginBottom: 8 }}>
+            <strong>Ventas realizadas (a depositar):</strong>
+            <ul style={{ margin: "4px 0 0 0", paddingLeft: 20, fontSize: 13 }}>
+              {returnDeliveredOrders.map((o) => (
+                <li key={o.id}>
+                  #{o.id} {o.customer_name || "-"} — Bs. {Number(o.total || 0).toFixed(2)}
+                </li>
+              ))}
+            </ul>
+            <div style={{ marginTop: 4 }}>
+              Total ventas: <strong>Bs. {Number(returnDeliveredTotal || 0).toFixed(2)}</strong>
+              {(Number(returnForm.gastos_gasolina || 0) + Number(returnForm.gastos_almuerzo || 0) + Number(returnForm.gastos_otros || 0)) > 0 && (
+                <> − Gastos: <strong>Bs. {(Number(returnForm.gastos_gasolina || 0) + Number(returnForm.gastos_almuerzo || 0) + Number(returnForm.gastos_otros || 0)).toFixed(2)}</strong> = Neto a caja: <strong>Bs. {Math.max(0, Number(returnDeliveredTotal || 0) - (Number(returnForm.gastos_gasolina || 0) + Number(returnForm.gastos_almuerzo || 0) + Number(returnForm.gastos_otros || 0))).toFixed(2)}</strong></>
+              )}
+            </div>
+          </div>
+        )}
         <div className="table-scroll" style={{ marginTop: 8 }}>
           <table className="table">
             <thead>
               <tr>
                 <th></th>
-                <th>ID</th>
+                <th>Nº</th>
                 <th>Cliente</th>
                 <th>Estado</th>
+                <th>Creado</th>
+                <th>Programado</th>
                 <th>Dirección</th>
                 <th>Zona</th>
                 <th>Detalle</th>
                 <th>Observaciones</th>
                 <th>Total</th>
+                {canChangeReprogramedStatus && <th>Acción</th>}
               </tr>
             </thead>
             <tbody>
-              {truckOrders.map((o) => (
+              {truckOrders.map((o, idx) => (
                 <tr key={o.id}>
                   <td>
                     <input
@@ -633,19 +835,57 @@ export default function Logistics({ user }) {
                       }}
                     />
                   </td>
-                  <td>{o.id}</td>
+                  <td>{idx + 1}</td>
                   <td>{o.customer_name || "-"}</td>
                   <td><span className={statusClass(o.status)}>{o.status}</span></td>
+                  <td>{o.created_at ? (() => { const d = new Date(o.created_at); return Number.isNaN(d.getTime()) ? "-" : d.toLocaleDateString("es") + " " + d.toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" }); })() : "-"}</td>
+                  <td>{formatScheduledDate(o.scheduled_date)}</td>
                   <td>{o.address || "-"}</td>
                   <td>{o.zona || "-"}</td>
                   <td>{o.items || "-"}</td>
                   <td>{o.notes || "-"}</td>
                   <td>Bs. {Number(o.total || 0).toFixed(2)}</td>
+                  {canChangeReprogramedStatus && (
+                    <td>
+                      {o.status === "Reprogramado" ? (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+                          <select
+                            value={statusChangeNewStatus[o.id] || ""}
+                            onChange={(e) => setStatusChangeNewStatus((prev) => ({ ...prev, [o.id]: e.target.value }))}
+                            style={{ minWidth: 120 }}
+                          >
+                            <option value="">Nuevo estado</option>
+                            <option value="Pendiente">Pendiente</option>
+                            <option value="Creado">Creado</option>
+                            <option value="Cancelado">Cancelado</option>
+                            <option value="Reprogramado">Reprogramado</option>
+                          </select>
+                          {(statusChangeNewStatus[o.id] || "") === "Reprogramado" && (
+                            <input
+                              type="date"
+                              value={statusChangeDate[o.id] || ""}
+                              onChange={(e) => setStatusChangeDate((prev) => ({ ...prev, [o.id]: e.target.value }))}
+                            />
+                          )}
+                          <button
+                            type="button"
+                            className="btn btn-outline"
+                            disabled={statusChangeLoading === o.id}
+                            onClick={() => submitStatusChange(o.id)}
+                          >
+                            {statusChangeLoading === o.id ? "Actualizando..." : "Cambiar estado"}
+                          </button>
+                        </div>
+                      ) : (
+                        "-"
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))}
               {truckOrders.length === 0 && (
-                <tr>
-                  <td colSpan={9}>No hay pedidos disponibles.</td>
+                <tr key="no-orders">
+                  <td colSpan={canChangeReprogramedStatus ? 13 : 12}>No hay pedidos disponibles.</td>
                 </tr>
               )}
             </tbody>
@@ -715,7 +955,13 @@ export default function Logistics({ user }) {
           {bulkError && <div className="error">{bulkError}</div>}
           {bulkResult && (
             <div className="tag" style={{ marginTop: 8 }}>
-              Asignados: {bulkResult.assigned} | Omitidos: {bulkResult.skipped}
+              Asignados: {bulkResult.assigned}
+              {bulkResult.updated != null && bulkResult.updated > 0 && (
+                <> | Reasignados: {bulkResult.updated}</>
+              )}
+              {bulkResult.skipped != null && bulkResult.skipped > 0 && (
+                <> | Omitidos: {bulkResult.skipped}</>
+              )}
             </div>
           )}
           <table className="table" style={{ marginTop: 12 }}>
@@ -731,7 +977,7 @@ export default function Logistics({ user }) {
                     onChange={(e) => toggleAllBulk(e.target.checked)}
                   />
                 </th>
-                <th>ID</th>
+                <th>Nº</th>
                 <th>Nombre</th>
                 <th>Estado</th>
                 <th>Zona</th>
@@ -741,7 +987,7 @@ export default function Logistics({ user }) {
               </tr>
             </thead>
             <tbody>
-              {pendingOrders.map((p) => (
+              {pendingOrders.map((p, idx) => (
                 <tr key={p.id}>
                   <td>
                     <input
@@ -750,7 +996,7 @@ export default function Logistics({ user }) {
                       onChange={() => toggleBulkSelection(p.id)}
                     />
                   </td>
-                  <td>{p.id}</td>
+                  <td>{idx + 1}</td>
                   <td>{p.customer_name}</td>
                   <td><span className={statusClass(p.status)}>{p.status}</span></td>
                   <td>{p.zona || "-"}</td>
@@ -838,7 +1084,7 @@ export default function Logistics({ user }) {
                 <table className="table">
                   <thead>
                     <tr>
-                      <th>Nro pedido</th>
+                      <th>Nº</th>
                       <th>Nombre cliente</th>
                       <th>Zona</th>
                       <th>Dirección</th>
@@ -857,9 +1103,9 @@ export default function Logistics({ user }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {previewOrders.map((o) => (
+                    {previewOrders.map((o, idx) => (
                       <tr key={o.id}>
-                        <td>{o.id || "-"}</td>
+                        <td>{idx + 1}</td>
                         <td>{o.customer_name || "-"}</td>
                         <td>{o.zona || "-"}</td>
                         <td>{o.address || "-"}</td>
@@ -950,6 +1196,79 @@ export default function Logistics({ user }) {
               </li>
             ))}
           </ul>
+        </div>
+      )}
+      {canSeeReturnsHistory && (
+        <div className="card" style={{ marginTop: 16 }}>
+          <h4>Historial de devoluciones</h4>
+          <div style={{ color: "#6b7a8c", fontSize: 13, marginBottom: 12 }}>
+            Consultar movimientos de devolución por rango de fechas (solo administrador o jefe de logística).
+          </div>
+          <div className="form-row" style={{ marginBottom: 12 }}>
+            <input
+              type="date"
+              value={historyFrom}
+              onChange={(e) => setHistoryFrom(e.target.value)}
+            />
+            <input
+              type="date"
+              value={historyTo}
+              onChange={(e) => setHistoryTo(e.target.value)}
+            />
+            <button
+              type="button"
+              className="btn"
+              onClick={loadReturnsHistory}
+              disabled={historyLoading}
+            >
+              {historyLoading ? "Cargando..." : "Buscar"}
+            </button>
+          </div>
+          {historyError && <div className="error" style={{ marginBottom: 8 }}>{historyError}</div>}
+          <div className="table-scroll">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Camión</th>
+                  <th>Repartidor</th>
+                  <th>Ventas (Bs.)</th>
+                  <th>Gastos gasolina</th>
+                  <th>Gastos almuerzo</th>
+                  <th>Gastos otros</th>
+                  <th>Monto caja (Bs.)</th>
+                  <th>Registrado por</th>
+                  <th>Hora</th>
+                </tr>
+              </thead>
+              <tbody>
+                {returnsHistory.map((r) => (
+                  <tr key={r.id}>
+                    <td>{formatScheduledDate(r.fecha)}</td>
+                    <td>{r.camion_placa || "-"}</td>
+                    <td>{r.repartidor_nombre || "-"}</td>
+                    <td>Bs. {Number(r.monto_ventas || 0).toFixed(2)}</td>
+                    <td>Bs. {Number(r.gastos_gasolina || 0).toFixed(2)}</td>
+                    <td>Bs. {Number(r.gastos_almuerzo || 0).toFixed(2)}</td>
+                    <td>Bs. {Number(r.gastos_otros || 0).toFixed(2)}</td>
+                    <td>Bs. {Number(r.monto_neto_caja || 0).toFixed(2)}</td>
+                    <td>{r.usuario_nombre || "-"}</td>
+                    <td>{r.creado_en ? new Date(r.creado_en).toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" }) : "-"}</td>
+                  </tr>
+                ))}
+                {historyLoading && returnsHistory.length === 0 && (
+                  <tr key="loading-returns">
+                    <td colSpan={10}>Cargando...</td>
+                  </tr>
+                )}
+                {!historyLoading && returnsHistory.length === 0 && (
+                  <tr key="no-returns">
+                    <td colSpan={10}>No hay registros para el rango seleccionado. Use «Buscar» para cargar.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

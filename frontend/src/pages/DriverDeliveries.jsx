@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../api";
 
@@ -12,6 +12,22 @@ function statusClass(status) {
   return `tag status-${normalized}`;
 }
 
+function formatDateOnly(value) {
+  if (!value) return "-";
+  const s = String(value).trim().slice(0, 10);
+  if (s.length < 10) return "-";
+  return new Date(s + "T12:00:00").toLocaleDateString("es");
+}
+
+function formatDateTimeSafe(value) {
+  if (!value) return "-";
+  const s = String(value).trim();
+  const datePart = s.slice(0, 10);
+  if (datePart.length < 10) return "-";
+  const timePart = s.slice(11, 19) || "12:00:00";
+  return new Date(datePart + "T" + timePart).toLocaleString("es");
+}
+
 export default function DriverDeliveries() {
   const navigate = useNavigate();
   const today = new Date();
@@ -20,6 +36,7 @@ export default function DriverDeliveries() {
     .slice(0, 10);
   const [deliveries, setDeliveries] = useState([]);
   const [filterDate, setFilterDate] = useState(todayIso);
+  const [filterTruck, setFilterTruck] = useState("");
   const [sales, setSales] = useState([]);
   const [statusUpdates, setStatusUpdates] = useState({});
   const [loading, setLoading] = useState(false);
@@ -64,6 +81,18 @@ export default function DriverDeliveries() {
     return () => clearInterval(intervalId);
   }, [filterDate]);
 
+  const trucksFromDeliveries = useMemo(
+    () => [...new Set(deliveries.map((d) => d.camion).filter(Boolean))].sort(),
+    [deliveries]
+  );
+  const filteredDeliveries = filterTruck
+    ? deliveries.filter((d) => d.camion === filterTruck)
+    : deliveries;
+
+  const filteredSales = filterTruck
+    ? sales.filter((s) => s.camion === filterTruck)
+    : sales;
+
   async function updateStatus(deliveryId) {
     const status = statusUpdates[deliveryId];
     if (!status) return;
@@ -93,6 +122,20 @@ export default function DriverDeliveries() {
               onChange={(e) => setFilterDate(e.target.value)}
             />
           </div>
+          <div className="form-field">
+            <label>Camión</label>
+            <select
+              value={filterTruck}
+              onChange={(e) => setFilterTruck(e.target.value)}
+            >
+              <option value="">Todos los camiones</option>
+              {trucksFromDeliveries.map((placa) => (
+                <option key={placa} value={placa}>
+                  {placa}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
         <div className="table-scroll">
           <table className="table table-deliveries">
@@ -101,32 +144,34 @@ export default function DriverDeliveries() {
                 <th>ID Entrega</th>
                 <th>Cliente</th>
                 <th className="col-address">Dirección</th>
+                <th>Zona</th>
                 <th>Repartidor</th>
                 <th>Camión</th>
                 <th>Estado</th>
                 <th className="col-order">Pedido</th>
+                <th>Monto (Bs.)</th>
                 <th>Fecha venta</th>
+                <th>Creado</th>
                 <th>Programado</th>
                 <th>Actualizar</th>
               </tr>
             </thead>
             <tbody>
-              {deliveries.map((d) => (
+              {filteredDeliveries.map((d) => (
                 <tr key={d.id}>
                   <td>{d.id}</td>
                   <td>{d.cliente}</td>
                   <td className="col-address">{d.direccion || "-"}</td>
+                  <td>{d.zona || "-"}</td>
                   <td>{d.repartidor}</td>
                   <td>{d.camion}</td>
                   <td><span className={statusClass(d.estado)}>{d.estado}</span></td>
                   <td className="col-order">{d.pedido_detalle || "-"}</td>
-                  <td>{d.entregado_en ? new Date(d.entregado_en).toLocaleString() : "-"}</td>
+                  <td>Bs. {Number(d.total_bs || 0).toFixed(2)}</td>
+                  <td>{d.entregado_en ? formatDateTimeSafe(d.entregado_en) : "-"}</td>
+                  <td>{formatDateOnly(d.fecha_creacion_pedido)}</td>
                   <td>
-                    {d.programado_en
-                      ? new Date(d.programado_en).toLocaleString()
-                      : d.fecha_programada
-                      ? new Date(d.fecha_programada).toLocaleDateString()
-                      : "-"}
+                    {formatDateOnly(d.programado_en || d.fecha_programada)}
                   </td>
                   <td>
                     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -163,9 +208,13 @@ export default function DriverDeliveries() {
                   </td>
                 </tr>
               ))}
-              {deliveries.length === 0 && (
+              {filteredDeliveries.length === 0 && (
                 <tr>
-                  <td colSpan={10}>No hay entregas asignadas.</td>
+                  <td colSpan={13}>
+                    {filterTruck
+                      ? "No hay entregas para el camión seleccionado."
+                      : "No hay entregas asignadas."}
+                  </td>
                 </tr>
               )}
             </tbody>
@@ -176,10 +225,13 @@ export default function DriverDeliveries() {
         <h4>Ventas realizadas</h4>
         {salesError && <div className="error" style={{ marginBottom: 8 }}>{salesError}</div>}
         <div style={{ marginBottom: 8 }}>
-          Ventas: <strong>{sales.length}</strong>{" "}
+          Ventas: <strong>{filteredSales.length}</strong>
+          {filterTruck && (
+            <span className="text-muted"> (camión {filterTruck})</span>
+          )}{" "}
           | Total a cobrar:{" "}
           <strong>
-            Bs. {sales.reduce((sum, s) => sum + Number(s.total || 0), 0).toFixed(2)}
+            Bs. {filteredSales.reduce((sum, s) => sum + Number(s.total || 0), 0).toFixed(2)}
           </strong>
         </div>
         <div className="table-scroll">
@@ -196,7 +248,7 @@ export default function DriverDeliveries() {
               </tr>
             </thead>
             <tbody>
-              {sales.map((s) => (
+              {filteredSales.map((s) => (
                 <tr key={s.pedido_id}>
                   <td>{s.pedido_id}</td>
                   <td>{s.cliente}</td>
@@ -207,18 +259,22 @@ export default function DriverDeliveries() {
                   <td>Bs. {Number(s.total || 0).toFixed(2)}</td>
                 </tr>
               ))}
-              {!salesLoading && sales.length === 0 && (
+              {!salesLoading && filteredSales.length === 0 && (
                 <tr>
-                  <td colSpan={7}>No hay ventas registradas.</td>
+                  <td colSpan={7}>
+                    {filterTruck
+                      ? "No hay ventas para el camión seleccionado."
+                      : "No hay ventas registradas."}
+                  </td>
                 </tr>
               )}
-              {sales.length > 0 && (
+              {filteredSales.length > 0 && (
                 <tr>
                   <td colSpan={6} style={{ textAlign: "right" }}>
                     Total
                   </td>
                   <td>
-                    Bs. {sales.reduce((sum, s) => sum + Number(s.total || 0), 0).toFixed(2)}
+                    Bs. {filteredSales.reduce((sum, s) => sum + Number(s.total || 0), 0).toFixed(2)}
                   </td>
                 </tr>
               )}

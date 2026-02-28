@@ -127,6 +127,9 @@ export default function Customers() {
     notas: "",
   });
   const [editId, setEditId] = useState(null);
+  const [selectedCustomerId, setSelectedCustomerId] = useState(null);
+  const [editMessage, setEditMessage] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
   const [gpsLoading, setGpsLoading] = useState(false);
   const [gpsError, setGpsError] = useState("");
   const [showMap, setShowMap] = useState(false);
@@ -147,6 +150,7 @@ export default function Customers() {
       notas: "",
     });
     setEditId(null);
+    setEditMessage("");
     setShowMap(false);
     setMapPosition(null);
   }
@@ -211,12 +215,20 @@ export default function Customers() {
     e.preventDefault();
     if (!editId) return;
     setGpsError("");
+    setEditMessage("");
+    setSuccessMessage("");
     await api.put(`/api/customers/${editId}`, form);
+    setSuccessMessage("Cliente actualizado correctamente.");
+    setSelectedCustomerId(null);
     resetForm();
     load();
+    setTimeout(() => setSuccessMessage(""), 4000);
   }
 
   function startEdit(customer) {
+    setEditMessage("");
+    setSuccessMessage("");
+    setSelectedCustomerId(customer.id);
     setEditId(customer.id);
     setForm({
       nombre_completo: customer.nombre_completo || "",
@@ -233,6 +245,19 @@ export default function Customers() {
     });
     const parsed = parseCoords(customer.datos_gps || "");
     setMapPosition(parsed);
+  }
+
+  function handleClickEditar() {
+    setSuccessMessage("");
+    if (selectedCustomerId == null) {
+      setEditMessage("Seleccione un cliente de la lista para editar.");
+      return;
+    }
+    const customer = (searchActive ? results : customers).find(
+      (c) => c.id === selectedCustomerId
+    );
+    if (customer) startEdit(customer);
+    setEditMessage("");
   }
 
   function handleGetGps() {
@@ -412,6 +437,16 @@ export default function Customers() {
           </div>
         </form>
       </div>
+      {editMessage && (
+        <div className="error" style={{ marginTop: 16 }}>
+          {editMessage}
+        </div>
+      )}
+      {successMessage && (
+        <div className="success-message" style={{ marginTop: 16 }}>
+          {successMessage}
+        </div>
+      )}
       <div className="card" style={{ marginTop: 16 }}>
         <h4>Buscar cliente</h4>
         <form onSubmit={handleSearch} className="form">
@@ -449,6 +484,18 @@ export default function Customers() {
         {searchError && <div className="error" style={{ marginTop: 8 }}>{searchError}</div>}
       </div>
       <div style={{ marginTop: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+          <button
+            className="btn btn-outline"
+            type="button"
+            onClick={handleClickEditar}
+          >
+            Editar cliente seleccionado
+          </button>
+          {selectedCustomerId != null && (
+            <span className="text-muted">Cliente #{selectedCustomerId} seleccionado</span>
+          )}
+        </div>
         <table className="table">
         <thead>
           <tr>
@@ -466,13 +513,25 @@ export default function Customers() {
         </thead>
         <tbody>
           {(searchActive ? results : customers).map((c) => (
-            <tr key={c.id}>
+            <tr
+              key={c.id}
+              className={`${selectedCustomerId === c.id ? "row-selected" : ""} ${c.estado === "Inactivo" ? "row-inactivo" : ""}`.trim()}
+              onClick={() => {
+                setEditMessage("");
+                setSelectedCustomerId(c.id);
+              }}
+              style={{ cursor: "pointer" }}
+            >
               <td>{c.id}</td>
               <td>{c.nombre_completo}</td>
               <td>{c.telefono_principal}</td>
               <td>{c.zona}</td>
               <td>{c.tipo_cliente}</td>
-              <td>{c.estado}</td>
+              <td>
+                <span className={c.estado === "Inactivo" ? "customer-estado-inactivo" : ""}>
+                  {c.estado}
+                </span>
+              </td>
               <td>{c.creado_por_nombre || "-"}</td>
               <td>{c.fecha_registro ? new Date(c.fecha_registro).toLocaleString() : "-"}</td>
               <td>{c.fecha_actualizacion ? new Date(c.fecha_actualizacion).toLocaleString() : "-"}</td>
@@ -480,7 +539,10 @@ export default function Customers() {
                 <button
                   className="btn btn-outline btn-sm"
                   type="button"
-                  onClick={() => startEdit(c)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    startEdit(c);
+                  }}
                 >
                   Editar
                 </button>
