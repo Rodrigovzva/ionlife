@@ -229,6 +229,7 @@ export default function DriverDeliveries() {
                         <option value="">Cambiar estado</option>
                         <option>Entregado</option>
                         <option>Cancelado</option>
+                        <option>Reprogramado</option>
                       </select>
                       <button
                         className="btn btn-outline btn-sm"

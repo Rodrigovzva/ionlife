@@ -109,6 +109,60 @@ export default function Logistics({ user }) {
   const [statusChangeDate, setStatusChangeDate] = useState({});
   const [statusChangeLoading, setStatusChangeLoading] = useState(null);
 
+  // Reasignación de entrega
+  const [reassignSearch, setReassignSearch] = useState("");
+  const [reassignResults, setReassignResults] = useState([]);
+  const [reassignSelected, setReassignSelected] = useState(null);
+  const [reassignTruckId, setReassignTruckId] = useState("");
+  const [reassignDriverId, setReassignDriverId] = useState("");
+  const [reassignLoading, setReassignLoading] = useState(false);
+  const [reassignSearchLoading, setReassignSearchLoading] = useState(false);
+  const [reassignError, setReassignError] = useState("");
+  const [reassignSuccess, setReassignSuccess] = useState("");
+
+  async function searchReassignDeliveries(q) {
+    setReassignSearch(q);
+    setReassignSelected(null);
+    if (!q || q.trim().length < 2) { setReassignResults([]); return; }
+    setReassignSearchLoading(true);
+    try {
+      const res = await api.get("/api/logistics/deliveries/search", { params: { q } });
+      setReassignResults(res.data || []);
+    } catch (_) {
+      setReassignResults([]);
+    } finally {
+      setReassignSearchLoading(false);
+    }
+  }
+
+  async function submitReassign(e) {
+    e.preventDefault();
+    setReassignError("");
+    setReassignSuccess("");
+    if (!reassignSelected || !reassignTruckId || !reassignDriverId) {
+      setReassignError("Seleccione un cliente de la lista, camión y repartidor.");
+      return;
+    }
+    setReassignLoading(true);
+    try {
+      await api.patch(`/api/logistics/deliveries/${reassignSelected.delivery_id}/reassign`, {
+        truck_id: Number(reassignTruckId),
+        driver_id: Number(reassignDriverId),
+      });
+      setReassignSuccess(`Entrega de ${reassignSelected.customer_name} reasignada correctamente.`);
+      setReassignSearch("");
+      setReassignResults([]);
+      setReassignSelected(null);
+      setReassignTruckId("");
+      setReassignDriverId("");
+      if (returnForm.truck_id) loadTruckOrders(returnForm.truck_id, returnDate);
+    } catch (_err) {
+      setReassignError("No se pudo reasignar la entrega.");
+    } finally {
+      setReassignLoading(false);
+    }
+  }
+
   async function loadReturnsHistory() {
     if (!canSeeReturnsHistory) return;
     setHistoryError("");
@@ -346,7 +400,7 @@ export default function Logistics({ user }) {
     setPrintLoading(true);
     try {
       const res = await api.get("/api/logistics/truck-orders", {
-        params: { truck_id: printTruckId, fecha_registro: printDateFilter || undefined },
+        params: { truck_id: printTruckId, scheduled_date: printDateFilter || undefined },
       });
       const orders = sortOrdersByZona(res.data || []);
       const truck = trucks.find((t) => String(t.id) === String(printTruckId));
@@ -680,7 +734,7 @@ export default function Logistics({ user }) {
     setPreviewLoading(true);
     try {
       const res = await api.get("/api/logistics/truck-orders", {
-        params: { truck_id: printTruckId, fecha_registro: printDateFilter || undefined },
+        params: { truck_id: printTruckId, scheduled_date: printDateFilter || undefined },
       });
       setPreviewOrders(sortOrdersByZona(res.data || []));
       setShowPreview(true);
@@ -1093,7 +1147,6 @@ export default function Logistics({ user }) {
               type="date"
               value={printDateFilter}
               onChange={(e) => setPrintDateFilter(e.target.value)}
-              placeholder="Fecha de registro"
             />
             <button className="btn btn-outline" type="button" onClick={loadPreview} disabled={previewLoading}>
               {previewLoading ? "Cargando..." : "Previsualizar"}
@@ -1221,6 +1274,94 @@ export default function Logistics({ user }) {
           )}
         </div>
         {returnCard}
+        {!isDriver && (isAdmin || isJefeLogistica) && (
+          <div className="card" style={{ marginTop: 16 }}>
+            <h4>Reasignar entrega a otro camión / repartidor</h4>
+            <div style={{ color: "#6b7a8c", fontSize: 13, marginBottom: 10 }}>
+              Escribe el nombre del cliente para encontrar su entrega activa y reasignarla.
+            </div>
+            <form onSubmit={submitReassign} className="form">
+              <div className="form-row" style={{ flexWrap: "wrap", gap: 10, alignItems: "flex-start" }}>
+                <div style={{ position: "relative", flex: "1 1 260px", minWidth: 220 }}>
+                  <input
+                    type="search"
+                    placeholder="Buscar cliente..."
+                    value={reassignSearch}
+                    onChange={(e) => searchReassignDeliveries(e.target.value)}
+                    autoComplete="off"
+                    style={{ width: "100%" }}
+                  />
+                  {reassignSearchLoading && (
+                    <div style={{ fontSize: 12, color: "#6b7a8c", marginTop: 2 }}>Buscando...</div>
+                  )}
+                  {!reassignSelected && reassignResults.length > 0 && (
+                    <ul style={{
+                      position: "absolute", zIndex: 100, background: "#fff",
+                      border: "1px solid #d9e3ec", borderRadius: 6, margin: 0,
+                      padding: 0, listStyle: "none", width: "100%", maxHeight: 220,
+                      overflowY: "auto", boxShadow: "0 4px 16px rgba(0,0,0,0.10)"
+                    }}>
+                      {reassignResults.map((r) => (
+                        <li
+                          key={r.delivery_id}
+                          onClick={() => {
+                            setReassignSelected(r);
+                            setReassignSearch(r.customer_name);
+                            setReassignResults([]);
+                          }}
+                          style={{
+                            padding: "8px 12px", cursor: "pointer", borderBottom: "1px solid #f0f4f8",
+                            fontSize: 13
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = "#eef5fb"}
+                          onMouseLeave={(e) => e.currentTarget.style.background = "#fff"}
+                        >
+                          <strong>{r.customer_name}</strong>
+                          <span style={{ color: "#6b7a8c", marginLeft: 8 }}>
+                            {r.zona || ""} — {r.truck_plate} / {r.driver_name}
+                          </span>
+                          <span style={{ float: "right", fontSize: 11, color: "#aaa" }}>
+                            #{r.delivery_id}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {reassignSelected && (
+                    <div style={{ marginTop: 4, fontSize: 12, color: "#0a7a6d", background: "#e5f6f3", padding: "4px 8px", borderRadius: 4 }}>
+                      Entrega #{reassignSelected.delivery_id} — {reassignSelected.truck_plate} / {reassignSelected.driver_name}
+                      <button type="button" onClick={() => { setReassignSelected(null); setReassignSearch(""); setReassignResults([]); }}
+                        style={{ marginLeft: 8, background: "none", border: "none", cursor: "pointer", color: "#c0392b", fontWeight: 700 }}>✕</button>
+                    </div>
+                  )}
+                </div>
+                <select
+                  value={reassignTruckId}
+                  onChange={(e) => setReassignTruckId(e.target.value)}
+                >
+                  <option value="">Nuevo camión</option>
+                  {trucks.map((t) => (
+                    <option key={t.id} value={t.id}>{t.plate}</option>
+                  ))}
+                </select>
+                <select
+                  value={reassignDriverId}
+                  onChange={(e) => setReassignDriverId(e.target.value)}
+                >
+                  <option value="">Nuevo repartidor</option>
+                  {drivers.map((d) => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
+                  ))}
+                </select>
+                <button className="btn" type="submit" disabled={reassignLoading || !reassignSelected}>
+                  {reassignLoading ? "Reasignando..." : "Reasignar"}
+                </button>
+              </div>
+            </form>
+            {reassignError && <div className="error" style={{ marginTop: 8 }}>{reassignError}</div>}
+            {reassignSuccess && <div className="tag" style={{ marginTop: 8, background: "#e5f6f3", color: "#0a7a6d" }}>{reassignSuccess}</div>}
+          </div>
+        )}
           </>
         )}
       </div>

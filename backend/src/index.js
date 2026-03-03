@@ -1561,11 +1561,71 @@ app.patch(
         );
       }
     }
+    if (status === "Reprogramado") {
+      const [delivery] = await query(
+        "SELECT pedido_id FROM entregas WHERE id = ?",
+        [req.params.id]
+      );
+      if (delivery) {
+        await query(
+          "UPDATE pedidos SET estado = 'Reprogramado', actualizado_por_usuario_id = ? WHERE id = ?",
+          [req.user?.id || null, delivery.pedido_id]
+        );
+        await query(
+          "INSERT INTO historial_estado_pedido (pedido_id, estado, nota) VALUES (?, 'Reprogramado', 'Estado actualizado desde Mis entregas')",
+          [delivery.pedido_id]
+        );
+      }
+    }
     await req.audit({
       action: "DELIVERY_STATUS",
       entityId: req.params.id,
       detail: status,
     });
+    res.json({ ok: true });
+  }
+);
+
+app.get("/api/logistics/deliveries/search", requireRole(ACCESS.logistics), async (req, res) => {
+  const { q } = req.query || {};
+  if (!q || String(q).trim().length < 2) return res.json([]);
+  const term = `%${String(q).trim()}%`;
+  const rows = await query(
+    `SELECT e.id as delivery_id, c.nombre_completo as customer_name, c.zona, cam.placa as truck_plate, r.nombre as driver_name, e.estado as status, p.id as order_id
+     FROM entregas e
+     JOIN pedidos p ON p.id = e.pedido_id
+     JOIN clientes c ON c.id = p.cliente_id
+     JOIN camiones cam ON cam.id = e.camion_id
+     JOIN repartidores r ON r.id = e.repartidor_id
+     WHERE c.nombre_completo LIKE ? AND e.estado NOT IN ('Entregado','Cancelado')
+     ORDER BY e.id DESC
+     LIMIT 20`,
+    [term]
+  );
+  res.json(rows);
+});
+
+app.patch(
+  "/api/logistics/deliveries/:id/reassign",
+  requireRole(ACCESS.logistics),
+  async (req, res) => {
+    const { truck_id, driver_id } = req.body || {};
+    if (!truck_id || !driver_id) {
+      return res.status(400).json({ error: "truck_id y driver_id son requeridos" });
+    }
+    const [existing] = await query("SELECT id, pedido_id FROM entregas WHERE id = ?", [req.params.id]);
+    if (!existing) {
+      return res.status(404).json({ error: "Entrega no encontrada" });
+    }
+    await query(
+      "UPDATE entregas SET camion_id = ?, repartidor_id = ?, actualizado_por_usuario_id = ? WHERE id = ?",
+      [truck_id, driver_id, req.user?.id || null, req.params.id]
+    );
+    await query(
+      "INSERT INTO historial_estado_pedido (pedido_id, estado, nota) VALUES (?, 'Reasignado', 'Camión y/o repartidor reasignado')",
+      [existing.pedido_id]
+    );
+    await req.audit({ action: "DELIVERY_REASSIGN", entityId: req.params.id, detail: `truck=${truck_id} driver=${driver_id}` });
     res.json({ ok: true });
   }
 );
@@ -1623,10 +1683,10 @@ app.get("/api/logistics/truck-orders", requireRole(ACCESS.logistics), async (req
     dateClause =
       " AND (DATE(CONVERT_TZ(COALESCE(e.entregado_en, p.fecha_programada), '+00:00', '-04:00')) = ? OR (e.estado = 'Entregado' AND DATE(CONVERT_TZ(e.entregado_en, '+00:00', '-04:00')) = ?))";
     dateParams = [delivery_date, delivery_date];
-  } else if (scheduled_date) {
-    dateClause =
-      " AND (DATE(CONVERT_TZ(p.fecha_programada, '+00:00', '-04:00')) = ? OR (e.estado = 'Entregado' AND DATE(CONVERT_TZ(e.entregado_en, '+00:00', '-04:00')) = ?))";
-    dateParams = [scheduled_date, scheduled_date];
+  } else if (scheduled_date && String(scheduled_date).trim().length >= 10) {
+    const dateOnly = String(scheduled_date).trim().slice(0, 10);
+    dateClause = " AND p.fecha_programada = ?";
+    dateParams = [dateOnly];
   } else if (deliveredTo) {
     dateClause = " AND e.entregado_en <= ?";
     dateParams = [deliveredTo];
