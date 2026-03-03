@@ -110,6 +110,18 @@ function toDateOnly(value) {
   return s.length >= 10 ? s.slice(0, 10) : null;
 }
 
+/** Fecha de hoy en La Paz, Bolivia (America/La_Paz, UTC-4). Formato YYYY-MM-DD. */
+function getTodayLaPaz() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/La_Paz",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const get = (type) => parts.find((p) => p.type === type).value;
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
+
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -1592,7 +1604,7 @@ app.get("/api/logistics/truck-summary", requireRole(ACCESS.logistics), async (re
 });
 
 app.get("/api/logistics/truck-orders", requireRole(ACCESS.logistics), async (req, res) => {
-  const { truck_id, delivered_to, scheduled_date, delivery_date } = req.query || {};
+  const { truck_id, delivered_to, scheduled_date, delivery_date, fecha_registro } = req.query || {};
   if (!truck_id) {
     return res.status(400).json({ error: "truck_id requerido" });
   }
@@ -1603,7 +1615,11 @@ app.get("/api/logistics/truck-orders", requireRole(ACCESS.logistics), async (req
   const deliveredTo = delivered_to ? `${delivered_to} 23:59:59` : null;
   let dateClause = "";
   let dateParams = [];
-  if (delivery_date) {
+  if (fecha_registro && String(fecha_registro).trim().length >= 10) {
+    const dateOnly = String(fecha_registro).trim().slice(0, 10);
+    dateClause = " AND DATE(CONVERT_TZ(p.fecha_creacion, '+00:00', '-04:00')) = ?";
+    dateParams = [dateOnly];
+  } else if (delivery_date) {
     dateClause =
       " AND (DATE(CONVERT_TZ(COALESCE(e.entregado_en, p.fecha_programada), '+00:00', '-04:00')) = ? OR (e.estado = 'Entregado' AND DATE(CONVERT_TZ(e.entregado_en, '+00:00', '-04:00')) = ?))";
     dateParams = [delivery_date, delivery_date];
@@ -1619,7 +1635,7 @@ app.get("/api/logistics/truck-orders", requireRole(ACCESS.logistics), async (req
     `SELECT
       p.id,
       p.estado as status,
-      p.fecha_programada as scheduled_date,
+      DATE_FORMAT(p.fecha_programada, '%Y-%m-%d') as scheduled_date,
       c.nombre_completo as customer_name,
       c.telefono_principal as phone,
       c.telefono_secundario as phone_secondary,
@@ -1665,7 +1681,7 @@ app.post("/api/logistics/returns", requireRole(ACCESS.logistics), async (req, re
   if (allowedTrucks !== null && (allowedTrucks.length === 0 || !allowedTrucks.map(Number).includes(Number(truck_id)))) {
     return res.status(403).json({ error: "Solo puede registrar devoluciones de sus propios camiones." });
   }
-  const expectedDate = return_date || new Date().toISOString().slice(0, 10);
+  const expectedDate = return_date || getTodayLaPaz();
   const [deliveredTotalRow] = await query(
     `SELECT COALESCE(SUM(oi.cantidad * oi.precio), 0) as total
      FROM entregas e
@@ -2078,6 +2094,7 @@ app.get(
         p.id as order_id,
         CASE WHEN e.estado IN ('Entregado','Cancelado') THEN e.estado ELSE p.estado END as status,
         p.fecha_creacion as created_at,
+        DATE_FORMAT(p.fecha_programada, '%Y-%m-%d') as scheduled_date,
         c.nombre_completo as customer_name,
         COALESCE(dc.direccion, c.direccion) as address,
         c.zona as zone,
@@ -2096,7 +2113,7 @@ app.get(
        JOIN items_pedido oi ON oi.pedido_id = p.id
        JOIN productos pr ON pr.id = oi.producto_id
        WHERE ${where.join(" AND ")}
-       GROUP BY p.id, CASE WHEN e.estado IN ('Entregado','Cancelado') THEN e.estado ELSE p.estado END, p.fecha_creacion, c.nombre_completo, address, cam.placa, rep.nombre, u.nombre
+       GROUP BY p.id, CASE WHEN e.estado IN ('Entregado','Cancelado') THEN e.estado ELSE p.estado END, p.fecha_creacion, p.fecha_programada, c.nombre_completo, address, cam.placa, rep.nombre, u.nombre
        ORDER BY p.id DESC`,
       params
     );

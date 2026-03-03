@@ -1,0 +1,12 @@
+# Monta el código del host para que los cambios se reflejen sin reconstruir.
+# Si borras este archivo, los contenedores usarán solo el código de la imagen (hay que hacer build).
+
+services:
+  frontend:
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules  # conserva node_modules de la imagen
+  backend:
+    volumes:
+      - ./backend:/app
+      - /app/node_modules

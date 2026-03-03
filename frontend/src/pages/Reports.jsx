@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import api from "../api";
+import { getTodayLaPaz } from "../utils/dateUtils";
 
 function statusClass(status) {
   if (!status) return "tag";
@@ -23,17 +24,11 @@ export default function Reports() {
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryError, setSummaryError] = useState("");
   const [trucks, setTrucks] = useState([]);
-  const [summaryFilters, setSummaryFilters] = useState(() => {
-    const now = new Date();
-    const todayIso = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
-      .toISOString()
-      .slice(0, 10);
-    return {
-      date: todayIso,
-      truck_id: "",
-      status: "",
-    };
-  });
+  const [summaryFilters, setSummaryFilters] = useState(() => ({
+    date: getTodayLaPaz(),
+    truck_id: "",
+    status: "",
+  }));
 
   function buildReportParams(filters) {
     const params = filters || summaryFilters;
@@ -126,12 +121,17 @@ export default function Reports() {
   function printReport() {
     const now = new Date().toLocaleString();
     const summaryFilterText = `Filtro: fecha=${summaryFilters.date || "-"}, estado=${summaryFilters.status || "-"}, camión=${summaryFilters.truck_id || "-"}`;
+    const fmtScheduled = (v) => {
+      if (!v || String(v).trim().length < 10) return "-";
+      const [y, m, d] = String(v).trim().slice(0, 10).split("-");
+      return d && m && y ? `${d}/${m}/${y}` : "-";
+    };
     const summaryRowsHtml = sortedSummaryRows
       .map(
         (s) =>
           `<tr><td>${s.order_id}</td><td>${s.customer_name}</td><td>${s.address || "-"}</td><td>${s.status}</td><td>${
             s.created_at ? new Date(s.created_at).toLocaleString() : "-"
-          }</td><td>${s.truck_plate || "-"}</td><td>${s.driver_name || "-"}</td><td>${s.zone || "-"}</td><td>${s.order_detail || "-"}</td><td>Bs. ${Number(s.total || 0).toFixed(2)}</td></tr>`
+          }</td><td>${fmtScheduled(s.scheduled_date)}</td><td>${s.truck_plate || "-"}</td><td>${s.driver_name || "-"}</td><td>${s.zone || "-"}</td><td>${s.order_detail || "-"}</td><td>Bs. ${Number(s.total || 0).toFixed(2)}</td></tr>`
       )
       .join("");
 
@@ -156,9 +156,9 @@ export default function Reports() {
           <div class="meta">${summaryFilterText}</div>
           <table>
             <thead>
-              <tr><th>Pedido</th><th>Nombre</th><th>Dirección</th><th>Estado</th><th>Fecha</th><th>Camión</th><th>Repartidor</th><th>Zona</th><th>Detalle</th><th>Total</th></tr>
+              <tr><th>Pedido</th><th>Nombre</th><th>Dirección</th><th>Estado</th><th>Fecha</th><th>Fecha programada</th><th>Camión</th><th>Repartidor</th><th>Zona</th><th>Detalle</th><th>Total</th></tr>
             </thead>
-            <tbody>${summaryRowsHtml || "<tr><td colspan='10'>Sin datos.</td></tr>"}</tbody>
+            <tbody>${summaryRowsHtml || "<tr><td colspan='11'>Sin datos.</td></tr>"}</tbody>
           </table>
         </body>
       </html>
@@ -227,12 +227,13 @@ export default function Reports() {
         </div>
         <table className="table" style={{ marginTop: 8 }}>
           <thead>
-            <tr>
+              <tr>
               <th>Pedido</th>
               <th>Nombre</th>
               <th>Dirección</th>
               <th>Estado</th>
               <th>Fecha</th>
+              <th>Fecha programada</th>
               <th>Camión</th>
               <th>Repartidor</th>
               <th>Zona</th>
@@ -248,6 +249,7 @@ export default function Reports() {
                 <td>{s.address || "-"}</td>
                 <td><span className={statusClass(s.status)}>{s.status}</span></td>
                 <td>{s.created_at ? new Date(s.created_at).toLocaleString() : "-"}</td>
+                <td>{s.scheduled_date ? (() => { const [y, m, d] = String(s.scheduled_date).slice(0, 10).split("-"); return d && m && y ? `${d}/${m}/${y}` : "-"; })() : "-"}</td>
                 <td>{s.truck_plate || "-"}</td>
                 <td>{s.driver_name || "-"}</td>
                 <td>{s.zone || "-"}</td>
@@ -257,7 +259,7 @@ export default function Reports() {
             ))}
             {summaryRows.length === 0 && (
               <tr>
-                <td colSpan={10}>Sin datos.</td>
+                <td colSpan={11}>Sin datos.</td>
               </tr>
             )}
           </tbody>

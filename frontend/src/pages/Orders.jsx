@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import api from "../api";
+import { getTodayLaPaz } from "../utils/dateUtils";
 
 function statusClass(status) {
   if (!status) return "tag";
@@ -38,16 +39,10 @@ export default function Orders() {
   const [tiposCliente, setTiposCliente] = useState([]);
   const [tiposPrecio, setTiposPrecio] = useState([]);
   const [preciosProducto, setPreciosProducto] = useState([]);
-  const [orderFilters, setOrderFilters] = useState(() => {
-    const now = new Date();
-    const todayIso = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
-      .toISOString()
-      .slice(0, 10);
-    return {
-      status: "",
-      fecha_registro: todayIso,
-    };
-  });
+  const [orderFilters, setOrderFilters] = useState(() => ({
+    status: "",
+    fecha_registro: getTodayLaPaz(),
+  }));
   const [addressHint, setAddressHint] = useState("");
   const [form, setForm] = useState({
     customer_id: "",
@@ -180,18 +175,14 @@ export default function Orders() {
       setOrderError("Seleccione un cliente antes de crear el pedido.");
       return;
     }
-    const today = new Date();
+    const todayLaPaz = getTodayLaPaz();
     const hasOrderToday = orders.some((o) => {
       if (String(o.customer_id || o.cliente_id) !== String(form.customer_id)) {
         return false;
       }
       if (!o.created_at) return false;
-      const created = new Date(o.created_at);
-      return (
-        created.getFullYear() === today.getFullYear() &&
-        created.getMonth() === today.getMonth() &&
-        created.getDate() === today.getDate()
-      );
+      const createdInLaPaz = new Date(o.created_at).toLocaleDateString("en-CA", { timeZone: "America/La_Paz" });
+      return createdInLaPaz === todayLaPaz;
     });
     if (hasOrderToday) {
       const ok = window.confirm(
@@ -349,11 +340,7 @@ export default function Orders() {
     const nextStatus = statusUpdates[orderId];
     if (!nextStatus) return;
     if (nextStatus === "Reprogramado") {
-      const today = new Date();
-      const defaultDate = new Date(today.getTime() - today.getTimezoneOffset() * 60000)
-        .toISOString()
-        .slice(0, 10);
-      setReprogramDate(defaultDate);
+      setReprogramDate(getTodayLaPaz());
       setReprogramOrderId(orderId);
       return;
     }

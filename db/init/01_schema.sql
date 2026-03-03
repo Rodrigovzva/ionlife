@@ -52,8 +52,8 @@ CREATE TABLE IF NOT EXISTS usuarios_roles (
 CREATE TABLE IF NOT EXISTS clientes (
   id INT AUTO_INCREMENT PRIMARY KEY,
   nombre_completo VARCHAR(180) NOT NULL,
-  telefono_principal VARCHAR(40) NOT NULL,
-  telefono_secundario VARCHAR(40),
+  telefono_principal VARCHAR(100) NOT NULL,
+  telefono_secundario VARCHAR(100),
   direccion VARCHAR(255),
   zona VARCHAR(120),
   datos_gps VARCHAR(255),

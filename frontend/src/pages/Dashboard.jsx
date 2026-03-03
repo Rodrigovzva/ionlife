@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import api from "../api";
+import { getTodayLaPaz, addDaysLaPaz } from "../utils/dateUtils";
 import { Bar, Pie } from "react-chartjs-2";
 import {
   Chart as ChartJS,
@@ -22,16 +23,11 @@ export default function Dashboard({ user }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const range = useMemo(() => {
-    const to = new Date();
-    const from = new Date();
-    from.setDate(to.getDate() - 30);
-    return {
-      from: from.toISOString().slice(0, 10),
-      to: to.toISOString().slice(0, 10),
-      status: "Entregado",
-    };
-  }, []);
+  const range = useMemo(() => ({
+    from: addDaysLaPaz(-30),
+    to: getTodayLaPaz(),
+    status: "Entregado",
+  }), []);
 
   async function load() {
     setLoading(true);

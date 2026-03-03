@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../api";
+import { getTodayLaPaz } from "../utils/dateUtils";
 
 function statusClass(status) {
   if (!status) return "tag";
@@ -30,10 +31,7 @@ function formatDateTimeSafe(value) {
 
 export default function DriverDeliveries() {
   const navigate = useNavigate();
-  const today = new Date();
-  const todayIso = new Date(today.getTime() - today.getTimezoneOffset() * 60000)
-    .toISOString()
-    .slice(0, 10);
+  const todayIso = getTodayLaPaz();
   const [deliveries, setDeliveries] = useState([]);
   const [filterDate, setFilterDate] = useState(todayIso);
   const [filterTruck, setFilterTruck] = useState("");

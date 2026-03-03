@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import api from "../api";
+import { getTodayLaPaz } from "../utils/dateUtils";
 
 function statusClass(status) {
   if (!status) return "tag";
@@ -11,21 +12,43 @@ function statusClass(status) {
   return `tag status-${normalized}`;
 }
 
+const MESES_ES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+
+/** Formatea fecha (YYYY-MM-DD o ISO) a "d de mes de año" sin usar zona horaria. */
+function formatDateOnlyLaPaz(value) {
+  if (value == null) return "-";
+  const s = String(value).trim();
+  const match = s.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return "-";
+  const [, y, m, d] = match;
+  const monthNum = parseInt(m, 10);
+  if (monthNum < 1 || monthNum > 12) return "-";
+  const dayNum = parseInt(d, 10);
+  if (dayNum < 1 || dayNum > 31) return "-";
+  return `${dayNum} de ${MESES_ES[monthNum - 1]} de ${y}`;
+}
+
 function formatScheduledDate(value) {
   if (value == null || value === "") return "-";
   const s = String(value).trim();
-  const datePart = s.slice(0, 10);
-  if (datePart.length < 10 || !/^\d{4}-\d{2}-\d{2}$/.test(datePart)) return "-";
-  const d = new Date(datePart + "T12:00:00");
-  if (Number.isNaN(d.getTime())) return "-";
-  return d.toLocaleDateString("es");
+  const match = s.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return "-";
+  const [, y, m, d] = match;
+  const monthNum = parseInt(m, 10);
+  const dayNum = parseInt(d, 10);
+  if (monthNum < 1 || monthNum > 12 || dayNum < 1 || dayNum > 31) return "-";
+  return `${dayNum}/${monthNum}/${y}`;
+}
+
+/** Orden para previsualización y hoja impresa: por zona (A–Z) y numeración diaria 1, 2, 3… */
+function sortOrdersByZona(orders) {
+  return (orders || []).slice().sort((a, b) =>
+    (a.zona || "").localeCompare(b.zona || "", undefined, { sensitivity: "base" })
+  );
 }
 
 export default function Logistics({ user }) {
-  const today = new Date();
-  const todayIso = new Date(today.getTime() - today.getTimezoneOffset() * 60000)
-    .toISOString()
-    .slice(0, 10);
+  const todayIso = getTodayLaPaz();
   const isDriver = user?.roles?.includes("Repartidor");
   const isAdmin = user?.roles?.includes("Administrador del sistema");
   const isJefeLogistica = user?.roles?.includes("Jefe de logística");
@@ -74,9 +97,9 @@ export default function Logistics({ user }) {
   const [showPreview, setShowPreview] = useState(false);
   const [returnsHistory, setReturnsHistory] = useState([]);
   const [historyFrom, setHistoryFrom] = useState(() => {
-    const d = new Date();
-    d.setDate(1);
-    return d.toISOString().slice(0, 10);
+    const today = getTodayLaPaz();
+    const [y, m] = today.split("-").map(Number);
+    return `${y}-${String(m).padStart(2, "0")}-01`;
   });
   const [historyTo, setHistoryTo] = useState(todayIso);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -155,7 +178,7 @@ export default function Logistics({ user }) {
     const res = await api.get("/api/logistics/truck-orders", {
       params: { truck_id: truckId, scheduled_date: dateFilter },
     });
-    const rows = res.data || [];
+    const rows = sortOrdersByZona(res.data || []);
     const deliveredTotal = rows
       .filter((order) => order.status === "Entregado")
       .reduce((sum, order) => sum + Number(order.total || 0), 0);
@@ -323,28 +346,38 @@ export default function Logistics({ user }) {
     setPrintLoading(true);
     try {
       const res = await api.get("/api/logistics/truck-orders", {
-        params: {
-          truck_id: printTruckId,
-          scheduled_date: printDateFilter || undefined,
-        },
+        params: { truck_id: printTruckId, fecha_registro: printDateFilter || undefined },
       });
-      const orders = res.data || [];
+      const orders = sortOrdersByZona(res.data || []);
       const truck = trucks.find((t) => String(t.id) === String(printTruckId));
       const title = "Hoja de ruta";
-      const scheduledLabel = printDateFilter
-        ? new Date(`${printDateFilter}T12:00:00`).toLocaleDateString("es")
-        : "-";
+      const firstScheduled = orders.find((o) => o.scheduled_date != null && String(o.scheduled_date).trim().length >= 10);
+      const scheduledLabel = firstScheduled
+        ? formatDateOnlyLaPaz(firstScheduled.scheduled_date)
+        : formatDateOnlyLaPaz(printDateFilter);
       const driverName = orders[0]?.driver_name || "-";
       const printerName = user?.email || user?.name || "-";
       const truckName = orders[0]?.truck_plate || truck?.plate || "-";
+      const formatDateForPrint = (v) => {
+        if (v == null || v === "") return "-";
+        const s = String(v).trim();
+        const match = s.match(/(\d{4})-(\d{2})-(\d{2})/);
+        if (!match) return "-";
+        const [, y, m, d] = match;
+        const monthNum = parseInt(m, 10);
+        const dayNum = parseInt(d, 10);
+        if (monthNum < 1 || monthNum > 12 || dayNum < 1 || dayNum > 31) return "-";
+        return `${dayNum}/${monthNum}/${y}`;
+      };
       const rowsHtml = orders
         .map(
           (o, idx) => `
             <tr>
               <td>${idx + 1}</td>
               <td>${o.customer_name || "-"}</td>
-              <td>${o.zona || "-"}</td>
+              <td>${formatDateForPrint(o.scheduled_date)}</td>
               <td>${o.address || "-"}</td>
+              <td>${o.zona || "-"}</td>
               <td>${o.phone || "-"}</td>
               <td>${o.phone_secondary || "-"}</td>
               <td>${Number(o.packs_600 || 0)}</td>
@@ -433,6 +466,7 @@ export default function Logistics({ user }) {
               table { width: 100%; border-collapse: collapse; }
               th, td { border: 1px solid #ccc; padding: 3px 4px; text-align: left; font-size: 10px; vertical-align: top; line-height: 1.2; }
               th { background: #f2f4f7; font-size: 10px; }
+              th:nth-child(3), td:nth-child(3) { min-width: 90px; }
               .center { text-align: center; }
               .obs { min-width: 120px; }
               .summary { margin-top: 10px; font-size: 11px; }
@@ -455,8 +489,9 @@ export default function Logistics({ user }) {
                 <tr>
                   <th>Nº</th>
                   <th>Nombre cliente</th>
-                  <th>Zona</th>
+                  <th>Fecha programada</th>
                   <th>Dirección</th>
+                  <th>Zona</th>
                   <th>Tel. principal</th>
                   <th>Tel. secundario</th>
                   <th>Packs 600cc</th>
@@ -474,7 +509,7 @@ export default function Logistics({ user }) {
                 </tr>
               </thead>
               <tbody>
-                ${rowsHtml || "<tr><td colspan='18'>No hay pedidos asignados.</td></tr>"}
+                ${rowsHtml || "<tr><td colspan='19'>No hay pedidos asignados.</td></tr>"}
               </tbody>
             </table>
             <div class="summary">
@@ -645,12 +680,9 @@ export default function Logistics({ user }) {
     setPreviewLoading(true);
     try {
       const res = await api.get("/api/logistics/truck-orders", {
-        params: {
-          truck_id: printTruckId,
-          scheduled_date: printDateFilter || undefined,
-        },
+        params: { truck_id: printTruckId, fecha_registro: printDateFilter || undefined },
       });
-      setPreviewOrders(res.data || []);
+      setPreviewOrders(sortOrdersByZona(res.data || []));
       setShowPreview(true);
     } catch (_err) {
       setPreviewError("No se pudo cargar la previsualización.");
@@ -783,9 +815,9 @@ export default function Logistics({ user }) {
           <div style={{ marginTop: 8, marginBottom: 8 }}>
             <strong>Ventas realizadas (a depositar):</strong>
             <ul style={{ margin: "4px 0 0 0", paddingLeft: 20, fontSize: 13 }}>
-              {returnDeliveredOrders.map((o) => (
+              {returnDeliveredOrders.map((o, idx) => (
                 <li key={o.id}>
-                  #{o.id} {o.customer_name || "-"} — Bs. {Number(o.total || 0).toFixed(2)}
+                  {idx + 1}. {o.customer_name || "-"} — Bs. {Number(o.total || 0).toFixed(2)}
                 </li>
               ))}
             </ul>
@@ -1041,7 +1073,7 @@ export default function Logistics({ user }) {
         </div>
         <div className="card">
           <h4>Hoja de ruta (PDF)</h4>
-          <div className="form-row">
+          <div className="form-row" style={{ flexWrap: "wrap", gap: 8 }}>
             <select
               value={printTruckId}
               onChange={(e) => setPrintTruckId(e.target.value)}
@@ -1057,7 +1089,7 @@ export default function Logistics({ user }) {
               type="date"
               value={printDateFilter}
               onChange={(e) => setPrintDateFilter(e.target.value)}
-              placeholder="Fecha programada"
+              placeholder="Fecha de registro"
             />
             <button className="btn btn-outline" type="button" onClick={loadPreview} disabled={previewLoading}>
               {previewLoading ? "Cargando..." : "Previsualizar"}
@@ -1086,8 +1118,9 @@ export default function Logistics({ user }) {
                     <tr>
                       <th>Nº</th>
                       <th>Nombre cliente</th>
-                      <th>Zona</th>
+                      <th>Fecha programada</th>
                       <th>Dirección</th>
+                      <th>Zona</th>
                       <th>Tel. principal</th>
                       <th>Tel. secundario</th>
                       <th>Packs 600cc</th>
@@ -1107,8 +1140,9 @@ export default function Logistics({ user }) {
                       <tr key={o.id}>
                         <td>{idx + 1}</td>
                         <td>{o.customer_name || "-"}</td>
-                        <td>{o.zona || "-"}</td>
+                        <td>{formatScheduledDate(o.scheduled_date)}</td>
                         <td>{o.address || "-"}</td>
+                        <td>{o.zona || "-"}</td>
                         <td>{o.phone || "-"}</td>
                         <td>{o.phone_secondary || "-"}</td>
                         <td>{Number(o.packs_600 || 0)}</td>
@@ -1125,7 +1159,7 @@ export default function Logistics({ user }) {
                     ))}
                     {previewOrders.length === 0 && (
                       <tr>
-                        <td colSpan={16}>No hay pedidos asignados.</td>
+                        <td colSpan={17}>No hay pedidos asignados.</td>
                       </tr>
                     )}
                   </tbody>
