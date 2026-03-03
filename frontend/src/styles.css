@@ -305,6 +305,20 @@ textarea {
   min-width: 100%;
 }
 
+/* Mis entregas: pantalla más ancha y sin scroll horizontal */
+.container.page-mis-entregas {
+  width: min(1600px, 98%);
+}
+
+.table-wrap-no-scroll {
+  width: 100%;
+  overflow: visible;
+}
+
+.table-wrap-no-scroll .table {
+  min-width: 100%;
+}
+
 .table-deliveries,
 .table-sales {
   min-width: 980px;

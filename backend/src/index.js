@@ -1359,7 +1359,7 @@ app.get("/api/logistics/pending-orders", requireRole(ACCESS.logistics), async (r
     return res.json([]);
   }
   const rows = await query(
-    "SELECT p.id, p.estado as status, p.notas as notes, c.nombre_completo as customer_name, c.zona, c.direccion, c.telefono_principal as phone, p.fecha_creacion as created_at FROM pedidos p JOIN clientes c ON c.id = p.cliente_id WHERE p.estado IN ('Pendiente', 'Reprogramado', 'Creado') ORDER BY p.id DESC"
+    "SELECT p.id, p.estado as status, p.notas as notes, c.nombre_completo as customer_name, c.zona, c.direccion, c.telefono_principal as phone, p.fecha_creacion as created_at, p.fecha_programada as scheduled_date FROM pedidos p JOIN clientes c ON c.id = p.cliente_id WHERE p.estado IN ('Pendiente', 'Reprogramado', 'Creado') ORDER BY p.id DESC"
   );
   res.json(rows);
 });

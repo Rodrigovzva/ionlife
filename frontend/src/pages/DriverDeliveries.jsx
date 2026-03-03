@@ -35,6 +35,7 @@ export default function DriverDeliveries() {
   const [deliveries, setDeliveries] = useState([]);
   const [filterDate, setFilterDate] = useState(todayIso);
   const [filterTruck, setFilterTruck] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [sales, setSales] = useState([]);
   const [statusUpdates, setStatusUpdates] = useState({});
   const [loading, setLoading] = useState(false);
@@ -83,9 +84,34 @@ export default function DriverDeliveries() {
     () => [...new Set(deliveries.map((d) => d.camion).filter(Boolean))].sort(),
     [deliveries]
   );
-  const filteredDeliveries = filterTruck
+  const filteredByTruck = filterTruck
     ? deliveries.filter((d) => d.camion === filterTruck)
     : deliveries;
+  const searchLower = (searchQuery || "").trim().toLowerCase();
+  const filteredBySearch = searchLower
+    ? filteredByTruck.filter((d) => {
+        const text = [
+          d.cliente,
+          d.direccion,
+          d.zona,
+          d.repartidor,
+          d.camion,
+          d.pedido_detalle,
+          d.estado,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return text.includes(searchLower);
+      })
+    : filteredByTruck;
+  const filteredDeliveries = useMemo(
+    () =>
+      [...filteredBySearch].sort((a, b) =>
+        (a.zona || "").localeCompare(b.zona || "", undefined, { sensitivity: "base" })
+      ),
+    [filteredBySearch]
+  );
 
   const filteredSales = filterTruck
     ? sales.filter((s) => s.camion === filterTruck)
@@ -107,11 +133,11 @@ export default function DriverDeliveries() {
   }
 
   return (
-    <div className="container page">
+    <div className="container page page-mis-entregas">
       <h2>Mis entregas</h2>
       <div className="card">
         {error && <div className="error" style={{ marginBottom: 8 }}>{error}</div>}
-        <div className="form-row" style={{ marginBottom: 8 }}>
+        <div className="form-row" style={{ marginBottom: 8, flexWrap: "wrap", gap: 12 }}>
           <div className="form-field">
             <label>Fecha</label>
             <input
@@ -134,12 +160,22 @@ export default function DriverDeliveries() {
               ))}
             </select>
           </div>
+          <div className="form-field" style={{ flex: "1 1 260px", minWidth: 200 }}>
+            <label>Buscar</label>
+            <input
+              type="search"
+              placeholder="Cliente, dirección, zona, pedido..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{ width: "100%" }}
+            />
+          </div>
         </div>
-        <div className="table-scroll">
+        <div className="table-wrap-no-scroll">
           <table className="table table-deliveries">
             <thead>
               <tr>
-                <th>ID Entrega</th>
+                <th>Nº</th>
                 <th>Cliente</th>
                 <th className="col-address">Dirección</th>
                 <th>Zona</th>
@@ -155,9 +191,9 @@ export default function DriverDeliveries() {
               </tr>
             </thead>
             <tbody>
-              {filteredDeliveries.map((d) => (
+              {filteredDeliveries.map((d, idx) => (
                 <tr key={d.id}>
-                  <td>{d.id}</td>
+                  <td>{idx + 1}</td>
                   <td>{d.cliente}</td>
                   <td className="col-address">{d.direccion || "-"}</td>
                   <td>{d.zona || "-"}</td>
@@ -209,9 +245,11 @@ export default function DriverDeliveries() {
               {filteredDeliveries.length === 0 && (
                 <tr>
                   <td colSpan={13}>
-                    {filterTruck
-                      ? "No hay entregas para el camión seleccionado."
-                      : "No hay entregas asignadas."}
+                    {searchLower
+                      ? "No hay coincidencias con la búsqueda."
+                      : filterTruck
+                        ? "No hay entregas para el camión seleccionado."
+                        : "No hay entregas asignadas."}
                   </td>
                 </tr>
               )}
@@ -232,11 +270,11 @@ export default function DriverDeliveries() {
             Bs. {filteredSales.reduce((sum, s) => sum + Number(s.total || 0), 0).toFixed(2)}
           </strong>
         </div>
-        <div className="table-scroll">
+        <div className="table-wrap-no-scroll">
           <table className="table table-sales">
             <thead>
               <tr>
-                <th>Pedido</th>
+                <th>Nº</th>
                 <th>Cliente</th>
                 <th>Estado</th>
                 <th>Entregado</th>
@@ -246,9 +284,9 @@ export default function DriverDeliveries() {
               </tr>
             </thead>
             <tbody>
-              {filteredSales.map((s) => (
+              {filteredSales.map((s, idx) => (
                 <tr key={s.pedido_id}>
-                  <td>{s.pedido_id}</td>
+                  <td>{idx + 1}</td>
                   <td>{s.cliente}</td>
                   <td><span className={statusClass(s.estado_entrega)}>{s.estado_entrega}</span></td>
                   <td>{s.entregado_en ? new Date(s.entregado_en).toLocaleString() : "-"}</td>

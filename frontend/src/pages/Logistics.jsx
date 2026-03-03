@@ -1016,6 +1016,8 @@ export default function Logistics({ user }) {
                 <th>Dirección</th>
                 <th>Observaciones</th>
                 <th>Tel. principal</th>
+                <th>Fecha creación</th>
+                <th>Fecha programada</th>
               </tr>
             </thead>
             <tbody>
@@ -1035,11 +1037,13 @@ export default function Logistics({ user }) {
                   <td>{p.direccion || "-"}</td>
                   <td>{p.notes || "-"}</td>
                   <td>{p.phone || "-"}</td>
+                  <td>{p.created_at ? (() => { const d = new Date(p.created_at); return Number.isNaN(d.getTime()) ? "-" : d.toLocaleDateString("es") + " " + d.toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" }); })() : "-"}</td>
+                  <td>{formatScheduledDate(p.scheduled_date)}</td>
                 </tr>
               ))}
               {pendingOrders.length === 0 && (
                 <tr>
-                  <td colSpan={8}>No hay pedidos pendientes.</td>
+                  <td colSpan={10}>No hay pedidos pendientes.</td>
                 </tr>
               )}
             </tbody>

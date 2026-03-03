@@ -128,8 +128,8 @@ export default function Reports() {
     };
     const summaryRowsHtml = sortedSummaryRows
       .map(
-        (s) =>
-          `<tr><td>${s.order_id}</td><td>${s.customer_name}</td><td>${s.address || "-"}</td><td>${s.status}</td><td>${
+        (s, idx) =>
+          `<tr><td>${idx + 1}</td><td>${s.customer_name}</td><td>${s.address || "-"}</td><td>${s.status}</td><td>${
             s.created_at ? new Date(s.created_at).toLocaleString() : "-"
           }</td><td>${fmtScheduled(s.scheduled_date)}</td><td>${s.truck_plate || "-"}</td><td>${s.driver_name || "-"}</td><td>${s.zone || "-"}</td><td>${s.order_detail || "-"}</td><td>Bs. ${Number(s.total || 0).toFixed(2)}</td></tr>`
       )
@@ -156,7 +156,7 @@ export default function Reports() {
           <div class="meta">${summaryFilterText}</div>
           <table>
             <thead>
-              <tr><th>Pedido</th><th>Nombre</th><th>Dirección</th><th>Estado</th><th>Fecha</th><th>Fecha programada</th><th>Camión</th><th>Repartidor</th><th>Zona</th><th>Detalle</th><th>Total</th></tr>
+              <tr><th>Nº</th><th>Nombre</th><th>Dirección</th><th>Estado</th><th>Fecha</th><th>Fecha programada</th><th>Camión</th><th>Repartidor</th><th>Zona</th><th>Detalle</th><th>Total</th></tr>
             </thead>
             <tbody>${summaryRowsHtml || "<tr><td colspan='11'>Sin datos.</td></tr>"}</tbody>
           </table>
@@ -228,7 +228,7 @@ export default function Reports() {
         <table className="table" style={{ marginTop: 8 }}>
           <thead>
               <tr>
-              <th>Pedido</th>
+              <th>Nº</th>
               <th>Nombre</th>
               <th>Dirección</th>
               <th>Estado</th>
@@ -242,9 +242,9 @@ export default function Reports() {
             </tr>
           </thead>
           <tbody>
-            {sortedSummaryRows.map((s) => (
+            {sortedSummaryRows.map((s, idx) => (
               <tr key={s.order_id}>
-                <td>{s.order_id}</td>
+                <td>{idx + 1}</td>
                 <td>{s.customer_name}</td>
                 <td>{s.address || "-"}</td>
                 <td><span className={statusClass(s.status)}>{s.status}</span></td>
