@@ -116,7 +116,7 @@ export default function Logistics({ user }) {
   // Reasignación de entrega
   const [reassignSearch, setReassignSearch] = useState("");
   const [reassignResults, setReassignResults] = useState([]);
-  const [reassignSelected, setReassignSelected] = useState(null);
+  const [reassignSelection, setReassignSelection] = useState({});
   const [reassignTruckId, setReassignTruckId] = useState("");
   const [reassignDriverId, setReassignDriverId] = useState("");
   const [reassignLoading, setReassignLoading] = useState(false);
@@ -126,7 +126,7 @@ export default function Logistics({ user }) {
 
   async function searchReassignDeliveries(q) {
     setReassignSearch(q);
-    setReassignSelected(null);
+    setReassignSelection({});
     if (!q || q.trim().length < 2) { setReassignResults([]); return; }
     setReassignSearchLoading(true);
     try {
@@ -143,20 +143,24 @@ export default function Logistics({ user }) {
     e.preventDefault();
     setReassignError("");
     setReassignSuccess("");
-    if (!reassignSelected || !reassignTruckId || !reassignDriverId) {
-      setReassignError("Seleccione un cliente de la lista, camión y repartidor.");
+    const selectedIds = Object.keys(reassignSelection).filter((id) => reassignSelection[id]);
+    if (selectedIds.length === 0 || !reassignTruckId || !reassignDriverId) {
+      setReassignError("Seleccione al menos una entrega, camión y repartidor.");
       return;
     }
     setReassignLoading(true);
     try {
-      await api.patch(`/api/logistics/deliveries/${reassignSelected.delivery_id}/reassign`, {
+      const res = await api.post("/api/logistics/deliveries/reassign-bulk", {
+        delivery_ids: selectedIds.map(Number),
         truck_id: Number(reassignTruckId),
         driver_id: Number(reassignDriverId),
       });
-      setReassignSuccess(`Entrega de ${reassignSelected.customer_name} reasignada correctamente.`);
+      const updated = res.data?.reassigned ?? selectedIds.length;
+      const skipped = res.data?.skipped ?? 0;
+      setReassignSuccess(`Reasignadas: ${updated}. ${skipped > 0 ? `Omitidas: ${skipped}.` : ""}`);
       setReassignSearch("");
       setReassignResults([]);
-      setReassignSelected(null);
+      setReassignSelection({});
       setReassignTruckId("");
       setReassignDriverId("");
       if (returnForm.truck_id) loadTruckOrders(returnForm.truck_id, returnDate);
@@ -1327,7 +1331,7 @@ export default function Logistics({ user }) {
           <div className="card" style={{ marginTop: 16 }}>
             <h4>Reasignar entrega a otro camión / repartidor</h4>
             <div style={{ color: "#6b7a8c", fontSize: 13, marginBottom: 10 }}>
-              Escribe el nombre del cliente para encontrar su entrega activa y reasignarla.
+              Escribe el nombre del cliente para encontrar entregas activas y reasignarlas en forma masiva.
             </div>
             <form onSubmit={submitReassign} className="form">
               <div className="form-row" style={{ flexWrap: "wrap", gap: 10, alignItems: "flex-start" }}>
@@ -1342,46 +1346,6 @@ export default function Logistics({ user }) {
                   />
                   {reassignSearchLoading && (
                     <div style={{ fontSize: 12, color: "#6b7a8c", marginTop: 2 }}>Buscando...</div>
-                  )}
-                  {!reassignSelected && reassignResults.length > 0 && (
-                    <ul style={{
-                      position: "absolute", zIndex: 100, background: "#fff",
-                      border: "1px solid #d9e3ec", borderRadius: 6, margin: 0,
-                      padding: 0, listStyle: "none", width: "100%", maxHeight: 220,
-                      overflowY: "auto", boxShadow: "0 4px 16px rgba(0,0,0,0.10)"
-                    }}>
-                      {reassignResults.map((r) => (
-                        <li
-                          key={r.delivery_id}
-                          onClick={() => {
-                            setReassignSelected(r);
-                            setReassignSearch(r.customer_name);
-                            setReassignResults([]);
-                          }}
-                          style={{
-                            padding: "8px 12px", cursor: "pointer", borderBottom: "1px solid #f0f4f8",
-                            fontSize: 13
-                          }}
-                          onMouseEnter={(e) => e.currentTarget.style.background = "#eef5fb"}
-                          onMouseLeave={(e) => e.currentTarget.style.background = "#fff"}
-                        >
-                          <strong>{r.customer_name}</strong>
-                          <span style={{ color: "#6b7a8c", marginLeft: 8 }}>
-                            {r.zona || ""} — {r.truck_plate} / {r.driver_name}
-                          </span>
-                          <span style={{ float: "right", fontSize: 11, color: "#aaa" }}>
-                            #{r.delivery_id}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {reassignSelected && (
-                    <div style={{ marginTop: 4, fontSize: 12, color: "#0a7a6d", background: "#e5f6f3", padding: "4px 8px", borderRadius: 4 }}>
-                      Entrega #{reassignSelected.delivery_id} — {reassignSelected.truck_plate} / {reassignSelected.driver_name}
-                      <button type="button" onClick={() => { setReassignSelected(null); setReassignSearch(""); setReassignResults([]); }}
-                        style={{ marginLeft: 8, background: "none", border: "none", cursor: "pointer", color: "#c0392b", fontWeight: 700 }}>✕</button>
-                    </div>
                   )}
                 </div>
                 <select
@@ -1402,11 +1366,87 @@ export default function Logistics({ user }) {
                     <option key={d.id} value={d.id}>{d.name}</option>
                   ))}
                 </select>
-                <button className="btn" type="submit" disabled={reassignLoading || !reassignSelected}>
-                  {reassignLoading ? "Reasignando..." : "Reasignar"}
+                <button
+                  className="btn"
+                  type="submit"
+                  disabled={
+                    reassignLoading ||
+                    Object.keys(reassignSelection).filter((id) => reassignSelection[id]).length === 0
+                  }
+                >
+                  {reassignLoading ? "Reasignando..." : "Reasignar seleccionados"}
                 </button>
               </div>
             </form>
+            <div style={{ marginTop: 10, fontSize: 13, color: "#6b7a8c" }}>
+              Seleccionados: <strong>{Object.keys(reassignSelection).filter((id) => reassignSelection[id]).length}</strong>
+            </div>
+            {reassignSearch.trim().length >= 2 && reassignResults.length === 0 && !reassignSearchLoading && (
+              <div style={{ marginTop: 8, fontSize: 13, color: "#6b7a8c" }}>Sin resultados.</div>
+            )}
+            {reassignResults.length > 0 && (
+              <div className="table-scroll" style={{ marginTop: 8 }}>
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>
+                        <input
+                          type="checkbox"
+                          checked={
+                            reassignResults.length > 0 &&
+                            reassignResults.every((r) => reassignSelection[r.delivery_id])
+                          }
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            if (!checked) {
+                              setReassignSelection({});
+                              return;
+                            }
+                            const next = {};
+                            reassignResults.forEach((r) => {
+                              next[r.delivery_id] = true;
+                            });
+                            setReassignSelection(next);
+                          }}
+                        />
+                      </th>
+                      <th>Cliente</th>
+                      <th>Zona</th>
+                      <th>Camión</th>
+                      <th>Repartidor</th>
+                      <th>Estado</th>
+                      <th>Entrega</th>
+                      <th>Pedido</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reassignResults.map((r) => (
+                      <tr key={r.delivery_id}>
+                        <td>
+                          <input
+                            type="checkbox"
+                            checked={!!reassignSelection[r.delivery_id]}
+                            onChange={() =>
+                              setReassignSelection((prev) => ({
+                                ...prev,
+                                [r.delivery_id]: !prev[r.delivery_id],
+                              }))
+                            }
+                          />
+                        </td>
+                        <td>{r.customer_name}</td>
+                        <td>{r.zona || "-"}</td>
+                        <td>{r.truck_plate}</td>
+                        <td>{r.driver_name}</td>
+                        <td><span className={statusClass(r.status)}>{r.status}</span></td>
+                        <td>#{r.delivery_id}</td>
+                        <td>#{r.order_id}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
             {reassignError && <div className="error" style={{ marginTop: 8 }}>{reassignError}</div>}
             {reassignSuccess && <div className="tag" style={{ marginTop: 8, background: "#e5f6f3", color: "#0a7a6d" }}>{reassignSuccess}</div>}
           </div>

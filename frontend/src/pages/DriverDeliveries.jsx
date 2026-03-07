@@ -208,7 +208,7 @@ export default function DriverDeliveries() {
                     {formatDateOnly(d.programado_en || d.fecha_programada)}
                   </td>
                   <td>
-                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <div className="mis-entregas-actions">
                       <button
                         className="btn btn-outline btn-sm"
                         type="button"

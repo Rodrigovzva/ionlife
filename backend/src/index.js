@@ -1680,6 +1680,57 @@ app.patch(
   }
 );
 
+app.post(
+  "/api/logistics/deliveries/reassign-bulk",
+  requireRole(ACCESS.logistics),
+  async (req, res) => {
+    const { delivery_ids, truck_id, driver_id } = req.body || {};
+    if (!Array.isArray(delivery_ids) || delivery_ids.length === 0 || !truck_id || !driver_id) {
+      return res.status(400).json({ error: "delivery_ids, truck_id y driver_id son requeridos" });
+    }
+    const ids = delivery_ids.map(Number).filter((id) => Number.isFinite(id));
+    if (ids.length === 0) {
+      return res.status(400).json({ error: "delivery_ids inválidos" });
+    }
+    const placeholders = ids.map(() => "?").join(",");
+    const deliveries = await query(
+      `SELECT id, pedido_id FROM entregas WHERE id IN (${placeholders}) AND estado NOT IN ('Entregado','Cancelado')`,
+      ids
+    );
+    if (deliveries.length === 0) {
+      return res.status(404).json({ error: "No hay entregas válidas para reasignar" });
+    }
+    const validIds = deliveries.map((d) => d.id);
+    const updatePlaceholders = validIds.map(() => "?").join(",");
+    const updateResult = await query(
+      `UPDATE entregas SET camion_id = ?, repartidor_id = ?, actualizado_por_usuario_id = ? WHERE id IN (${updatePlaceholders})`,
+      [truck_id, driver_id, req.user?.id || null, ...validIds]
+    );
+    if (deliveries.length > 0) {
+      const insertValues = deliveries
+        .map(() => "(?, 'Reasignado', 'Camión y/o repartidor reasignado (masivo)')")
+        .join(",");
+      const insertParams = deliveries.map((d) => d.pedido_id);
+      await query(
+        `INSERT INTO historial_estado_pedido (pedido_id, estado, nota) VALUES ${insertValues}`,
+        insertParams
+      );
+    }
+    await req.audit({
+      action: "DELIVERY_REASSIGN_BULK",
+      entityId: 0,
+      detail: `count=${validIds.length} truck=${truck_id} driver=${driver_id}`,
+    });
+    res.json({
+      ok: true,
+      updated: updateResult?.affectedRows ?? validIds.length,
+      selected: ids.length,
+      reassigned: validIds.length,
+      skipped: Math.max(0, ids.length - validIds.length),
+    });
+  }
+);
+
 async function getCentralWarehouseId() {
   const [central] = await query(
     "SELECT id FROM almacenes WHERE LOWER(nombre) LIKE '%central%' ORDER BY id ASC LIMIT 1"

@@ -35,7 +35,7 @@ a {
 }
 
 .container {
-  width: min(1280px, 96%);
+  width: min(1600px, 98%);
   margin: 0 auto;
 }
 
@@ -61,6 +61,18 @@ a {
   vertical-align: top;
   white-space: normal;
   word-break: break-word;
+}
+
+@media (max-width: 1024px) {
+  .container {
+    width: 96%;
+  }
+}
+
+@media (max-width: 768px) {
+  .container {
+    width: 94%;
+  }
 }
 
 .nav {
@@ -369,6 +381,60 @@ textarea {
 .table-deliveries .col-order {
   min-width: 300px;
   width: 30%;
+}
+
+.page-mis-entregas .mis-entregas-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 1024px) {
+  .table-wrap-no-scroll {
+    overflow-x: auto;
+  }
+  .table-deliveries,
+  .table-sales {
+    min-width: 980px;
+  }
+}
+
+@media (max-width: 768px) {
+  .table-deliveries,
+  .table-sales {
+    min-width: 860px;
+  }
+  .table-deliveries th,
+  .table-deliveries td,
+  .table-sales th,
+  .table-sales td {
+    font-size: 0.82rem;
+    padding: 6px 8px;
+  }
+  .page-mis-entregas .mis-entregas-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+@media (max-width: 540px) {
+  .table-deliveries th:nth-child(5),
+  .table-deliveries td:nth-child(5),
+  .table-deliveries th:nth-child(6),
+  .table-deliveries td:nth-child(6),
+  .table-deliveries th:nth-child(11),
+  .table-deliveries td:nth-child(11),
+  .table-deliveries th:nth-child(12),
+  .table-deliveries td:nth-child(12) {
+    display: none;
+  }
+  .table-sales th:nth-child(5),
+  .table-sales td:nth-child(5),
+  .table-sales th:nth-child(6),
+  .table-sales td:nth-child(6) {
+    display: none;
+  }
 }
 
 .tag {
