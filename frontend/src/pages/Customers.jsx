@@ -169,18 +169,26 @@ export default function Customers({ user }) {
   }, [form.datos_gps, mapPosition]);
 
   async function loadCustomers(offset = 0) {
-    const res = await api.get("/api/customers", { params: { limit: PAGE_SIZE, offset } });
-    setCustomers(res.data.rows || []);
-    setCustomersTotal(res.data.total || 0);
-    setCustomersOffset(offset);
+    try {
+      const res = await api.get("/api/customers", { params: { limit: PAGE_SIZE, offset } });
+      setCustomers(res.data.rows || []);
+      setCustomersTotal(res.data.total || 0);
+      setCustomersOffset(offset);
+    } catch (err) {
+      console.error("Error cargando clientes:", err);
+    }
   }
 
   async function load() {
-    const [, resTipos] = await Promise.all([
-      loadCustomers(0),
-      api.get("/api/tipos-cliente"),
-    ]);
-    setTiposCliente(resTipos.data);
+    try {
+      const [, resTipos] = await Promise.all([
+        loadCustomers(0),
+        api.get("/api/tipos-cliente"),
+      ]);
+      setTiposCliente(resTipos.data || []);
+    } catch (err) {
+      console.error("Error en carga inicial:", err);
+    }
   }
 
   useEffect(() => {
@@ -201,10 +209,11 @@ export default function Customers({ user }) {
       setResults(res.data.rows || []);
       setResultsTotal(res.data.total || 0);
       setResultsOffset(offset);
-    } catch (_err) {
+    } catch (err) {
       setResults([]);
       setResultsTotal(0);
-      setSearchError("No se pudo buscar clientes.");
+      const msg = err?.response?.data?.error || err?.message || "Error desconocido";
+      setSearchError(`No se pudo buscar clientes: ${msg}`);
     }
   }
 

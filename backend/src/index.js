@@ -489,51 +489,58 @@ app.get("/api/customers", requireRole(ACCESS.customers), async (req, res) => {
      LEFT JOIN usuarios u ON u.id = c.creado_por_usuario_id
      ORDER BY c.id DESC LIMIT ${safeLimit} OFFSET ${safeOffset}`
   );
+  res.set("Cache-Control", "no-store");
   res.json({ rows, total: Number(total), limit: safeLimit, offset: safeOffset });
 });
 
 app.get("/api/customers/search", requireAuth, async (req, res) => {
-  const { nombre, telefono, direccion, zona } = req.query || {};
-  const conditions = [];
-  const params = [];
+  try {
+    const { nombre, telefono, direccion, zona } = req.query || {};
+    const conditions = [];
+    const params = [];
 
-  if (nombre) {
-    conditions.push("nombre_completo LIKE ?");
-    params.push(`%${nombre}%`);
-  }
-  if (telefono) {
-    conditions.push("telefono_principal LIKE ?");
-    params.push(`%${telefono}%`);
-  }
-  if (direccion) {
-    conditions.push("direccion LIKE ?");
-    params.push(`%${direccion}%`);
-  }
-  if (zona) {
-    conditions.push("zona LIKE ?");
-    params.push(`%${zona}%`);
-  }
+    if (nombre) {
+      conditions.push("nombre_completo LIKE ?");
+      params.push(`%${nombre}%`);
+    }
+    if (telefono) {
+      conditions.push("telefono_principal LIKE ?");
+      params.push(`%${telefono}%`);
+    }
+    if (direccion) {
+      conditions.push("direccion LIKE ?");
+      params.push(`%${direccion}%`);
+    }
+    if (zona) {
+      conditions.push("zona LIKE ?");
+      params.push(`%${zona}%`);
+    }
 
-  if (conditions.length === 0) {
-    return res.json([]);
-  }
+    if (conditions.length === 0) {
+      return res.json({ rows: [], total: 0, limit: 20, offset: 0 });
+    }
 
-  const offset = Number(req.query?.offset) || 0;
-  const safeOffset = Number.isFinite(offset) && offset >= 0 ? Math.floor(offset) : 0;
-  const [{ total }] = await query(
-    `SELECT COUNT(*) as total FROM clientes c WHERE ${conditions.join(" AND ")}`,
-    params
-  );
-  const rows = await query(
-    `SELECT c.*, u.nombre as creado_por_nombre
-     FROM clientes c
-     LEFT JOIN usuarios u ON u.id = c.creado_por_usuario_id
-     WHERE ${conditions.join(" AND ")}
-     ORDER BY c.nombre_completo
-     LIMIT 20 OFFSET ${safeOffset}`,
-    params
-  );
-  res.json({ rows, total: Number(total), limit: 20, offset: safeOffset });
+    const offset = Number(req.query?.offset) || 0;
+    const safeOffset = Number.isFinite(offset) && offset >= 0 ? Math.floor(offset) : 0;
+    const [{ total }] = await query(
+      `SELECT COUNT(*) as total FROM clientes c WHERE ${conditions.join(" AND ")}`,
+      params
+    );
+    const rows = await query(
+      `SELECT c.*, u.nombre as creado_por_nombre
+       FROM clientes c
+       LEFT JOIN usuarios u ON u.id = c.creado_por_usuario_id
+       WHERE ${conditions.join(" AND ")}
+       ORDER BY c.nombre_completo
+       LIMIT 20 OFFSET ${safeOffset}`,
+      params
+    );
+    res.set("Cache-Control", "no-store");
+    res.json({ rows, total: Number(total), limit: 20, offset: safeOffset });
+  } catch (err) {
+    console.error("Error en /api/customers/search:", err);
+    res.status(500).json({ error: err.message || "Error interno al buscar clientes" });
+  }
 });
 
 app.post("/api/customers", requireRole(ACCESS.customers), async (req, res) => {

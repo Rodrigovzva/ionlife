@@ -160,7 +160,7 @@ export default function Orders() {
           zona: search.zona || undefined,
         },
       });
-      const list = res.data || [];
+      const list = res.data?.rows || res.data || [];
       setResults(list.filter((c) => c.estado !== "Inactivo"));
     } catch (err) {
       setSearchError("No se pudo buscar clientes.");
