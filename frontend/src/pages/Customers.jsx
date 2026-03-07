@@ -30,7 +30,8 @@ function MapClickHandler({ onSelect }) {
   return null;
 }
 
-export default function Customers() {
+export default function Customers({ user }) {
+  const isDriver = user?.roles?.includes("Repartidor");
   const zonas = [
     "SOPOCACHI",
     "CALACOTO",
@@ -102,7 +103,10 @@ export default function Customers() {
     "JUPAPINA",
     "OVEJUYO",
   ];
+  const PAGE_SIZE = 20;
   const [customers, setCustomers] = useState([]);
+  const [customersTotal, setCustomersTotal] = useState(0);
+  const [customersOffset, setCustomersOffset] = useState(0);
   const [search, setSearch] = useState({
     nombre: "",
     telefono: "",
@@ -110,6 +114,8 @@ export default function Customers() {
     zona: "",
   });
   const [results, setResults] = useState([]);
+  const [resultsTotal, setResultsTotal] = useState(0);
+  const [resultsOffset, setResultsOffset] = useState(0);
   const [searchError, setSearchError] = useState("");
   const [searchActive, setSearchActive] = useState(false);
   const [tiposCliente, setTiposCliente] = useState([]);
@@ -162,12 +168,18 @@ export default function Customers() {
     return { lat: -16.5, lng: -68.15 };
   }, [form.datos_gps, mapPosition]);
 
+  async function loadCustomers(offset = 0) {
+    const res = await api.get("/api/customers", { params: { limit: PAGE_SIZE, offset } });
+    setCustomers(res.data.rows || []);
+    setCustomersTotal(res.data.total || 0);
+    setCustomersOffset(offset);
+  }
+
   async function load() {
-    const [resCustomers, resTipos] = await Promise.all([
-      api.get("/api/customers", { params: { limit: 25 } }),
+    const [, resTipos] = await Promise.all([
+      loadCustomers(0),
       api.get("/api/tipos-cliente"),
     ]);
-    setCustomers(resCustomers.data);
     setTiposCliente(resTipos.data);
   }
 
@@ -175,10 +187,7 @@ export default function Customers() {
     load();
   }, []);
 
-  async function handleSearch(e) {
-    e.preventDefault();
-    setSearchError("");
-    setSearchActive(true);
+  async function fetchSearch(offset = 0) {
     try {
       const res = await api.get("/api/customers/search", {
         params: {
@@ -186,21 +195,34 @@ export default function Customers() {
           telefono: search.telefono || undefined,
           direccion: search.direccion || undefined,
           zona: search.zona || undefined,
+          offset,
         },
       });
-      setResults(res.data || []);
+      setResults(res.data.rows || []);
+      setResultsTotal(res.data.total || 0);
+      setResultsOffset(offset);
     } catch (_err) {
       setResults([]);
+      setResultsTotal(0);
       setSearchError("No se pudo buscar clientes.");
     }
+  }
+
+  async function handleSearch(e) {
+    e.preventDefault();
+    setSearchError("");
+    setSearchActive(true);
+    await fetchSearch(0);
   }
 
   function clearSearch() {
     setSearch({ nombre: "", telefono: "", direccion: "", zona: "" });
     setResults([]);
+    setResultsTotal(0);
+    setResultsOffset(0);
     setSearchError("");
     setSearchActive(false);
-    load();
+    loadCustomers(0);
   }
 
   async function handleCreate(e) {
@@ -208,7 +230,7 @@ export default function Customers() {
     setGpsError("");
     await api.post("/api/customers", form);
     resetForm();
-    load();
+    loadCustomers(0);
   }
 
   async function handleUpdate(e) {
@@ -221,7 +243,8 @@ export default function Customers() {
     setSuccessMessage("Cliente actualizado correctamente.");
     setSelectedCustomerId(null);
     resetForm();
-    load();
+    if (searchActive) fetchSearch(resultsOffset);
+    else loadCustomers(customersOffset);
     setTimeout(() => setSuccessMessage(""), 4000);
   }
 
@@ -502,6 +525,7 @@ export default function Customers() {
             <th>ID</th>
             <th>Nombre</th>
             <th>Teléfono</th>
+            <th>Dirección</th>
             <th>Zona</th>
             <th>Tipo</th>
             <th>Estado</th>
@@ -525,6 +549,7 @@ export default function Customers() {
               <td>{c.id}</td>
               <td>{c.nombre_completo}</td>
               <td>{c.telefono_principal}</td>
+              <td>{c.direccion || "-"}</td>
               <td>{c.zona}</td>
               <td>{c.tipo_cliente}</td>
               <td>
@@ -551,11 +576,57 @@ export default function Customers() {
           ))}
           {searchActive && results.length === 0 && (
             <tr>
-              <td colSpan={10}>Sin resultados.</td>
+              <td colSpan={11}>Sin resultados.</td>
+            </tr>
+          )}
+          {!searchActive && customers.length === 0 && (
+            <tr>
+              <td colSpan={11}>No hay clientes.</td>
             </tr>
           )}
         </tbody>
         </table>
+
+        {/* Paginación */}
+        {(() => {
+          const total = searchActive ? resultsTotal : customersTotal;
+          const offset = searchActive ? resultsOffset : customersOffset;
+          const currentEnd = Math.min(offset + PAGE_SIZE, total);
+          const hasPrev = offset > 0;
+          const hasNext = offset + PAGE_SIZE < total;
+          if (total === 0) return null;
+          return (
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 12, fontSize: 13, color: "#6b7a8c" }}>
+              <button
+                className="btn btn-outline btn-sm"
+                type="button"
+                disabled={!hasPrev}
+                onClick={() => {
+                  const newOffset = Math.max(0, offset - PAGE_SIZE);
+                  if (searchActive) fetchSearch(newOffset);
+                  else loadCustomers(newOffset);
+                }}
+              >
+                ← Anteriores 20
+              </button>
+              <span>
+                Mostrando <strong>{offset + 1}–{currentEnd}</strong> de <strong>{total}</strong>
+              </span>
+              <button
+                className="btn btn-outline btn-sm"
+                type="button"
+                disabled={!hasNext}
+                onClick={() => {
+                  const newOffset = offset + PAGE_SIZE;
+                  if (searchActive) fetchSearch(newOffset);
+                  else loadCustomers(newOffset);
+                }}
+              >
+                Siguientes 20 →
+              </button>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );

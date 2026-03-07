@@ -39,6 +39,30 @@ a {
   margin: 0 auto;
 }
 
+/* Vista móvil de entregas */
+.container-movil {
+  width: min(1200px, 98%);
+  margin: 0 auto;
+  padding: 0 8px;
+}
+
+.table-deliveries-movil,
+.table-sales-movil {
+  min-width: 700px;
+}
+
+.table-deliveries-movil th,
+.table-deliveries-movil td,
+.table-sales-movil th,
+.table-sales-movil td {
+  font-size: 0.78rem;
+  padding: 5px 6px;
+  line-height: 1.2;
+  vertical-align: top;
+  white-space: normal;
+  word-break: break-word;
+}
+
 .nav {
   background: linear-gradient(90deg, var(--primary), #0f7db7);
   border-bottom: none;

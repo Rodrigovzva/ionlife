@@ -104,6 +104,10 @@ export default function Logistics({ user }) {
   const [historyTo, setHistoryTo] = useState(todayIso);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState("");
+  const [returnSuccess, setReturnSuccess] = useState("");
+  const [dayReturns, setDayReturns] = useState([]);
+  const [dayReturnsLoading, setDayReturnsLoading] = useState(false);
+  const [alreadyReturned, setAlreadyReturned] = useState(false);
   const canChangeReprogramedStatus = canSeeReturnsHistory;
   const [statusChangeNewStatus, setStatusChangeNewStatus] = useState({});
   const [statusChangeDate, setStatusChangeDate] = useState({});
@@ -344,15 +348,32 @@ export default function Logistics({ user }) {
     }
   }
 
+  async function loadDayReturns(date) {
+    setDayReturnsLoading(true);
+    try {
+      const d = date || returnDate || todayIso;
+      const res = await api.get("/api/logistics/returns-history", {
+        params: { from: d, to: d },
+      });
+      const rows = res.data || [];
+      setDayReturns(rows);
+      if (returnForm.truck_id) {
+        const truckPlate = trucks.find((t) => String(t.id) === String(returnForm.truck_id))?.plate;
+        setAlreadyReturned(rows.some((r) => r.camion_placa === truckPlate));
+      }
+    } catch (_) {
+      setDayReturns([]);
+    } finally {
+      setDayReturnsLoading(false);
+    }
+  }
+
   async function handleReturn(e) {
     e.preventDefault();
     setReturnError("");
-    if (!returnForm.truck_id || !returnForm.order_id) {
-      setReturnError("Seleccione camión y pedido.");
-      return;
-    }
-    if (!returnSelection[returnForm.order_id]) {
-      setReturnError("Seleccione el pedido en la tabla para devolución.");
+    setReturnSuccess("");
+    if (!returnForm.truck_id) {
+      setReturnError("Seleccione un camión.");
       return;
     }
     const ventasTotal = Number(returnDeliveredTotal || 0);
@@ -368,17 +389,28 @@ export default function Logistics({ user }) {
       );
       return;
     }
-    await api.post("/api/logistics/returns", {
-      truck_id: Number(returnForm.truck_id),
-      order_id: Number(returnForm.order_id),
-      cash_amount: returnForm.cash_amount ? Number(returnForm.cash_amount) : 0,
-      return_date: returnDate || undefined,
-      gastos_gasolina: gastosGas,
-      gastos_almuerzo: gastosAlm,
-      gastos_otros: gastosOtros,
-    });
+    const savedTruckId = returnForm.truck_id;
+    const savedDate = returnDate;
+    try {
+      await api.post("/api/logistics/returns", {
+        truck_id: Number(returnForm.truck_id),
+        order_id: returnForm.order_id ? Number(returnForm.order_id) : undefined,
+        cash_amount: returnForm.cash_amount ? Number(returnForm.cash_amount) : 0,
+        return_date: returnDate || undefined,
+        gastos_gasolina: gastosGas,
+        gastos_almuerzo: gastosAlm,
+        gastos_otros: gastosOtros,
+      });
+    } catch (err) {
+      const msg = err?.response?.data?.error || "No se pudo registrar la devolución.";
+      setReturnError(msg);
+      if (err?.response?.status === 409) setAlreadyReturned(true);
+      return;
+    }
+    setReturnSuccess("Devolución registrada correctamente.");
+    setAlreadyReturned(true);
     setReturnForm({
-      truck_id: returnForm.truck_id,
+      truck_id: savedTruckId,
       order_id: "",
       cash_amount: "",
       gastos_gasolina: "",
@@ -386,9 +418,10 @@ export default function Logistics({ user }) {
       gastos_otros: "",
     });
     setReturnSelection({});
-    loadTruckSummary(returnForm.truck_id);
-    loadTruckOrders(returnForm.truck_id);
+    loadTruckSummary(savedTruckId);
+    loadTruckOrders(savedTruckId);
     loadPendingOrders();
+    loadDayReturns(savedDate);
   }
 
   async function printRouteSheet() {
@@ -427,23 +460,21 @@ export default function Logistics({ user }) {
         .map(
           (o, idx) => `
             <tr>
-              <td>${idx + 1}</td>
+              <td class="num">${idx + 1}</td>
               <td>${o.customer_name || "-"}</td>
-              <td>${formatDateForPrint(o.scheduled_date)}</td>
-              <td>${o.address || "-"}</td>
               <td>${o.zona || "-"}</td>
+              <td>${o.address || "-"}</td>
               <td>${o.phone || "-"}</td>
-              <td>${o.phone_secondary || "-"}</td>
-              <td>${Number(o.packs_600 || 0)}</td>
-              <td>${Number(o.packs_1lt || 0)}</td>
-              <td>${Number(o.packs_2lt || 0)}</td>
-              <td>${Number(o.bidon_5 || 0)}</td>
-              <td>${Number(o.recarga || 0)}</td>
-              <td>${Number(o.base || 0)}</td>
-              <td>${Number(o.botellon || 0)}</td>
-              <td>${Number(o.kit_completo || 0)}</td>
-              <td>${Number(o.botellon_purificada || 0)}</td>
-              <td>Bs. ${Number(o.total || 0).toFixed(2)}</td>
+              <td>${Number(o.recarga || 0) || ""}</td>
+              <td>${Number(o.botellon_purificada || 0) || ""}</td>
+              <td>${Number(o.botellon || 0) || ""}</td>
+              <td>${Number(o.kit_completo || 0) || ""}</td>
+              <td>${Number(o.base || 0) || ""}</td>
+              <td>${Number(o.bidon_5 || 0) || ""}</td>
+              <td>${Number(o.packs_2lt || 0) || ""}</td>
+              <td>${Number(o.packs_1lt || 0) || ""}</td>
+              <td>${Number(o.packs_600 || 0) || ""}</td>
+              <td>${Number(o.total || 0).toFixed(2)}</td>
               <td class="center"></td>
               <td class="obs">${o.notes || "-"}</td>
             </tr>
@@ -486,16 +517,16 @@ export default function Logistics({ user }) {
             <tr>
               <td>${plate}</td>
               <td>${s.orders}</td>
-              <td>${s.packs_600}</td>
-              <td>${s.packs_1lt}</td>
-              <td>${s.packs_2lt}</td>
-              <td>${s.bidon_5}</td>
-              <td>${s.recarga}</td>
-              <td>${s.base}</td>
-              <td>${s.botellon}</td>
-              <td>${s.kit_completo}</td>
-              <td>${s.botellon_purificada}</td>
-              <td>Bs. ${s.total.toFixed(2)}</td>
+              <td>${s.recarga || ""}</td>
+              <td>${s.botellon_purificada || ""}</td>
+              <td>${s.botellon || ""}</td>
+              <td>${s.kit_completo || ""}</td>
+              <td>${s.base || ""}</td>
+              <td>${s.bidon_5 || ""}</td>
+              <td>${s.packs_2lt || ""}</td>
+              <td>${s.packs_1lt || ""}</td>
+              <td>${s.packs_600 || ""}</td>
+              <td>${s.total.toFixed(2)}</td>
             </tr>
           `
         )
@@ -514,18 +545,27 @@ export default function Logistics({ user }) {
               @page { size: landscape; margin: 8mm; }
               body { font-family: Arial, sans-serif; padding: 6px; }
               h2 { margin: 0 0 4px; font-size: 16px; }
-              .meta { color: #555; margin-bottom: 8px; font-size: 11px; }
-              .meta-grid { display: grid; grid-template-columns: repeat(2, minmax(220px, 1fr)); gap: 6px 16px; margin-bottom: 10px; font-size: 11px; }
+              .meta { color: #555; margin-bottom: 8px; font-size: 12px; }
+              .meta-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 5px 24px; margin-bottom: 10px; font-size: 12px; }
               .line { display: inline-block; border-bottom: 1px solid #333; min-width: 160px; height: 12px; vertical-align: middle; }
-              table { width: 100%; border-collapse: collapse; }
-              th, td { border: 1px solid #ccc; padding: 3px 4px; text-align: left; font-size: 10px; vertical-align: top; line-height: 1.2; }
-              th { background: #f2f4f7; font-size: 10px; }
-              th:nth-child(3), td:nth-child(3) { min-width: 90px; }
+              table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+              th, td { border: 2px solid #888; padding: 3px 4px; text-align: left; font-size: 11px; vertical-align: top; line-height: 1.3; overflow: hidden; word-break: break-word; }
+              th { background: #e8ecf0; font-size: 10px; font-weight: bold; }
+              .num { width: 22px; text-align: center; font-size: 9px; }
+              col.c-num    { width: 22px; }
+              col.c-name   { width: 13%; }
+              col.c-zona   { width: 8%; }
+              col.c-dir    { width: 13%; }
+              col.c-tel    { width: 8%; }
+              col.c-prod   { width: 4%; text-align: center; }
+              col.c-precio { width: 5%; }
+              col.c-ent    { width: 4%; }
+              col.c-obs    { width: 11%; }
               .center { text-align: center; }
-              .obs { min-width: 120px; }
+              .obs { word-break: break-word; }
               .summary { margin-top: 10px; font-size: 11px; }
               .summary table { width: 100%; border-collapse: collapse; }
-              .summary th, .summary td { border: 1px solid #ccc; padding: 3px 4px; font-size: 10px; }
+              .summary th, .summary td { border: 2px solid #888; padding: 4px 5px; font-size: 11px; }
             </style>
           </head>
           <body>
@@ -534,36 +574,53 @@ export default function Logistics({ user }) {
               <div><strong>Camión:</strong> ${truckName}</div>
               <div><strong>Distribuidor:</strong> ${driverName}</div>
               <div><strong>Ayudante:</strong> <span class="line"></span></div>
+              <div><strong>Refrigerio:</strong> <span class="line"></span></div>
               <div><strong>KM inicial:</strong> <span class="line"></span></div>
               <div><strong>KM final:</strong> <span class="line"></span></div>
-              <div><strong>Refrigerio:</strong> <span class="line"></span></div>
             </div>
             <table>
+              <colgroup>
+                <col class="c-num" />
+                <col class="c-name" />
+                <col class="c-zona" />
+                <col class="c-dir" />
+                <col class="c-tel" />
+                <col class="c-prod" />
+                <col class="c-prod" />
+                <col class="c-prod" />
+                <col class="c-prod" />
+                <col class="c-prod" />
+                <col class="c-prod" />
+                <col class="c-prod" />
+                <col class="c-prod" />
+                <col class="c-prod" />
+                <col class="c-precio" />
+                <col class="c-ent" />
+                <col class="c-obs" />
+              </colgroup>
               <thead>
                 <tr>
-                  <th>Nº</th>
+                  <th class="num">Nº</th>
                   <th>Nombre cliente</th>
-                  <th>Fecha programada</th>
-                  <th>Dirección</th>
                   <th>Zona</th>
-                  <th>Tel. principal</th>
-                  <th>Tel. secundario</th>
-                  <th>Packs 600cc</th>
-                  <th>Packs 1 LT</th>
-                  <th>Packs 2 LT</th>
-                  <th>Bidón 5 LT</th>
+                  <th>Dirección</th>
+                  <th>Teléfono</th>
                   <th>Recarga</th>
-                  <th>Base</th>
+                  <th>Purificada</th>
                   <th>Botellón</th>
-                  <th>Kit completo</th>
-                  <th>Botellón purificada</th>
+                  <th>Kit</th>
+                  <th>Base</th>
+                  <th>Bidón 5</th>
+                  <th>P2LT</th>
+                  <th>P1LT</th>
+                  <th>600cc</th>
                   <th>Precio</th>
                   <th>Entregado</th>
                   <th>Observaciones</th>
                 </tr>
               </thead>
               <tbody>
-                ${rowsHtml || "<tr><td colspan='19'>No hay pedidos asignados.</td></tr>"}
+                ${rowsHtml || "<tr><td colspan='17'>No hay pedidos asignados.</td></tr>"}
               </tbody>
             </table>
             <div class="summary">
@@ -572,16 +629,16 @@ export default function Logistics({ user }) {
                 <thead>
                   <tr>
                     <th>Camión</th>
-                    <th>Nro pedidos</th>
-                    <th>Packs 600cc</th>
-                    <th>Packs 1 LT</th>
-                    <th>Packs 2 LT</th>
-                    <th>Bidón 5 LT</th>
+                    <th>Pedidos</th>
                     <th>Recarga</th>
-                    <th>Base</th>
+                    <th>Purificada</th>
                     <th>Botellón</th>
                     <th>Kit completo</th>
-                    <th>Botellón purificada</th>
+                    <th>Base</th>
+                    <th>Bidón 5 LT</th>
+                    <th>Pack 2 LT</th>
+                    <th>Pack 1 LT</th>
+                    <th>Pack 600cc</th>
                     <th>Precio</th>
                   </tr>
                 </thead>
@@ -789,7 +846,10 @@ export default function Logistics({ user }) {
             onChange={(e) => {
               const nextId = e.target.value;
               setReturnForm((prev) => ({ ...prev, truck_id: nextId, order_id: "" }));
+              setAlreadyReturned(false);
+              setReturnSuccess("");
               loadTruckOrders(nextId, returnDate);
+              if (nextId) loadDayReturns(returnDate);
             }}
           >
             <option value="">Seleccione camión</option>
@@ -805,8 +865,11 @@ export default function Logistics({ user }) {
             onChange={(e) => {
               const nextDate = e.target.value;
               setReturnDate(nextDate);
+              setAlreadyReturned(false);
+              setReturnSuccess("");
               if (returnForm.truck_id) {
                 loadTruckOrders(returnForm.truck_id, nextDate);
+                loadDayReturns(nextDate);
               }
             }}
           />
@@ -851,140 +914,122 @@ export default function Logistics({ user }) {
             }
           />
         </div>
-        <div style={{ marginTop: 8, color: "#6b7a8c", fontSize: 13 }}>
-          {returnForm.order_id ? (
-            <span>
-              Ventas entregadas: <strong>Bs. {(Number(returnDeliveredTotal || 0)).toFixed(2)}</strong>
-              {(Number(returnForm.gastos_gasolina || 0) + Number(returnForm.gastos_almuerzo || 0) + Number(returnForm.gastos_otros || 0)) > 0 && (
-                <> — Gastos: <strong>Bs. {(Number(returnForm.gastos_gasolina || 0) + Number(returnForm.gastos_almuerzo || 0) + Number(returnForm.gastos_otros || 0)).toFixed(2)}</strong></>
-              )}
-              <br />
-              Monto neto a entregar a caja: <strong>Bs. {Math.max(0, Number(returnDeliveredTotal || 0) - (Number(returnForm.gastos_gasolina || 0) + Number(returnForm.gastos_almuerzo || 0) + Number(returnForm.gastos_otros || 0))).toFixed(2)}</strong>
-            </span>
+        <div style={{ marginTop: 8, fontSize: 13 }}>
+          {returnDeliveredTotal > 0 ? (
+            <div>
+              <div style={{ color: "#6b7a8c", marginBottom: 6 }}>
+                <strong>Ventas entregadas del día:</strong>
+              </div>
+              <ul style={{ margin: "0 0 8px 0", paddingLeft: 20, color: "#374151" }}>
+                {returnDeliveredOrders.map((o, idx) => (
+                  <li key={o.id}>
+                    {idx + 1}. {o.customer_name || "-"} — Bs. {Number(o.total || 0).toFixed(2)}
+                  </li>
+                ))}
+              </ul>
+              <div style={{ color: "#374151", borderTop: "1px solid #e5e7eb", paddingTop: 6 }}>
+                Total ventas: <strong>Bs. {Number(returnDeliveredTotal).toFixed(2)}</strong>
+                {(Number(returnForm.gastos_gasolina || 0) + Number(returnForm.gastos_almuerzo || 0) + Number(returnForm.gastos_otros || 0)) > 0 && (
+                  <> — Gastos: <strong>Bs. {(Number(returnForm.gastos_gasolina || 0) + Number(returnForm.gastos_almuerzo || 0) + Number(returnForm.gastos_otros || 0)).toFixed(2)}</strong></>
+                )}
+                <br />
+                <span style={{ color: "#1d4ed8", fontWeight: 700 }}>
+                  Monto neto a entregar a caja: Bs. {Math.max(0, Number(returnDeliveredTotal) - (Number(returnForm.gastos_gasolina || 0) + Number(returnForm.gastos_almuerzo || 0) + Number(returnForm.gastos_otros || 0))).toFixed(2)}
+                </span>
+              </div>
+            </div>
           ) : (
-            <span>Seleccione un pedido para ver el monto a entregar.</span>
+            <span style={{ color: "#6b7a8c" }}>
+              {returnForm.truck_id
+                ? "No hay ventas entregadas para este camión en la fecha seleccionada."
+                : "Seleccione un camión para ver las ventas del día."}
+            </span>
           )}
         </div>
-        {returnDeliveredOrders.length > 0 && (
-          <div style={{ marginTop: 8, marginBottom: 8 }}>
-            <strong>Ventas realizadas (a depositar):</strong>
-            <ul style={{ margin: "4px 0 0 0", paddingLeft: 20, fontSize: 13 }}>
-              {returnDeliveredOrders.map((o, idx) => (
-                <li key={o.id}>
-                  {idx + 1}. {o.customer_name || "-"} — Bs. {Number(o.total || 0).toFixed(2)}
-                </li>
-              ))}
-            </ul>
-            <div style={{ marginTop: 4 }}>
-              Total ventas: <strong>Bs. {Number(returnDeliveredTotal || 0).toFixed(2)}</strong>
-              {(Number(returnForm.gastos_gasolina || 0) + Number(returnForm.gastos_almuerzo || 0) + Number(returnForm.gastos_otros || 0)) > 0 && (
-                <> − Gastos: <strong>Bs. {(Number(returnForm.gastos_gasolina || 0) + Number(returnForm.gastos_almuerzo || 0) + Number(returnForm.gastos_otros || 0)).toFixed(2)}</strong> = Neto a caja: <strong>Bs. {Math.max(0, Number(returnDeliveredTotal || 0) - (Number(returnForm.gastos_gasolina || 0) + Number(returnForm.gastos_almuerzo || 0) + Number(returnForm.gastos_otros || 0))).toFixed(2)}</strong></>
-              )}
-            </div>
+        {alreadyReturned && (
+          <div style={{ background: "#fef3c7", color: "#92400e", border: "1px solid #fcd34d", borderRadius: 6, padding: "8px 12px", fontSize: 13, marginBottom: 8 }}>
+            Ya existe una devolución registrada para este camión en esta fecha. No se puede registrar dos veces.
           </div>
         )}
-        <div className="table-scroll" style={{ marginTop: 8 }}>
-          <table className="table">
-            <thead>
-              <tr>
-                <th></th>
-                <th>Nº</th>
-                <th>Cliente</th>
-                <th>Estado</th>
-                <th>Creado</th>
-                <th>Programado</th>
-                <th>Dirección</th>
-                <th>Zona</th>
-                <th>Detalle</th>
-                <th>Observaciones</th>
-                <th>Total</th>
-                {canChangeReprogramedStatus && <th>Acción</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {truckOrders.map((o, idx) => (
-                <tr key={o.id}>
-                  <td>
-                    <input
-                      type="checkbox"
-                      checked={!!returnSelection[o.id]}
-                      onChange={(e) => {
-                        const checked = e.target.checked;
-                        setReturnSelection((prev) => ({
-                          ...prev,
-                          [o.id]: checked,
-                        }));
-                        setReturnForm((prev) => ({
-                          ...prev,
-                          order_id: checked ? String(o.id) : "",
-                        }));
-                      }}
-                    />
-                  </td>
-                  <td>{idx + 1}</td>
-                  <td>{o.customer_name || "-"}</td>
-                  <td><span className={statusClass(o.status)}>{o.status}</span></td>
-                  <td>{o.created_at ? (() => { const d = new Date(o.created_at); return Number.isNaN(d.getTime()) ? "-" : d.toLocaleDateString("es") + " " + d.toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" }); })() : "-"}</td>
-                  <td>{formatScheduledDate(o.scheduled_date)}</td>
-                  <td>{o.address || "-"}</td>
-                  <td>{o.zona || "-"}</td>
-                  <td>{o.items || "-"}</td>
-                  <td>{o.notes || "-"}</td>
-                  <td>Bs. {Number(o.total || 0).toFixed(2)}</td>
-                  {canChangeReprogramedStatus && (
-                    <td>
-                      {o.status === "Reprogramado" ? (
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
-                          <select
-                            value={statusChangeNewStatus[o.id] || ""}
-                            onChange={(e) => setStatusChangeNewStatus((prev) => ({ ...prev, [o.id]: e.target.value }))}
-                            style={{ minWidth: 120 }}
-                          >
-                            <option value="">Nuevo estado</option>
-                            <option value="Pendiente">Pendiente</option>
-                            <option value="Creado">Creado</option>
-                            <option value="Cancelado">Cancelado</option>
-                            <option value="Reprogramado">Reprogramado</option>
-                          </select>
-                          {(statusChangeNewStatus[o.id] || "") === "Reprogramado" && (
-                            <input
-                              type="date"
-                              value={statusChangeDate[o.id] || ""}
-                              onChange={(e) => setStatusChangeDate((prev) => ({ ...prev, [o.id]: e.target.value }))}
-                            />
-                          )}
-                          <button
-                            type="button"
-                            className="btn btn-outline"
-                            disabled={statusChangeLoading === o.id}
-                            onClick={() => submitStatusChange(o.id)}
-                          >
-                            {statusChangeLoading === o.id ? "Actualizando..." : "Cambiar estado"}
-                          </button>
-                        </div>
-                      ) : (
-                        "-"
-                      )}
-                    </td>
-                  )}
-                </tr>
-              ))}
-              {truckOrders.length === 0 && (
-                <tr key="no-orders">
-                  <td colSpan={canChangeReprogramedStatus ? 13 : 12}>No hay pedidos disponibles.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn" type="submit">Registrar devolución</button>
+          <button className="btn" type="submit" disabled={alreadyReturned}>Registrar devolución</button>
           <button className="btn btn-outline" type="button" onClick={printReturnSummary}>
             Imprimir devolución
           </button>
         </div>
       </form>
       {returnError && <div className="error">{returnError}</div>}
+      {returnSuccess && (
+        <div className="tag" style={{ marginTop: 8, background: "#dcfce7", color: "#166534", padding: "8px 12px", borderRadius: 6 }}>
+          {returnSuccess}
+        </div>
+      )}
+
+      {canSeeReturnsHistory && (
+        <div style={{ marginTop: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+            <strong style={{ fontSize: 14 }}>Devoluciones del día:</strong>
+            <input
+              type="date"
+              value={returnDate}
+              style={{ fontSize: 13, padding: "3px 6px" }}
+              onChange={(e) => {
+                setReturnDate(e.target.value);
+                if (returnForm.truck_id) loadTruckOrders(returnForm.truck_id, e.target.value);
+                loadDayReturns(e.target.value);
+              }}
+            />
+            <button
+              type="button"
+              className="btn btn-outline"
+              style={{ fontSize: 12, padding: "4px 10px" }}
+              onClick={() => loadDayReturns(returnDate)}
+              disabled={dayReturnsLoading}
+            >
+              {dayReturnsLoading ? "Cargando..." : "Actualizar"}
+            </button>
+          </div>
+          <div className="table-scroll">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Hora</th>
+                  <th>Camión</th>
+                  <th>Repartidor</th>
+                  <th>Ventas (Bs.)</th>
+                  <th>Gas.</th>
+                  <th>Alm.</th>
+                  <th>Otros</th>
+                  <th>Neto caja (Bs.)</th>
+                  <th>Registrado por</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dayReturns.map((r) => (
+                  <tr key={r.id}>
+                    <td>{r.creado_en ? new Date(r.creado_en).toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" }) : "-"}</td>
+                    <td>{r.camion_placa || "-"}</td>
+                    <td>{r.repartidor_nombre || "-"}</td>
+                    <td>Bs. {Number(r.monto_ventas || 0).toFixed(2)}</td>
+                    <td>Bs. {Number(r.gastos_gasolina || 0).toFixed(2)}</td>
+                    <td>Bs. {Number(r.gastos_almuerzo || 0).toFixed(2)}</td>
+                    <td>Bs. {Number(r.gastos_otros || 0).toFixed(2)}</td>
+                    <td><strong>Bs. {Number(r.monto_neto_caja || 0).toFixed(2)}</strong></td>
+                    <td>{r.usuario_nombre || "-"}</td>
+                  </tr>
+                ))}
+                {!dayReturnsLoading && dayReturns.length === 0 && (
+                  <tr>
+                    <td colSpan={9} style={{ color: "#6b7a8c" }}>
+                      No hay devoluciones registradas para esta fecha. Registre una devolución o haga clic en «Actualizar».
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 
@@ -992,8 +1037,7 @@ export default function Logistics({ user }) {
     <div className="container page">
       <h2>Logística</h2>
       <div className="grid">
-        {isDriver ? returnCard : (
-          <>
+        {!isDriver && (
         <div className="card">
           <h4>Asignar pedidos pendientes (masivo)</h4>
           <div className="form-row">
@@ -1103,6 +1147,8 @@ export default function Logistics({ user }) {
             </tbody>
           </table>
         </div>
+        )}
+        {!isDriver && (
         <div className="card">
           <h4>Resumen del camión (hoy)</h4>
           <div className="form-row">
@@ -1129,6 +1175,8 @@ export default function Logistics({ user }) {
             <div>Valor Bs.: <strong>{Number(truckSummary.total_value || 0).toFixed(2)}</strong></div>
           </div>
         </div>
+        )}
+        {!isDriver && (
         <div className="card">
           <h4>Hoja de ruta (PDF)</h4>
           <div className="form-row" style={{ flexWrap: "wrap", gap: 8 }}>
@@ -1273,6 +1321,7 @@ export default function Logistics({ user }) {
             </div>
           )}
         </div>
+        )}
         {returnCard}
         {!isDriver && (isAdmin || isJefeLogistica) && (
           <div className="card" style={{ marginTop: 16 }}>
@@ -1361,8 +1410,6 @@ export default function Logistics({ user }) {
             {reassignError && <div className="error" style={{ marginTop: 8 }}>{reassignError}</div>}
             {reassignSuccess && <div className="tag" style={{ marginTop: 8, background: "#e5f6f3", color: "#0a7a6d" }}>{reassignSuccess}</div>}
           </div>
-        )}
-          </>
         )}
       </div>
       {!isDriver && (

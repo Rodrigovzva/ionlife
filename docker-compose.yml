@@ -5,6 +5,7 @@ services:
   backend:
     build: ./backend
     container_name: ionlife_backend
+    restart: always
     env_file: .env
     environment:
       PORT: 18081
@@ -27,6 +28,7 @@ services:
   frontend:
     build: ./frontend
     container_name: ionlife_frontend
+    restart: always
     env_file: .env
     environment:
       VITE_API_URL: ${VITE_API_URL}

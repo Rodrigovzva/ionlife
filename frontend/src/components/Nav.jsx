@@ -4,7 +4,8 @@ export default function Nav({ user, onLogout }) {
   const navigate = useNavigate();
   const isAdmin = user?.roles?.includes("Administrador del sistema");
   const isDriver = user?.roles?.includes("Repartidor");
-  const showDeliveries = isDriver || isAdmin;
+  const isJefeLogistica = user?.roles?.includes("Jefe de logística");
+  const showDeliveries = isDriver || isAdmin || isJefeLogistica;
 
   function handleLogout() {
     localStorage.removeItem("ionlife_token");
@@ -20,8 +21,9 @@ export default function Nav({ user, onLogout }) {
           <NavLink className="nav-link" to="/">Inicio</NavLink>
           {isDriver ? (
             <>
+              <NavLink className="nav-link" to="/clientes">Clientes</NavLink>
               <NavLink className="nav-link" to="/logistica">Logística</NavLink>
-              <NavLink className="nav-link" to="/mis-entregas">Mis entregas</NavLink>
+              <NavLink className="nav-link" to="/entregas-movil">Entregas móvil</NavLink>
             </>
           ) : (
             <>
@@ -32,7 +34,10 @@ export default function Nav({ user, onLogout }) {
               <NavLink className="nav-link" to="/logistica">Logística</NavLink>
               <NavLink className="nav-link" to="/reportes">Reportes</NavLink>
               {showDeliveries && (
-                <NavLink className="nav-link" to="/mis-entregas">Mis entregas</NavLink>
+                <>
+                  <NavLink className="nav-link" to="/mis-entregas">Mis entregas</NavLink>
+                  <NavLink className="nav-link" to="/entregas-movil">Entregas móvil</NavLink>
+                </>
               )}
               {isAdmin && (
                 <NavLink className="nav-link" to="/admin">Administración</NavLink>

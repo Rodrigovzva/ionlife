@@ -11,11 +11,13 @@ import Logistics from "./pages/Logistics.jsx";
 import Reports from "./pages/Reports.jsx";
 import Admin from "./pages/Admin.jsx";
 import DriverDeliveries from "./pages/DriverDeliveries.jsx";
+import EntregasMovil from "./pages/EntregasMovil.jsx";
 import Nav from "./components/Nav.jsx";
 
-function PrivateRoute({ user, children }) {
-  if (!user) {
-    return <Navigate to="/login" replace />;
+function PrivateRoute({ user, children, denyDriver }) {
+  if (!user) return <Navigate to="/login" replace />;
+  if (denyDriver && user?.roles?.includes("Repartidor")) {
+    return <Navigate to="/entregas-movil" replace />;
   }
   return children;
 }
@@ -69,7 +71,7 @@ export default function App() {
           path="/clientes"
           element={
             <PrivateRoute user={user}>
-              <Customers />
+              <Customers user={user} />
             </PrivateRoute>
           }
         />
@@ -124,8 +126,16 @@ export default function App() {
         <Route
           path="/mis-entregas"
           element={
-            <PrivateRoute user={user}>
+            <PrivateRoute user={user} denyDriver>
               <DriverDeliveries />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/entregas-movil"
+          element={
+            <PrivateRoute user={user}>
+              <EntregasMovil />
             </PrivateRoute>
           }
         />

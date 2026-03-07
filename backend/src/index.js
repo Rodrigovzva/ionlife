@@ -71,11 +71,13 @@ const ACCESS = {
     "Administrador del sistema",
     "Supervisor de call center",
     "Operador de call center",
+    "Repartidor",
   ],
   products: [
     "Administrador del sistema",
     "Supervisor de call center",
     "Encargado de almacén",
+    "Repartidor",
   ],
   warehouses: [
     "Administrador del sistema",
@@ -380,7 +382,7 @@ app.get("/api/driver/entregas", requireAuth, async (req, res) => {
   const isAdmin = roles.includes("Administrador del sistema");
   const isDriver = roles.includes("Repartidor");
   const baseQuery =
-    "SELECT e.id, e.estado, e.programado_en, e.entregado_en, p.id as pedido_id, p.fecha_programada as fecha_programada, p.fecha_creacion as fecha_creacion_pedido, c.nombre_completo as cliente, c.zona as zona, COALESCE(dc.direccion, c.direccion) as direccion, r.nombre as repartidor, cam.placa as camion, COALESCE(SUM(oi.cantidad * oi.precio), 0) as total_bs, GROUP_CONCAT(CONCAT(pr.nombre, ' x', oi.cantidad) SEPARATOR ', ') as pedido_detalle FROM entregas e JOIN pedidos p ON p.id = e.pedido_id JOIN clientes c ON c.id = p.cliente_id LEFT JOIN direcciones_clientes dc ON dc.id = p.direccion_id JOIN repartidores r ON r.id = e.repartidor_id JOIN camiones cam ON cam.id = e.camion_id JOIN items_pedido oi ON oi.pedido_id = p.id JOIN productos pr ON pr.id = oi.producto_id";
+    "SELECT e.id, e.estado, e.programado_en, e.entregado_en, p.id as pedido_id, p.fecha_programada as fecha_programada, p.fecha_creacion as fecha_creacion_pedido, c.nombre_completo as cliente, c.zona as zona, COALESCE(dc.direccion, c.direccion) as direccion, c.telefono_principal as celular, r.nombre as repartidor, cam.placa as camion, COALESCE(SUM(oi.cantidad * oi.precio), 0) as total_bs, GROUP_CONCAT(CONCAT(pr.nombre, ' x', oi.cantidad) SEPARATOR ', ') as pedido_detalle FROM entregas e JOIN pedidos p ON p.id = e.pedido_id JOIN clientes c ON c.id = p.cliente_id LEFT JOIN direcciones_clientes dc ON dc.id = p.direccion_id JOIN repartidores r ON r.id = e.repartidor_id JOIN camiones cam ON cam.id = e.camion_id JOIN items_pedido oi ON oi.pedido_id = p.id JOIN productos pr ON pr.id = oi.producto_id";
   const groupByClause = "GROUP BY e.id, e.estado, e.programado_en, e.entregado_en, p.id, p.fecha_programada, p.fecha_creacion, c.nombre_completo, c.zona, direccion, r.nombre, cam.placa ORDER BY c.zona ASC, e.id DESC";
   const todayClause =
     "DATE(COALESCE(e.programado_en, p.fecha_programada)) = DATE(CONVERT_TZ(NOW(),'+00:00','-04:00'))";
@@ -418,7 +420,7 @@ app.get("/api/driver/ventas", requireAuth, async (req, res) => {
   const isAdmin = roles.includes("Administrador del sistema");
   const isDriver = roles.includes("Repartidor");
   const baseQuery =
-    "SELECT p.id as pedido_id, c.nombre_completo as cliente, cam.placa as camion, r.nombre as repartidor, e.estado as estado_entrega, e.entregado_en, SUM(oi.cantidad * oi.precio) as total FROM entregas e JOIN pedidos p ON p.id = e.pedido_id JOIN clientes c ON c.id = p.cliente_id JOIN items_pedido oi ON oi.pedido_id = p.id JOIN repartidores r ON r.id = e.repartidor_id JOIN camiones cam ON cam.id = e.camion_id WHERE (e.estado = 'Entregado' OR p.estado = 'Entregado')";
+    "SELECT e.id as entrega_id, p.id as pedido_id, c.nombre_completo as cliente, cam.placa as camion, r.nombre as repartidor, e.estado as estado_entrega, e.entregado_en, SUM(oi.cantidad * oi.precio) as total FROM entregas e JOIN pedidos p ON p.id = e.pedido_id JOIN clientes c ON c.id = p.cliente_id JOIN items_pedido oi ON oi.pedido_id = p.id JOIN repartidores r ON r.id = e.repartidor_id JOIN camiones cam ON cam.id = e.camion_id WHERE (e.estado = 'Entregado' OR p.estado = 'Entregado')";
   const todayClause =
     "DATE(CONVERT_TZ(e.entregado_en,'+00:00','-04:00')) = DATE(CONVERT_TZ(NOW(),'+00:00','-04:00'))";
   const dateClause = date
@@ -427,7 +429,7 @@ app.get("/api/driver/ventas", requireAuth, async (req, res) => {
   const dateParams = date ? [date] : [];
   if (isAdmin) {
     const rows = await query(
-      `${baseQuery} AND ${dateClause} GROUP BY p.id, c.nombre_completo, cam.placa, r.nombre, e.estado, e.entregado_en ORDER BY p.id DESC`,
+      `${baseQuery} AND ${dateClause} GROUP BY e.id, p.id, c.nombre_completo, cam.placa, r.nombre, e.estado, e.entregado_en ORDER BY p.id DESC`,
       dateParams
     );
     return res.json(rows);
@@ -439,11 +441,11 @@ app.get("/api/driver/ventas", requireAuth, async (req, res) => {
   const driverName = req.user?.name;
   const rows = driverId
     ? await query(
-        `${baseQuery} AND r.id = ? AND ${dateClause} GROUP BY p.id, c.nombre_completo, cam.placa, r.nombre, e.estado, e.entregado_en ORDER BY p.id DESC`,
+        `${baseQuery} AND r.id = ? AND ${dateClause} GROUP BY e.id, p.id, c.nombre_completo, cam.placa, r.nombre, e.estado, e.entregado_en ORDER BY p.id DESC`,
         [driverId, ...dateParams]
       )
     : await query(
-        `${baseQuery} AND LOWER(r.nombre) = LOWER(?) AND ${dateClause} GROUP BY p.id, c.nombre_completo, cam.placa, r.nombre, e.estado, e.entregado_en ORDER BY p.id DESC`,
+        `${baseQuery} AND LOWER(r.nombre) = LOWER(?) AND ${dateClause} GROUP BY e.id, p.id, c.nombre_completo, cam.placa, r.nombre, e.estado, e.entregado_en ORDER BY p.id DESC`,
         [driverName, ...dateParams]
       );
   res.json(rows);
@@ -476,15 +478,18 @@ app.get("/api/precios-producto", requireAuth, async (_req, res) => {
 
 app.get("/api/customers", requireRole(ACCESS.customers), async (req, res) => {
   const limit = Number(req.query?.limit);
+  const offset = Number(req.query?.offset) || 0;
   const hasLimit = Number.isFinite(limit) && limit > 0;
-  const safeLimit = hasLimit ? Math.min(Math.floor(limit), 200) : null;
+  const safeLimit = hasLimit ? Math.min(Math.floor(limit), 200) : 20;
+  const safeOffset = Number.isFinite(offset) && offset >= 0 ? Math.floor(offset) : 0;
+  const [{ total }] = await query("SELECT COUNT(*) as total FROM clientes");
   const rows = await query(
     `SELECT c.*, u.nombre as creado_por_nombre
      FROM clientes c
      LEFT JOIN usuarios u ON u.id = c.creado_por_usuario_id
-     ORDER BY c.id DESC${safeLimit ? ` LIMIT ${safeLimit}` : ""}`
+     ORDER BY c.id DESC LIMIT ${safeLimit} OFFSET ${safeOffset}`
   );
-  res.json(rows);
+  res.json({ rows, total: Number(total), limit: safeLimit, offset: safeOffset });
 });
 
 app.get("/api/customers/search", requireAuth, async (req, res) => {
@@ -513,16 +518,22 @@ app.get("/api/customers/search", requireAuth, async (req, res) => {
     return res.json([]);
   }
 
+  const offset = Number(req.query?.offset) || 0;
+  const safeOffset = Number.isFinite(offset) && offset >= 0 ? Math.floor(offset) : 0;
+  const [{ total }] = await query(
+    `SELECT COUNT(*) as total FROM clientes c WHERE ${conditions.join(" AND ")}`,
+    params
+  );
   const rows = await query(
     `SELECT c.*, u.nombre as creado_por_nombre
      FROM clientes c
      LEFT JOIN usuarios u ON u.id = c.creado_por_usuario_id
      WHERE ${conditions.join(" AND ")}
      ORDER BY c.nombre_completo
-     LIMIT 20`,
+     LIMIT 20 OFFSET ${safeOffset}`,
     params
   );
-  res.json(rows);
+  res.json({ rows, total: Number(total), limit: 20, offset: safeOffset });
 });
 
 app.post("/api/customers", requireRole(ACCESS.customers), async (req, res) => {
@@ -662,7 +673,7 @@ app.delete("/api/customers/:id", requireRole(ACCESS.customers), async (req, res)
   res.json({ ok: true });
 });
 
-app.get("/api/customers/:id/addresses", requireRole([...ACCESS.customers, ...ACCESS.orders]), async (req, res) => {
+app.get("/api/customers/:id/addresses", requireRole([...ACCESS.customers, ...ACCESS.orders, "Repartidor"]), async (req, res) => {
   const rows = await query(
     "SELECT * FROM direcciones_clientes WHERE cliente_id = ?",
     [req.params.id]
@@ -1511,7 +1522,7 @@ app.patch(
   "/api/logistics/deliveries/:id/status",
   requireRole(ACCESS.logistics),
   async (req, res) => {
-    const { status, incident_type, note } = req.body || {};
+    const { status, incident_type, note, scheduled_date } = req.body || {};
     if (!status) {
       return res.status(400).json({ error: "Estado requerido" });
     }
@@ -1561,19 +1572,51 @@ app.patch(
         );
       }
     }
-    if (status === "Reprogramado") {
+    if (status === "Pendiente") {
       const [delivery] = await query(
         "SELECT pedido_id FROM entregas WHERE id = ?",
         [req.params.id]
       );
       if (delivery) {
         await query(
-          "UPDATE pedidos SET estado = 'Reprogramado', actualizado_por_usuario_id = ? WHERE id = ?",
+          "UPDATE pedidos SET estado = 'Pendiente', actualizado_por_usuario_id = ? WHERE id = ?",
           [req.user?.id || null, delivery.pedido_id]
         );
         await query(
-          "INSERT INTO historial_estado_pedido (pedido_id, estado, nota) VALUES (?, 'Reprogramado', 'Estado actualizado desde Mis entregas')",
+          "UPDATE entregas SET entregado_en = NULL, actualizado_por_usuario_id = ? WHERE id = ?",
+          [req.user?.id || null, req.params.id]
+        );
+        await query(
+          "INSERT INTO historial_estado_pedido (pedido_id, estado, nota) VALUES (?, 'Pendiente', 'Venta deshecha desde Entregas móvil')",
           [delivery.pedido_id]
+        );
+      }
+    }
+    if (status === "Reprogramado") {
+      const [delivery] = await query(
+        "SELECT pedido_id FROM entregas WHERE id = ?",
+        [req.params.id]
+      );
+      if (delivery) {
+        const newDate = toDateOnly(scheduled_date);
+        if (newDate) {
+          await query(
+            "UPDATE pedidos SET estado = 'Reprogramado', fecha_programada = ?, actualizado_por_usuario_id = ? WHERE id = ?",
+            [newDate, req.user?.id || null, delivery.pedido_id]
+          );
+          await query(
+            "UPDATE entregas SET programado_en = ?, actualizado_por_usuario_id = ? WHERE id = ?",
+            [`${newDate} 12:00:00`, req.user?.id || null, req.params.id]
+          );
+        } else {
+          await query(
+            "UPDATE pedidos SET estado = 'Reprogramado', actualizado_por_usuario_id = ? WHERE id = ?",
+            [req.user?.id || null, delivery.pedido_id]
+          );
+        }
+        await query(
+          "INSERT INTO historial_estado_pedido (pedido_id, estado, nota) VALUES (?, 'Reprogramado', ?)",
+          [delivery.pedido_id, newDate ? `Reprogramado para ${newDate}` : "Reprogramado desde Entregas móvil"]
         );
       }
     }
@@ -1734,14 +1777,23 @@ app.get("/api/logistics/truck-orders", requireRole(ACCESS.logistics), async (req
 
 app.post("/api/logistics/returns", requireRole(ACCESS.logistics), async (req, res) => {
   const { order_id, truck_id, cash_amount, return_date, gastos_gasolina, gastos_almuerzo, gastos_otros } = req.body || {};
-  if (!order_id || !truck_id) {
-    return res.status(400).json({ error: "Datos incompletos" });
+  if (!truck_id) {
+    return res.status(400).json({ error: "Datos incompletos: falta el camión" });
   }
   const allowedTrucks = await getAllowedTruckIdsForDriver(req);
   if (allowedTrucks !== null && (allowedTrucks.length === 0 || !allowedTrucks.map(Number).includes(Number(truck_id)))) {
     return res.status(403).json({ error: "Solo puede registrar devoluciones de sus propios camiones." });
   }
   const expectedDate = return_date || getTodayLaPaz();
+  const [existingReturn] = await query(
+    "SELECT id FROM devoluciones_registro WHERE camion_id = ? AND fecha = ? LIMIT 1",
+    [truck_id, expectedDate]
+  );
+  if (existingReturn) {
+    return res.status(409).json({
+      error: `Ya existe un registro de devolución para este camión en la fecha ${expectedDate}. No se puede registrar dos veces.`,
+    });
+  }
   const [deliveredTotalRow] = await query(
     `SELECT COALESCE(SUM(oi.cantidad * oi.precio), 0) as total
      FROM entregas e
@@ -1770,65 +1822,67 @@ app.post("/api/logistics/returns", requireRole(ACCESS.logistics), async (req, re
       gastos_total: totalGastos,
     });
   }
-  const warehouseId = await getCentralWarehouseId();
-  if (!warehouseId) {
-    return res.status(400).json({ error: "No hay almacenes disponibles" });
-  }
-  const items = await query(
-    "SELECT producto_id, cantidad FROM items_pedido WHERE pedido_id = ?",
-    [order_id]
-  );
-  for (const item of items) {
-    await query(
-      "INSERT INTO movimientos_inventario (almacen_id, producto_id, cantidad, tipo, pedido_id, nota, creado_por_usuario_id, actualizado_por_usuario_id) VALUES (?, ?, ?, 'DEVOLUCION', ?, 'Devolución de vendedor', ?, ?)",
-      [
-        warehouseId,
-        item.producto_id,
-        item.cantidad,
-        order_id,
-        req.user?.id || null,
-        req.user?.id || null,
-      ]
+  if (order_id) {
+    const warehouseId = await getCentralWarehouseId();
+    if (!warehouseId) {
+      return res.status(400).json({ error: "No hay almacenes disponibles" });
+    }
+    const items = await query(
+      "SELECT producto_id, cantidad FROM items_pedido WHERE pedido_id = ?",
+      [order_id]
     );
-    const existing = await query(
-      "SELECT id FROM inventario WHERE almacen_id = ? AND producto_id = ?",
-      [warehouseId, item.producto_id]
-    );
-    if (existing.length === 0) {
+    for (const item of items) {
       await query(
-        "INSERT INTO inventario (almacen_id, producto_id, cantidad, stock_minimo, creado_por_usuario_id, actualizado_por_usuario_id) VALUES (?, ?, ?, 0, ?, ?)",
+        "INSERT INTO movimientos_inventario (almacen_id, producto_id, cantidad, tipo, pedido_id, nota, creado_por_usuario_id, actualizado_por_usuario_id) VALUES (?, ?, ?, 'DEVOLUCION', ?, 'Devolución de vendedor', ?, ?)",
         [
           warehouseId,
           item.producto_id,
           item.cantidad,
+          order_id,
           req.user?.id || null,
           req.user?.id || null,
         ]
       );
-    } else {
+      const existing = await query(
+        "SELECT id FROM inventario WHERE almacen_id = ? AND producto_id = ?",
+        [warehouseId, item.producto_id]
+      );
+      if (existing.length === 0) {
+        await query(
+          "INSERT INTO inventario (almacen_id, producto_id, cantidad, stock_minimo, creado_por_usuario_id, actualizado_por_usuario_id) VALUES (?, ?, ?, 0, ?, ?)",
+          [
+            warehouseId,
+            item.producto_id,
+            item.cantidad,
+            req.user?.id || null,
+            req.user?.id || null,
+          ]
+        );
+      } else {
+        await query(
+          "UPDATE inventario SET cantidad = cantidad + ?, actualizado_por_usuario_id = ? WHERE almacen_id = ? AND producto_id = ?",
+          [item.cantidad, req.user?.id || null, warehouseId, item.producto_id]
+        );
+      }
+    }
+    await query(
+      "UPDATE pedidos SET estado = 'Reprogramado', actualizado_por_usuario_id = ? WHERE id = ?",
+      [req.user?.id || null, order_id]
+    );
+    await query(
+      "UPDATE entregas SET estado = 'Reprogramado', actualizado_por_usuario_id = ? WHERE pedido_id = ? AND camion_id = ?",
+      [req.user?.id || null, order_id, truck_id]
+    );
+    await query(
+      "INSERT INTO historial_estado_pedido (pedido_id, estado, nota) VALUES (?, 'Reprogramado', 'Devolución registrada')",
+      [order_id]
+    );
+    if (cash_amount && Number(cash_amount) > 0) {
       await query(
-        "UPDATE inventario SET cantidad = cantidad + ?, actualizado_por_usuario_id = ? WHERE almacen_id = ? AND producto_id = ?",
-        [item.cantidad, req.user?.id || null, warehouseId, item.producto_id]
+        "INSERT INTO pagos (pedido_id, monto, metodo, estado, creado_por_usuario_id, actualizado_por_usuario_id) VALUES (?, ?, 'Caja', 'Recibido', ?, ?)",
+        [order_id, Number(cash_amount), req.user?.id || null, req.user?.id || null]
       );
     }
-  }
-  await query(
-    "UPDATE pedidos SET estado = 'Reprogramado', actualizado_por_usuario_id = ? WHERE id = ?",
-    [req.user?.id || null, order_id]
-  );
-  await query(
-    "UPDATE entregas SET estado = 'Reprogramado', actualizado_por_usuario_id = ? WHERE pedido_id = ? AND camion_id = ?",
-    [req.user?.id || null, order_id, truck_id]
-  );
-  await query(
-    "INSERT INTO historial_estado_pedido (pedido_id, estado, nota) VALUES (?, 'Reprogramado', 'Devolución registrada')",
-    [order_id]
-  );
-  if (cash_amount && Number(cash_amount) > 0) {
-    await query(
-      "INSERT INTO pagos (pedido_id, monto, metodo, estado, creado_por_usuario_id, actualizado_por_usuario_id) VALUES (?, ?, 'Caja', 'Recibido', ?, ?)",
-      [order_id, Number(cash_amount), req.user?.id || null, req.user?.id || null]
-    );
   }
   const despachados = await query(
     `SELECT e.pedido_id FROM entregas e
@@ -1855,8 +1909,8 @@ app.post("/api/logistics/returns", requireRole(ACCESS.logistics), async (req, re
   );
   }
   const [repartidorRow] = await query(
-    "SELECT repartidor_id FROM entregas WHERE camion_id = ? AND pedido_id = ? LIMIT 1",
-    [truck_id, order_id]
+    "SELECT repartidor_id FROM entregas WHERE camion_id = ? LIMIT 1",
+    [truck_id]
   );
   const repartidorId = repartidorRow?.repartidor_id || null;
   await query(
@@ -1866,7 +1920,7 @@ app.post("/api/logistics/returns", requireRole(ACCESS.logistics), async (req, re
       expectedDate,
       truck_id,
       repartidorId,
-      order_id,
+      order_id || null,
       ventasTotal,
       gastosGas,
       gastosAlm,
