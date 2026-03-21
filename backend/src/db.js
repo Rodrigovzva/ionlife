@@ -24,4 +24,23 @@ async function query(sql, params = []) {
   return rows;
 }
 
-module.exports = { pool, query };
+// Ejecuta fn(exec) dentro de una transacción. Hace rollback automático si fn lanza error.
+// exec(sql, params) es equivalente a query() pero usa la misma conexión.
+async function withTransaction(fn) {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const exec = (sql, params = []) =>
+      conn.execute(sql, params).then(([rows]) => rows);
+    const result = await fn(exec);
+    await conn.commit();
+    return result;
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
+
+module.exports = { pool, query, withTransaction };

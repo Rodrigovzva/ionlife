@@ -5,9 +5,13 @@ const cors = require("cors");
 const morgan = require("morgan");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const { query, pool } = require("./db");
+const { query, pool, withTransaction } = require("./db");
 const { requireAuth, requireRole } = require("./auth");
 const { auditMiddleware } = require("./audit");
+
+// Wrapper para capturar errores async en handlers de Express
+const asyncHandler = (fn) => (req, res, next) =>
+  Promise.resolve(fn(req, res, next)).catch(next);
 
 const {
   PORT = 18081,
@@ -15,6 +19,39 @@ const {
   ADMIN_EMAIL,
   ADMIN_PASSWORD,
 } = process.env;
+
+// Rate limiter en memoria para el endpoint de login
+// Máx 10 intentos por IP cada 15 minutos
+const loginAttempts = new Map();
+const LOGIN_MAX = 10;
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+
+function loginRateLimit(req, res, next) {
+  const ip = req.ip || req.socket?.remoteAddress || "unknown";
+  const now = Date.now();
+  const entry = loginAttempts.get(ip);
+
+  if (entry && now < entry.resetAt) {
+    if (entry.count >= LOGIN_MAX) {
+      const waitSecs = Math.ceil((entry.resetAt - now) / 1000);
+      return res.status(429).json({
+        error: `Demasiados intentos. Intente de nuevo en ${waitSecs} segundos.`,
+      });
+    }
+    entry.count += 1;
+  } else {
+    loginAttempts.set(ip, { count: 1, resetAt: now + LOGIN_WINDOW_MS });
+  }
+  next();
+}
+
+// Limpiar entradas expiradas cada 15 minutos
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, entry] of loginAttempts) {
+    if (now >= entry.resetAt) loginAttempts.delete(ip);
+  }
+}, LOGIN_WINDOW_MS);
 
 const ROLE_NAMES = [
   "Administrador del sistema",
@@ -313,12 +350,15 @@ async function ensureDevolucionesRegistroTable() {
   );
 }
 
-app.post("/api/auth/login", async (req, res) => {
+app.post("/api/auth/login", loginRateLimit, asyncHandler(async (req, res) => {
   const { email, password } = req.body || {};
   const emailTrim = (email && typeof email === "string" ? email : "").trim();
   const passwordTrim = (password != null && typeof password === "string" ? password : "").trim();
   if (!emailTrim || !passwordTrim) {
     return res.status(400).json({ error: "Email y contraseña requeridos" });
+  }
+  if (passwordTrim.length > 128) {
+    return res.status(400).json({ error: "Contraseña demasiado larga" });
   }
   const users = await query(
     "SELECT id, nombre as name, usuario as email, hash_contrasena, activo as is_active FROM usuarios WHERE usuario = ?",
@@ -353,6 +393,9 @@ app.post("/api/auth/login", async (req, res) => {
     );
     if (driverLike) driver = driverLike;
   }
+  // Login exitoso: limpiar intentos fallidos de esta IP
+  loginAttempts.delete(req.ip || req.socket?.remoteAddress || "unknown");
+
   const token = jwt.sign(
     { id: user.id, email: user.email, name: user.name, roles: roleNames, driver_id: driver?.id || null },
     JWT_SECRET,
@@ -362,7 +405,7 @@ app.post("/api/auth/login", async (req, res) => {
     token,
     user: { id: user.id, name: user.name, email: user.email, roles: roleNames },
   });
-});
+}));
 
 app.get("/api/auth/me", requireAuth, (req, res) => {
   res.json({ user: req.user });
@@ -376,7 +419,7 @@ app.use("/api/logistics", requireAuth, auditMiddleware("logistics"));
 app.use("/api/reports", requireAuth, auditMiddleware("reports"));
 app.use("/api/admin", requireAuth, auditMiddleware("admin"));
 
-app.get("/api/driver/entregas", requireAuth, async (req, res) => {
+app.get("/api/driver/entregas", requireAuth, asyncHandler(async (req, res) => {
   const { date } = req.query || {};
   const roles = req.user?.roles || [];
   const isAdmin = roles.includes("Administrador del sistema");
@@ -412,9 +455,9 @@ app.get("/api/driver/entregas", requireAuth, async (req, res) => {
         [driverName, ...dateParams]
       );
   res.json(rows);
-});
+}));
 
-app.get("/api/driver/ventas", requireAuth, async (req, res) => {
+app.get("/api/driver/ventas", requireAuth, asyncHandler(async (req, res) => {
   const { date } = req.query || {};
   const roles = req.user?.roles || [];
   const isAdmin = roles.includes("Administrador del sistema");
@@ -449,23 +492,23 @@ app.get("/api/driver/ventas", requireAuth, async (req, res) => {
         [driverName, ...dateParams]
       );
   res.json(rows);
-});
+}));
 
-app.get("/api/tipos-cliente", requireAuth, async (_req, res) => {
+app.get("/api/tipos-cliente", requireAuth, asyncHandler(async (_req, res) => {
   const rows = await query(
     "SELECT id, nombre, descuento_unidades FROM tipos_cliente WHERE activo = 1 ORDER BY nombre"
   );
   res.json(rows);
-});
+}));
 
-app.get("/api/tipos-precio", requireAuth, async (_req, res) => {
+app.get("/api/tipos-precio", requireAuth, asyncHandler(async (_req, res) => {
   const rows = await query(
     "SELECT id, nombre FROM tipos_precio WHERE activo = 1 ORDER BY nombre"
   );
   res.json(rows);
-});
+}));
 
-app.get("/api/precios-producto", requireAuth, async (_req, res) => {
+app.get("/api/precios-producto", requireAuth, asyncHandler(async (_req, res) => {
   const rows = await query(
     `SELECT tpp.producto_id, tpp.tipo_precio_id, tpp.precio
      FROM tipos_precio_producto tpp
@@ -474,9 +517,9 @@ app.get("/api/precios-producto", requireAuth, async (_req, res) => {
      WHERE tpp.activo = 1 AND tp.activo = 1 AND p.activo = 1`
   );
   res.json(rows);
-});
+}));
 
-app.get("/api/customers", requireRole(ACCESS.customers), async (req, res) => {
+app.get("/api/customers", requireRole(ACCESS.customers), asyncHandler(async (req, res) => {
   const limit = Number(req.query?.limit);
   const offset = Number(req.query?.offset) || 0;
   const hasLimit = Number.isFinite(limit) && limit > 0;
@@ -491,59 +534,54 @@ app.get("/api/customers", requireRole(ACCESS.customers), async (req, res) => {
   );
   res.set("Cache-Control", "no-store");
   res.json({ rows, total: Number(total), limit: safeLimit, offset: safeOffset });
-});
+}));
 
-app.get("/api/customers/search", requireAuth, async (req, res) => {
-  try {
-    const { nombre, telefono, direccion, zona } = req.query || {};
-    const conditions = [];
-    const params = [];
+app.get("/api/customers/search", requireAuth, asyncHandler(async (req, res) => {
+  const { nombre, telefono, direccion, zona } = req.query || {};
+  const conditions = [];
+  const params = [];
 
-    if (nombre) {
-      conditions.push("nombre_completo LIKE ?");
-      params.push(`%${nombre}%`);
-    }
-    if (telefono) {
-      conditions.push("telefono_principal LIKE ?");
-      params.push(`%${telefono}%`);
-    }
-    if (direccion) {
-      conditions.push("direccion LIKE ?");
-      params.push(`%${direccion}%`);
-    }
-    if (zona) {
-      conditions.push("zona LIKE ?");
-      params.push(`%${zona}%`);
-    }
-
-    if (conditions.length === 0) {
-      return res.json({ rows: [], total: 0, limit: 20, offset: 0 });
-    }
-
-    const offset = Number(req.query?.offset) || 0;
-    const safeOffset = Number.isFinite(offset) && offset >= 0 ? Math.floor(offset) : 0;
-    const [{ total }] = await query(
-      `SELECT COUNT(*) as total FROM clientes c WHERE ${conditions.join(" AND ")}`,
-      params
-    );
-    const rows = await query(
-      `SELECT c.*, u.nombre as creado_por_nombre
-       FROM clientes c
-       LEFT JOIN usuarios u ON u.id = c.creado_por_usuario_id
-       WHERE ${conditions.join(" AND ")}
-       ORDER BY c.nombre_completo
-       LIMIT 20 OFFSET ${safeOffset}`,
-      params
-    );
-    res.set("Cache-Control", "no-store");
-    res.json({ rows, total: Number(total), limit: 20, offset: safeOffset });
-  } catch (err) {
-    console.error("Error en /api/customers/search:", err);
-    res.status(500).json({ error: err.message || "Error interno al buscar clientes" });
+  if (nombre) {
+    conditions.push("nombre_completo LIKE ?");
+    params.push(`%${nombre}%`);
   }
-});
+  if (telefono) {
+    conditions.push("telefono_principal LIKE ?");
+    params.push(`%${telefono}%`);
+  }
+  if (direccion) {
+    conditions.push("direccion LIKE ?");
+    params.push(`%${direccion}%`);
+  }
+  if (zona) {
+    conditions.push("zona LIKE ?");
+    params.push(`%${zona}%`);
+  }
 
-app.post("/api/customers", requireRole(ACCESS.customers), async (req, res) => {
+  if (conditions.length === 0) {
+    return res.json({ rows: [], total: 0, limit: 20, offset: 0 });
+  }
+
+  const offset = Number(req.query?.offset) || 0;
+  const safeOffset = Number.isFinite(offset) && offset >= 0 ? Math.floor(offset) : 0;
+  const [{ total }] = await query(
+    `SELECT COUNT(*) as total FROM clientes c WHERE ${conditions.join(" AND ")}`,
+    params
+  );
+  const rows = await query(
+    `SELECT c.*, u.nombre as creado_por_nombre
+     FROM clientes c
+     LEFT JOIN usuarios u ON u.id = c.creado_por_usuario_id
+     WHERE ${conditions.join(" AND ")}
+     ORDER BY c.nombre_completo
+     LIMIT 20 OFFSET ${safeOffset}`,
+    params
+  );
+  res.set("Cache-Control", "no-store");
+  res.json({ rows, total: Number(total), limit: 20, offset: safeOffset });
+}));
+
+app.post("/api/customers", requireRole(ACCESS.customers), asyncHandler(async (req, res) => {
   const {
     nombre_completo,
     telefono_principal,
@@ -584,9 +622,9 @@ app.post("/api/customers", requireRole(ACCESS.customers), async (req, res) => {
     detail: nombre_completo,
   });
   res.status(201).json({ id: result.insertId });
-});
+}));
 
-app.get("/api/customers/:id", requireAuth, async (req, res) => {
+app.get("/api/customers/:id", requireAuth, asyncHandler(async (req, res) => {
   const roles = req.user?.roles || [];
   const isAdmin = roles.includes("Administrador del sistema");
   const canCustomers = roles.some((role) => ACCESS.customers.includes(role));
@@ -636,9 +674,9 @@ app.get("/api/customers/:id", requireAuth, async (req, res) => {
     [req.params.id]
   );
   res.json({ ...customer, addresses });
-});
+}));
 
-app.put("/api/customers/:id", requireRole(ACCESS.customers), async (req, res) => {
+app.put("/api/customers/:id", requireRole(ACCESS.customers), asyncHandler(async (req, res) => {
   const {
     nombre_completo,
     telefono_principal,
@@ -672,23 +710,23 @@ app.put("/api/customers/:id", requireRole(ACCESS.customers), async (req, res) =>
   );
   await req.audit({ action: "UPDATE", entityId: req.params.id });
   res.json({ ok: true });
-});
+}));
 
-app.delete("/api/customers/:id", requireRole(ACCESS.customers), async (req, res) => {
+app.delete("/api/customers/:id", requireRole(ACCESS.customers), asyncHandler(async (req, res) => {
   await query("DELETE FROM clientes WHERE id = ?", [req.params.id]);
   await req.audit({ action: "DELETE", entityId: req.params.id });
   res.json({ ok: true });
-});
+}));
 
-app.get("/api/customers/:id/addresses", requireRole([...ACCESS.customers, ...ACCESS.orders, "Repartidor"]), async (req, res) => {
+app.get("/api/customers/:id/addresses", requireRole([...ACCESS.customers, ...ACCESS.orders, "Repartidor"]), asyncHandler(async (req, res) => {
   const rows = await query(
     "SELECT * FROM direcciones_clientes WHERE cliente_id = ?",
     [req.params.id]
   );
   res.json(rows);
-});
+}));
 
-app.post("/api/customers/:id/addresses", requireRole(ACCESS.customers), async (req, res) => {
+app.post("/api/customers/:id/addresses", requireRole(ACCESS.customers), asyncHandler(async (req, res) => {
   const { etiqueta, direccion, ciudad, referencia, es_principal } = req.body || {};
   if (!direccion) {
     return res.status(400).json({ error: "Dirección requerida" });
@@ -712,9 +750,9 @@ app.post("/api/customers/:id/addresses", requireRole(ACCESS.customers), async (r
     detail: direccion,
   });
   res.status(201).json({ id: result.insertId });
-});
+}));
 
-app.put("/api/addresses/:id", requireAuth, requireRole(ACCESS.customers), async (req, res) => {
+app.put("/api/addresses/:id", requireAuth, requireRole(ACCESS.customers), asyncHandler(async (req, res) => {
   const { etiqueta, direccion, ciudad, referencia, es_principal } = req.body || {};
   await query(
     "UPDATE direcciones_clientes SET etiqueta = ?, direccion = ?, ciudad = ?, referencia = ?, es_principal = ?, actualizado_por_usuario_id = ? WHERE id = ?",
@@ -729,21 +767,22 @@ app.put("/api/addresses/:id", requireAuth, requireRole(ACCESS.customers), async 
     ]
   );
   res.json({ ok: true });
-});
+}));
 
-app.delete("/api/addresses/:id", requireAuth, requireRole(ACCESS.customers), async (req, res) => {
+app.delete("/api/addresses/:id", requireAuth, requireRole(ACCESS.customers), asyncHandler(async (req, res) => {
   await query("DELETE FROM direcciones_clientes WHERE id = ?", [req.params.id]);
+  await req.audit({ action: "DELETE_ADDRESS", entityId: req.params.id });
   res.json({ ok: true });
-});
+}));
 
-app.get("/api/products", requireRole([...ACCESS.products, ...ACCESS.orders]), async (_req, res) => {
+app.get("/api/products", requireRole([...ACCESS.products, ...ACCESS.orders]), asyncHandler(async (_req, res) => {
   const rows = await query(
     "SELECT id, nombre as name, descripcion as description, precio as price, activo as active FROM productos ORDER BY id DESC"
   );
   res.json(rows);
-});
+}));
 
-app.post("/api/products", requireRole(ACCESS.products), async (req, res) => {
+app.post("/api/products", requireRole(ACCESS.products), asyncHandler(async (req, res) => {
   const { name, description, price, active } = req.body || {};
   if (!name || price == null) {
     return res.status(400).json({ error: "Nombre y precio requeridos" });
@@ -761,9 +800,9 @@ app.post("/api/products", requireRole(ACCESS.products), async (req, res) => {
   );
   await req.audit({ action: "CREATE", entityId: result.insertId, detail: name });
   res.status(201).json({ id: result.insertId });
-});
+}));
 
-app.put("/api/products/:id", requireRole(ACCESS.products), async (req, res) => {
+app.put("/api/products/:id", requireRole(ACCESS.products), asyncHandler(async (req, res) => {
   const { name, description, price, active } = req.body || {};
   await query(
     "UPDATE productos SET nombre = ?, descripcion = ?, precio = ?, activo = ?, actualizado_por_usuario_id = ? WHERE id = ?",
@@ -778,25 +817,25 @@ app.put("/api/products/:id", requireRole(ACCESS.products), async (req, res) => {
   );
   await req.audit({ action: "UPDATE", entityId: req.params.id });
   res.json({ ok: true });
-});
+}));
 
-app.delete("/api/products/:id", requireRole(ACCESS.products), async (req, res) => {
+app.delete("/api/products/:id", requireRole(ACCESS.products), asyncHandler(async (req, res) => {
   await query(
     "UPDATE productos SET activo = 0, actualizado_por_usuario_id = ? WHERE id = ?",
     [req.user?.id || null, req.params.id]
   );
   await req.audit({ action: "DEACTIVATE", entityId: req.params.id });
   res.json({ ok: true });
-});
+}));
 
-app.get("/api/warehouses", requireRole(ACCESS.warehouses), async (_req, res) => {
+app.get("/api/warehouses", requireRole(ACCESS.warehouses), asyncHandler(async (_req, res) => {
   const rows = await query(
     "SELECT id, nombre as name, ubicacion as location FROM almacenes ORDER BY id DESC"
   );
   res.json(rows);
-});
+}));
 
-app.post("/api/warehouses", requireRole(ACCESS.warehouses), async (req, res) => {
+app.post("/api/warehouses", requireRole(ACCESS.warehouses), asyncHandler(async (req, res) => {
   const { name, location } = req.body || {};
   if (!name) {
     return res.status(400).json({ error: "Nombre requerido" });
@@ -807,9 +846,9 @@ app.post("/api/warehouses", requireRole(ACCESS.warehouses), async (req, res) => 
   );
   await req.audit({ action: "CREATE", entityId: result.insertId, detail: name });
   res.status(201).json({ id: result.insertId });
-});
+}));
 
-app.put("/api/warehouses/:id", requireRole(ACCESS.warehouses), async (req, res) => {
+app.put("/api/warehouses/:id", requireRole(ACCESS.warehouses), asyncHandler(async (req, res) => {
   const { name, location } = req.body || {};
   await query(
     "UPDATE almacenes SET nombre = ?, ubicacion = ?, actualizado_por_usuario_id = ? WHERE id = ?",
@@ -817,31 +856,31 @@ app.put("/api/warehouses/:id", requireRole(ACCESS.warehouses), async (req, res) 
   );
   await req.audit({ action: "UPDATE", entityId: req.params.id });
   res.json({ ok: true });
-});
+}));
 
-app.delete("/api/warehouses/:id", requireRole(ACCESS.warehouses), async (req, res) => {
+app.delete("/api/warehouses/:id", requireRole(ACCESS.warehouses), asyncHandler(async (req, res) => {
   await query("DELETE FROM almacenes WHERE id = ?", [req.params.id]);
   await req.audit({ action: "DELETE", entityId: req.params.id });
   res.json({ ok: true });
-});
+}));
 
 app.get(
   "/api/warehouses/:id/inventory",
   requireRole(ACCESS.warehouses),
-  async (req, res) => {
+  asyncHandler(async (req, res) => {
     const rows = await query(
       "SELECT i.id, i.cantidad as quantity, i.stock_minimo as min_stock, p.nombre as product_name, p.id as product_id FROM inventario i JOIN productos p ON p.id = i.producto_id WHERE i.almacen_id = ?",
       [req.params.id]
     );
     res.json(rows);
-  }
+  })
 );
 
 app.post(
   "/api/inventory/move",
   requireAuth,
   auditMiddleware("inventory"),
-  async (req, res) => {
+  asyncHandler(async (req, res) => {
   const { warehouse_id, product_id, qty, type, order_id, note } = req.body || {};
   if (!warehouse_id || !product_id || !qty || !type) {
     return res.status(400).json({ error: "Datos incompletos" });
@@ -880,12 +919,12 @@ app.post(
     detail: `${type}:${qty}`,
   });
   res.json({ ok: true });
-});
+  }));
 
 app.get(
   "/api/inventory/summary",
   requireAuth,
-  async (_req, res) => {
+  asyncHandler(async (_req, res) => {
     const rows = await query(
       `SELECT p.id as product_id, p.nombre as product_name, COALESCE(SUM(i.cantidad), 0) as stock
        FROM productos p
@@ -893,10 +932,10 @@ app.get(
        GROUP BY p.id, p.nombre`
     );
     res.json(rows);
-  }
+  })
 );
 
-app.get("/api/orders", requireAuth, async (req, res) => {
+app.get("/api/orders", requireAuth, asyncHandler(async (req, res) => {
   const roles = req.user?.roles || [];
   const isAdmin = roles.includes("Administrador del sistema");
   const canOrders = roles.some((role) => ACCESS.orders.includes(role));
@@ -928,9 +967,9 @@ app.get("/api/orders", requireAuth, async (req, res) => {
         [driverName]
       );
   res.json(rows);
-});
+}));
 
-app.get("/api/orders/:id", requireAuth, async (req, res) => {
+app.get("/api/orders/:id", requireAuth, asyncHandler(async (req, res) => {
   const roles = req.user?.roles || [];
   const isAdmin = roles.includes("Administrador del sistema");
   const canOrders = roles.some((role) => ACCESS.orders.includes(role));
@@ -970,9 +1009,9 @@ app.get("/api/orders/:id", requireAuth, async (req, res) => {
     [req.params.id]
   );
   res.json({ ...order, items, history });
-});
+}));
 
-app.put("/api/orders/:id", requireAuth, async (req, res) => {
+app.put("/api/orders/:id", requireAuth, asyncHandler(async (req, res) => {
   const roles = req.user?.roles || [];
   const isAdmin = roles.includes("Administrador del sistema");
   const canOrders = roles.some((role) => ACCESS.orders.includes(role));
@@ -1130,9 +1169,9 @@ app.put("/api/orders/:id", requireAuth, async (req, res) => {
   }
   await req.audit({ action: "UPDATE", entityId: req.params.id });
   res.json({ ok: true });
-});
+}));
 
-app.post("/api/orders", requireRole(ACCESS.orders), async (req, res) => {
+app.post("/api/orders", requireRole(ACCESS.orders), asyncHandler(async (req, res) => {
   const {
     customer_id,
     address_id,
@@ -1272,9 +1311,9 @@ app.post("/api/orders", requireRole(ACCESS.orders), async (req, res) => {
   );
   await req.audit({ action: "CREATE", entityId: orderId });
   res.status(201).json({ id: orderId });
-});
+}));
 
-app.patch("/api/orders/:id/status", requireRole(ACCESS.orders), async (req, res) => {
+app.patch("/api/orders/:id/status", requireRole(ACCESS.orders), asyncHandler(async (req, res) => {
   const { status, note, warehouse_id, scheduled_date } = req.body || {};
   if (!status) {
     return res.status(400).json({ error: "Estado requerido" });
@@ -1346,9 +1385,9 @@ app.patch("/api/orders/:id/status", requireRole(ACCESS.orders), async (req, res)
     detail: status,
   });
   res.json({ ok: true });
-});
+}));
 
-app.get("/api/logistics/trucks", requireRole(ACCESS.logistics), async (req, res) => {
+app.get("/api/logistics/trucks", requireRole(ACCESS.logistics), asyncHandler(async (req, res) => {
   const allowedTrucks = await getAllowedTruckIdsForDriver(req);
   if (allowedTrucks === null) {
     const rows = await query(
@@ -1369,9 +1408,9 @@ app.get("/api/logistics/trucks", requireRole(ACCESS.logistics), async (req, res)
     allowedTrucks
   );
   res.json(rows);
-});
+}));
 
-app.get("/api/logistics/pending-orders", requireRole(ACCESS.logistics), async (req, res) => {
+app.get("/api/logistics/pending-orders", requireRole(ACCESS.logistics), asyncHandler(async (req, res) => {
   const allowedTrucks = await getAllowedTruckIdsForDriver(req);
   if (allowedTrucks !== null) {
     return res.json([]);
@@ -1380,9 +1419,9 @@ app.get("/api/logistics/pending-orders", requireRole(ACCESS.logistics), async (r
     "SELECT p.id, p.estado as status, p.notas as notes, c.nombre_completo as customer_name, c.zona, c.direccion, c.telefono_principal as phone, p.fecha_creacion as created_at, p.fecha_programada as scheduled_date FROM pedidos p JOIN clientes c ON c.id = p.cliente_id WHERE p.estado IN ('Pendiente', 'Reprogramado', 'Creado') ORDER BY p.id DESC"
   );
   res.json(rows);
-});
+}));
 
-app.post("/api/logistics/trucks", requireRole(ACCESS.logistics), async (req, res) => {
+app.post("/api/logistics/trucks", requireRole(ACCESS.logistics), asyncHandler(async (req, res) => {
   const { plate, capacity, active } = req.body || {};
   if (!plate) {
     return res.status(400).json({ error: "Placa requerida" });
@@ -1393,25 +1432,26 @@ app.post("/api/logistics/trucks", requireRole(ACCESS.logistics), async (req, res
   );
   await req.audit({ action: "CREATE_TRUCK", entityId: result.insertId });
   res.status(201).json({ id: result.insertId });
-});
+}));
 
-app.put("/api/logistics/trucks/:id", requireRole(ACCESS.logistics), async (req, res) => {
+app.put("/api/logistics/trucks/:id", requireRole(ACCESS.logistics), asyncHandler(async (req, res) => {
   const { plate, capacity, active } = req.body || {};
   await query(
     "UPDATE camiones SET placa = ?, capacidad = ?, activo = ?, actualizado_por_usuario_id = ? WHERE id = ?",
     [plate, capacity || null, active ? 1 : 0, req.user?.id || null, req.params.id]
   );
+  await req.audit({ action: "UPDATE_TRUCK", entityId: req.params.id, detail: plate });
   res.json({ ok: true });
-});
+}));
 
-app.get("/api/logistics/drivers", requireRole(ACCESS.logistics), async (_req, res) => {
+app.get("/api/logistics/drivers", requireRole(ACCESS.logistics), asyncHandler(async (_req, res) => {
   const rows = await query(
     "SELECT id, nombre as name, telefono as phone, activo as active FROM repartidores ORDER BY id DESC"
   );
   res.json(rows);
-});
+}));
 
-app.post("/api/logistics/drivers", requireRole(ACCESS.logistics), async (req, res) => {
+app.post("/api/logistics/drivers", requireRole(ACCESS.logistics), asyncHandler(async (req, res) => {
   const { name, phone, active } = req.body || {};
   if (!name) {
     return res.status(400).json({ error: "Nombre requerido" });
@@ -1422,18 +1462,19 @@ app.post("/api/logistics/drivers", requireRole(ACCESS.logistics), async (req, re
   );
   await req.audit({ action: "CREATE_DRIVER", entityId: result.insertId });
   res.status(201).json({ id: result.insertId });
-});
+}));
 
-app.put("/api/logistics/drivers/:id", requireRole(ACCESS.logistics), async (req, res) => {
+app.put("/api/logistics/drivers/:id", requireRole(ACCESS.logistics), asyncHandler(async (req, res) => {
   const { name, phone, active } = req.body || {};
   await query(
     "UPDATE repartidores SET nombre = ?, telefono = ?, activo = ?, actualizado_por_usuario_id = ? WHERE id = ?",
     [name, phone || null, active ? 1 : 0, req.user?.id || null, req.params.id]
   );
+  await req.audit({ action: "UPDATE_DRIVER", entityId: req.params.id, detail: name });
   res.json({ ok: true });
-});
+}));
 
-app.post("/api/logistics/deliveries", requireRole(ACCESS.logistics), async (req, res) => {
+app.post("/api/logistics/deliveries", requireRole(ACCESS.logistics), asyncHandler(async (req, res) => {
   const { order_id, truck_id, driver_id, scheduled_at } = req.body || {};
   if (!order_id || !truck_id || !driver_id) {
     return res.status(400).json({ error: "Datos incompletos" });
@@ -1473,62 +1514,70 @@ app.post("/api/logistics/deliveries", requireRole(ACCESS.logistics), async (req,
   );
   await req.audit({ action: "ASSIGN_DELIVERY", entityId: result.insertId });
   res.status(201).json({ id: result.insertId });
-});
+}));
 
-app.post("/api/logistics/deliveries/bulk", requireRole(ACCESS.logistics), async (req, res) => {
+app.post("/api/logistics/deliveries/bulk", requireRole(ACCESS.logistics), asyncHandler(async (req, res) => {
   const { order_ids, truck_id, driver_id } = req.body || {};
   if (!Array.isArray(order_ids) || order_ids.length === 0 || !truck_id || !driver_id) {
     return res.status(400).json({ error: "Datos incompletos" });
   }
   let assigned = 0;
   let updated = 0;
-  let skipped = 0;
-  for (const rawId of order_ids) {
-    const orderId = Number(rawId);
-    if (!orderId) continue;
-    const existing = await query(
-      "SELECT id FROM entregas WHERE pedido_id = ? LIMIT 1",
-      [orderId]
-    );
-    if (existing.length > 0) {
-      await query(
-        "UPDATE entregas SET camion_id = ?, repartidor_id = ?, estado = 'Despachado', programado_en = NULL, actualizado_por_usuario_id = ? WHERE pedido_id = ?",
-        [truck_id, driver_id, req.user?.id || null, orderId]
-      );
-      await query(
-        "UPDATE pedidos SET estado = 'Despachado', actualizado_por_usuario_id = ? WHERE id = ?",
-        [req.user?.id || null, orderId]
-      );
-      await query(
-        "INSERT INTO historial_estado_pedido (pedido_id, estado, nota) VALUES (?, 'Despachado', 'Reasignado a camión (masivo)')",
+  const skipped = 0;
+  const auditItems = [];
+
+  await withTransaction(async (exec) => {
+    for (const rawId of order_ids) {
+      const orderId = Number(rawId);
+      if (!orderId) continue;
+      const existing = await exec(
+        "SELECT id FROM entregas WHERE pedido_id = ? LIMIT 1",
         [orderId]
       );
-      await req.audit({ action: "REASSIGN_DELIVERY_BULK", entityId: existing[0].id });
-      updated += 1;
-      continue;
+      if (existing.length > 0) {
+        await exec(
+          "UPDATE entregas SET camion_id = ?, repartidor_id = ?, estado = 'Despachado', programado_en = NULL, actualizado_por_usuario_id = ? WHERE pedido_id = ?",
+          [truck_id, driver_id, req.user?.id || null, orderId]
+        );
+        await exec(
+          "UPDATE pedidos SET estado = 'Despachado', actualizado_por_usuario_id = ? WHERE id = ?",
+          [req.user?.id || null, orderId]
+        );
+        await exec(
+          "INSERT INTO historial_estado_pedido (pedido_id, estado, nota) VALUES (?, 'Despachado', 'Reasignado a camión (masivo)')",
+          [orderId]
+        );
+        auditItems.push({ action: "REASSIGN_DELIVERY_BULK", entityId: existing[0].id });
+        updated += 1;
+      } else {
+        const result = await exec(
+          "INSERT INTO entregas (pedido_id, camion_id, repartidor_id, estado, programado_en, creado_por_usuario_id, actualizado_por_usuario_id) VALUES (?, ?, ?, 'Despachado', NULL, ?, ?)",
+          [orderId, truck_id, driver_id, req.user?.id || null, req.user?.id || null]
+        );
+        await exec(
+          "UPDATE pedidos SET estado = 'Despachado', actualizado_por_usuario_id = ? WHERE id = ?",
+          [req.user?.id || null, orderId]
+        );
+        await exec(
+          "INSERT INTO historial_estado_pedido (pedido_id, estado, nota) VALUES (?, 'Despachado', 'Asignado a camión (masivo)')",
+          [orderId]
+        );
+        auditItems.push({ action: "ASSIGN_DELIVERY_BULK", entityId: result.insertId });
+        assigned += 1;
+      }
     }
-    const result = await query(
-      "INSERT INTO entregas (pedido_id, camion_id, repartidor_id, estado, programado_en, creado_por_usuario_id, actualizado_por_usuario_id) VALUES (?, ?, ?, 'Despachado', NULL, ?, ?)",
-      [orderId, truck_id, driver_id, req.user?.id || null, req.user?.id || null]
-    );
-    await query(
-      "UPDATE pedidos SET estado = 'Despachado', actualizado_por_usuario_id = ? WHERE id = ?",
-      [req.user?.id || null, orderId]
-    );
-    await query(
-      "INSERT INTO historial_estado_pedido (pedido_id, estado, nota) VALUES (?, 'Despachado', 'Asignado a camión (masivo)')",
-      [orderId]
-    );
-    await req.audit({ action: "ASSIGN_DELIVERY_BULK", entityId: result.insertId });
-    assigned += 1;
+  });
+
+  for (const item of auditItems) {
+    await req.audit(item);
   }
   res.json({ ok: true, assigned, updated, skipped });
-});
+}));
 
 app.patch(
   "/api/logistics/deliveries/:id/status",
   requireRole(ACCESS.logistics),
-  async (req, res) => {
+  asyncHandler(async (req, res) => {
     const { status, incident_type, note, scheduled_date } = req.body || {};
     if (!status) {
       return res.status(400).json({ error: "Estado requerido" });
@@ -1633,10 +1682,10 @@ app.patch(
       detail: status,
     });
     res.json({ ok: true });
-  }
+  })
 );
 
-app.get("/api/logistics/deliveries/search", requireRole(ACCESS.logistics), async (req, res) => {
+app.get("/api/logistics/deliveries/search", requireRole(ACCESS.logistics), asyncHandler(async (req, res) => {
   const { q } = req.query || {};
   if (!q || String(q).trim().length < 2) return res.json([]);
   const term = `%${String(q).trim()}%`;
@@ -1653,12 +1702,12 @@ app.get("/api/logistics/deliveries/search", requireRole(ACCESS.logistics), async
     [term]
   );
   res.json(rows);
-});
+}));
 
 app.patch(
   "/api/logistics/deliveries/:id/reassign",
   requireRole(ACCESS.logistics),
-  async (req, res) => {
+  asyncHandler(async (req, res) => {
     const { truck_id, driver_id } = req.body || {};
     if (!truck_id || !driver_id) {
       return res.status(400).json({ error: "truck_id y driver_id son requeridos" });
@@ -1677,13 +1726,13 @@ app.patch(
     );
     await req.audit({ action: "DELIVERY_REASSIGN", entityId: req.params.id, detail: `truck=${truck_id} driver=${driver_id}` });
     res.json({ ok: true });
-  }
+  })
 );
 
 app.post(
   "/api/logistics/deliveries/reassign-bulk",
   requireRole(ACCESS.logistics),
-  async (req, res) => {
+  asyncHandler(async (req, res) => {
     const { delivery_ids, truck_id, driver_id } = req.body || {};
     if (!Array.isArray(delivery_ids) || delivery_ids.length === 0 || !truck_id || !driver_id) {
       return res.status(400).json({ error: "delivery_ids, truck_id y driver_id son requeridos" });
@@ -1693,6 +1742,8 @@ app.post(
       return res.status(400).json({ error: "delivery_ids inválidos" });
     }
     const placeholders = ids.map(() => "?").join(",");
+
+    // Leer deliveries válidas antes de la transacción (solo lectura)
     const deliveries = await query(
       `SELECT id, pedido_id FROM entregas WHERE id IN (${placeholders}) AND estado NOT IN ('Entregado','Cancelado')`,
       ids
@@ -1700,22 +1751,25 @@ app.post(
     if (deliveries.length === 0) {
       return res.status(404).json({ error: "No hay entregas válidas para reasignar" });
     }
+
     const validIds = deliveries.map((d) => d.id);
     const updatePlaceholders = validIds.map(() => "?").join(",");
-    const updateResult = await query(
-      `UPDATE entregas SET camion_id = ?, repartidor_id = ?, actualizado_por_usuario_id = ? WHERE id IN (${updatePlaceholders})`,
-      [truck_id, driver_id, req.user?.id || null, ...validIds]
-    );
-    if (deliveries.length > 0) {
+    let updateResult;
+
+    await withTransaction(async (exec) => {
+      updateResult = await exec(
+        `UPDATE entregas SET camion_id = ?, repartidor_id = ?, actualizado_por_usuario_id = ? WHERE id IN (${updatePlaceholders})`,
+        [truck_id, driver_id, req.user?.id || null, ...validIds]
+      );
       const insertValues = deliveries
         .map(() => "(?, 'Reasignado', 'Camión y/o repartidor reasignado (masivo)')")
         .join(",");
-      const insertParams = deliveries.map((d) => d.pedido_id);
-      await query(
+      await exec(
         `INSERT INTO historial_estado_pedido (pedido_id, estado, nota) VALUES ${insertValues}`,
-        insertParams
+        deliveries.map((d) => d.pedido_id)
       );
-    }
+    });
+
     await req.audit({
       action: "DELIVERY_REASSIGN_BULK",
       entityId: 0,
@@ -1728,7 +1782,7 @@ app.post(
       reassigned: validIds.length,
       skipped: Math.max(0, ids.length - validIds.length),
     });
-  }
+  })
 );
 
 async function getCentralWarehouseId() {
@@ -1740,7 +1794,7 @@ async function getCentralWarehouseId() {
   return first ? first.id : null;
 }
 
-app.get("/api/logistics/truck-summary", requireRole(ACCESS.logistics), async (req, res) => {
+app.get("/api/logistics/truck-summary", requireRole(ACCESS.logistics), asyncHandler(async (req, res) => {
   const { truck_id } = req.query || {};
   if (!truck_id) {
     return res.status(400).json({ error: "truck_id requerido" });
@@ -1762,9 +1816,9 @@ app.get("/api/logistics/truck-summary", requireRole(ACCESS.logistics), async (re
     [truck_id]
   );
   res.json(rows[0] || { total_orders: 0, total_items: 0, total_value: 0 });
-});
+}));
 
-app.get("/api/logistics/truck-orders", requireRole(ACCESS.logistics), async (req, res) => {
+app.get("/api/logistics/truck-orders", requireRole(ACCESS.logistics), asyncHandler(async (req, res) => {
   const { truck_id, delivered_to, scheduled_date, delivery_date, fecha_registro } = req.query || {};
   if (!truck_id) {
     return res.status(400).json({ error: "truck_id requerido" });
@@ -1831,9 +1885,9 @@ app.get("/api/logistics/truck-orders", requireRole(ACCESS.logistics), async (req
     [truck_id, ...dateParams]
   );
   res.json(rows);
-});
+}));
 
-app.post("/api/logistics/returns", requireRole(ACCESS.logistics), async (req, res) => {
+app.post("/api/logistics/returns", requireRole(ACCESS.logistics), asyncHandler(async (req, res) => {
   const { order_id, truck_id, cash_amount, return_date, gastos_gasolina, gastos_almuerzo, gastos_otros } = req.body || {};
   if (!truck_id) {
     return res.status(400).json({ error: "Datos incompletos: falta el camión" });
@@ -1993,9 +2047,9 @@ app.post("/api/logistics/returns", requireRole(ACCESS.logistics), async (req, re
     detail: `camion:${truck_id}`,
   });
   res.json({ ok: true });
-});
+}));
 
-app.get("/api/logistics/returns-history", requireRole(ACCESS.logistics), async (req, res) => {
+app.get("/api/logistics/returns-history", requireRole(ACCESS.logistics), asyncHandler(async (req, res) => {
   const roles = req.user?.roles || [];
   const isAdmin = roles.includes("Administrador del sistema");
   const isJefe = roles.includes("Jefe de logística");
@@ -2024,9 +2078,9 @@ app.get("/api/logistics/returns-history", requireRole(ACCESS.logistics), async (
     [fromDate, toDate]
   );
   res.json(rows);
-});
+}));
 
-app.get("/api/reports/sales", requireRole(ACCESS.reports), async (req, res) => {
+app.get("/api/reports/sales", requireRole(ACCESS.reports), asyncHandler(async (req, res) => {
   const { from, to, status, truck_id } = req.query;
   const rangeFrom = from || "1970-01-01";
   const rangeTo = to || "2999-12-31";
@@ -2061,9 +2115,9 @@ app.get("/api/reports/sales", requireRole(ACCESS.reports), async (req, res) => {
     params
   );
   res.json(rows);
-});
+}));
 
-app.get("/api/reports/orders-by-status", requireRole(ACCESS.reports), async (req, res) => {
+app.get("/api/reports/orders-by-status", requireRole(ACCESS.reports), asyncHandler(async (req, res) => {
   const { from, to, truck_id, status } = req.query || {};
   const rangeFrom = from || "1970-01-01";
   const rangeTo = to || "2999-12-31";
@@ -2101,9 +2155,9 @@ app.get("/api/reports/orders-by-status", requireRole(ACCESS.reports), async (req
     params
   );
   res.json(rows);
-});
+}));
 
-app.get("/api/reports/deliveries", requireRole(ACCESS.reports), async (req, res) => {
+app.get("/api/reports/deliveries", requireRole(ACCESS.reports), asyncHandler(async (req, res) => {
   const { from, to, truck_id, status } = req.query || {};
   const rangeFrom = from || "1970-01-01";
   const rangeTo = to || "2999-12-31";
@@ -2128,9 +2182,9 @@ app.get("/api/reports/deliveries", requireRole(ACCESS.reports), async (req, res)
     params
   );
   res.json(rows);
-});
+}));
 
-app.get("/api/reports/sales-by-client-type", requireRole(ACCESS.reports), async (req, res) => {
+app.get("/api/reports/sales-by-client-type", requireRole(ACCESS.reports), asyncHandler(async (req, res) => {
   const { from, to, status } = req.query;
   const fromDate = from || "1970-01-01";
   const toDate = to || "2999-12-31";
@@ -2152,9 +2206,9 @@ app.get("/api/reports/sales-by-client-type", requireRole(ACCESS.reports), async 
     params
   );
   res.json(rows);
-});
+}));
 
-app.get("/api/reports/deliveries-by-truck", requireRole(ACCESS.reports), async (req, res) => {
+app.get("/api/reports/deliveries-by-truck", requireRole(ACCESS.reports), asyncHandler(async (req, res) => {
   const { from, to } = req.query;
   const fromDate = from || "1970-01-01";
   const toDate = to || "2999-12-31";
@@ -2169,33 +2223,33 @@ app.get("/api/reports/deliveries-by-truck", requireRole(ACCESS.reports), async (
     [fromDate, toDate]
   );
   res.json(rows);
-});
+}));
 
-app.get("/api/reports/trucks", requireRole(ACCESS.reports), async (_req, res) => {
+app.get("/api/reports/trucks", requireRole(ACCESS.reports), asyncHandler(async (_req, res) => {
   const rows = await query(
     "SELECT id, placa as plate FROM camiones ORDER BY placa"
   );
   res.json(rows);
-});
+}));
 
-app.get("/api/reports/drivers", requireRole(ACCESS.reports), async (_req, res) => {
+app.get("/api/reports/drivers", requireRole(ACCESS.reports), asyncHandler(async (_req, res) => {
   const rows = await query(
     "SELECT id, nombre as name FROM repartidores ORDER BY nombre"
   );
   res.json(rows);
-});
+}));
 
-app.get("/api/reports/users", requireRole(ACCESS.reports), async (_req, res) => {
+app.get("/api/reports/users", requireRole(ACCESS.reports), asyncHandler(async (_req, res) => {
   const rows = await query(
     "SELECT id, nombre as name FROM usuarios WHERE activo = 1 ORDER BY nombre"
   );
   res.json(rows);
-});
+}));
 
 app.get(
   "/api/reports/orders-status-summary",
   requireRole(ACCESS.reports),
-  async (req, res) => {
+  asyncHandler(async (req, res) => {
     const { from, to, month, truck_id, driver_id, seller_id } = req.query || {};
     let rangeFrom = from || "1970-01-01";
     let rangeTo = to || "2999-12-31";
@@ -2237,13 +2291,13 @@ app.get(
       params
     );
     res.json(rows);
-  }
+  })
 );
 
 app.get(
   "/api/reports/orders-summary",
   requireRole(ACCESS.reports),
-  async (req, res) => {
+  asyncHandler(async (req, res) => {
     const { from, to, truck_id, status } = req.query || {};
     const rangeFrom = from || "1970-01-01";
     const rangeTo = to || "2999-12-31";
@@ -2290,13 +2344,13 @@ app.get(
       params
     );
     res.json(rows);
-  }
+  })
 );
 
 app.get(
   "/api/reports/stock-by-warehouse",
   requireRole(ACCESS.reports),
-  async (req, res) => {
+  asyncHandler(async (req, res) => {
     const { from, to } = req.query || {};
     const rangeTo = to || from || "";
     if (!rangeTo) {
@@ -2323,10 +2377,10 @@ app.get(
       [rangeTo]
     );
     res.json(rows);
-  }
+  })
 );
 
-app.get("/api/reports/performance", requireRole(ACCESS.reports), async (req, res) => {
+app.get("/api/reports/performance", requireRole(ACCESS.reports), asyncHandler(async (req, res) => {
   const { from, to, truck_id } = req.query || {};
   const rangeFrom = from || "1970-01-01";
   const rangeTo = to || "2999-12-31";
@@ -2350,14 +2404,14 @@ app.get("/api/reports/performance", requireRole(ACCESS.reports), async (req, res
     params
   );
   res.json(rows);
-});
+}));
 
-app.get("/api/admin/roles", requireRole(ACCESS.admin), async (_req, res) => {
+app.get("/api/admin/roles", requireRole(ACCESS.admin), asyncHandler(async (_req, res) => {
   const roles = await query("SELECT id, nombre as name FROM roles ORDER BY nombre");
   res.json(roles);
-});
+}));
 
-app.post("/api/admin/roles", requireRole(ACCESS.admin), async (req, res) => {
+app.post("/api/admin/roles", requireRole(ACCESS.admin), asyncHandler(async (req, res) => {
   const { name } = req.body || {};
   if (!name) {
     return res.status(400).json({ error: "Nombre requerido" });
@@ -2372,9 +2426,9 @@ app.post("/api/admin/roles", requireRole(ACCESS.admin), async (req, res) => {
     }
     throw err;
   }
-});
+}));
 
-app.put("/api/admin/roles/:id", requireRole(ACCESS.admin), async (req, res) => {
+app.put("/api/admin/roles/:id", requireRole(ACCESS.admin), asyncHandler(async (req, res) => {
   const { name } = req.body || {};
   if (!name) {
     return res.status(400).json({ error: "Nombre requerido" });
@@ -2389,23 +2443,23 @@ app.put("/api/admin/roles/:id", requireRole(ACCESS.admin), async (req, res) => {
     }
     throw err;
   }
-});
+}));
 
-app.get("/api/admin/tipos-cliente", requireRole(ACCESS.admin), async (_req, res) => {
+app.get("/api/admin/tipos-cliente", requireRole(ACCESS.admin), asyncHandler(async (_req, res) => {
   const rows = await query(
     "SELECT id, nombre, activo, descuento_unidades, fecha_creacion FROM tipos_cliente ORDER BY nombre"
   );
   res.json(rows);
-});
+}));
 
-app.get("/api/admin/tipos-precio", requireRole(ACCESS.admin), async (_req, res) => {
+app.get("/api/admin/tipos-precio", requireRole(ACCESS.admin), asyncHandler(async (_req, res) => {
   const rows = await query(
     "SELECT id, nombre, activo, fecha_creacion FROM tipos_precio ORDER BY nombre"
   );
   res.json(rows);
-});
+}));
 
-app.get("/api/admin/precios-producto", requireRole(ACCESS.admin), async (_req, res) => {
+app.get("/api/admin/precios-producto", requireRole(ACCESS.admin), asyncHandler(async (_req, res) => {
   const rows = await query(
     `SELECT tpp.id, tpp.precio, tpp.activo, tpp.tipo_precio_id, tp.nombre as tipo_precio,
       tpp.producto_id, p.nombre as producto
@@ -2415,9 +2469,9 @@ app.get("/api/admin/precios-producto", requireRole(ACCESS.admin), async (_req, r
      ORDER BY tp.nombre, p.nombre`
   );
   res.json(rows);
-});
+}));
 
-app.post("/api/admin/tipos-cliente", requireRole(ACCESS.admin), async (req, res) => {
+app.post("/api/admin/tipos-cliente", requireRole(ACCESS.admin), asyncHandler(async (req, res) => {
   const { nombre, descuento_unidades } = req.body || {};
   if (!nombre) {
     return res.status(400).json({ error: "Nombre requerido" });
@@ -2428,9 +2482,9 @@ app.post("/api/admin/tipos-cliente", requireRole(ACCESS.admin), async (req, res)
   );
   await req.audit({ action: "CREATE_TIPO_CLIENTE", entityId: result.insertId, detail: nombre });
   res.status(201).json({ id: result.insertId });
-});
+}));
 
-app.post("/api/admin/tipos-precio", requireRole(ACCESS.admin), async (req, res) => {
+app.post("/api/admin/tipos-precio", requireRole(ACCESS.admin), asyncHandler(async (req, res) => {
   const { nombre } = req.body || {};
   if (!nombre) {
     return res.status(400).json({ error: "Nombre requerido" });
@@ -2441,12 +2495,15 @@ app.post("/api/admin/tipos-precio", requireRole(ACCESS.admin), async (req, res) 
   );
   await req.audit({ action: "CREATE_TIPO_PRECIO", entityId: result.insertId, detail: nombre });
   res.status(201).json({ id: result.insertId });
-});
+}));
 
-app.post("/api/admin/precios-producto", requireRole(ACCESS.admin), async (req, res) => {
+app.post("/api/admin/precios-producto", requireRole(ACCESS.admin), asyncHandler(async (req, res) => {
   const { tipo_precio_id, producto_id, precio, activo } = req.body || {};
   if (!tipo_precio_id || !producto_id || precio === undefined) {
     return res.status(400).json({ error: "Datos incompletos" });
+  }
+  if (!Number.isFinite(Number(precio)) || Number(precio) < 0) {
+    return res.status(400).json({ error: "Precio inválido" });
   }
   try {
   const result = await query(
@@ -2472,9 +2529,9 @@ app.post("/api/admin/precios-producto", requireRole(ACCESS.admin), async (req, r
     }
     throw err;
   }
-});
+}));
 
-app.put("/api/admin/tipos-cliente/:id", requireRole(ACCESS.admin), async (req, res) => {
+app.put("/api/admin/tipos-cliente/:id", requireRole(ACCESS.admin), asyncHandler(async (req, res) => {
   const { nombre, activo, descuento_unidades } = req.body || {};
   if (!nombre) {
     return res.status(400).json({ error: "Nombre requerido" });
@@ -2485,9 +2542,9 @@ app.put("/api/admin/tipos-cliente/:id", requireRole(ACCESS.admin), async (req, r
   );
   await req.audit({ action: "UPDATE_TIPO_CLIENTE", entityId: req.params.id, detail: nombre });
   res.json({ ok: true });
-});
+}));
 
-app.put("/api/admin/tipos-precio/:id", requireRole(ACCESS.admin), async (req, res) => {
+app.put("/api/admin/tipos-precio/:id", requireRole(ACCESS.admin), asyncHandler(async (req, res) => {
   const { nombre, activo } = req.body || {};
   if (!nombre) {
     return res.status(400).json({ error: "Nombre requerido" });
@@ -2498,12 +2555,15 @@ app.put("/api/admin/tipos-precio/:id", requireRole(ACCESS.admin), async (req, re
   );
   await req.audit({ action: "UPDATE_TIPO_PRECIO", entityId: req.params.id, detail: nombre });
   res.json({ ok: true });
-});
+}));
 
-app.put("/api/admin/precios-producto/:id", requireRole(ACCESS.admin), async (req, res) => {
+app.put("/api/admin/precios-producto/:id", requireRole(ACCESS.admin), asyncHandler(async (req, res) => {
   const { precio, activo } = req.body || {};
   if (precio === undefined) {
     return res.status(400).json({ error: "Precio requerido" });
+  }
+  if (!Number.isFinite(Number(precio)) || Number(precio) < 0) {
+    return res.status(400).json({ error: "Precio inválido" });
   }
   await query(
     "UPDATE tipos_precio_producto SET precio = ?, activo = ?, actualizado_por_usuario_id = ? WHERE id = ?",
@@ -2514,19 +2574,25 @@ app.put("/api/admin/precios-producto/:id", requireRole(ACCESS.admin), async (req
     entityId: req.params.id,
   });
   res.json({ ok: true });
-});
+}));
 
-app.get("/api/admin/users", requireRole(ACCESS.admin), async (_req, res) => {
+app.get("/api/admin/users", requireRole(ACCESS.admin), asyncHandler(async (_req, res) => {
   const rows = await query(
     "SELECT u.id, u.nombre as name, u.usuario as email, u.activo as is_active, u.fecha_creacion as created_at, GROUP_CONCAT(r.nombre ORDER BY r.nombre SEPARATOR ', ') as roles FROM usuarios u LEFT JOIN usuarios_roles ur ON ur.usuario_id = u.id LEFT JOIN roles r ON r.id = ur.rol_id GROUP BY u.id ORDER BY u.id DESC"
   );
   res.json(rows);
-});
+}));
 
-app.post("/api/admin/users", requireRole(ACCESS.admin), async (req, res) => {
+app.post("/api/admin/users", requireRole(ACCESS.admin), asyncHandler(async (req, res) => {
   const { name, email, password, is_active } = req.body || {};
   if (!name || !email || !password) {
     return res.status(400).json({ error: "Nombre, usuario y contraseña requeridos" });
+  }
+  if (String(password).length < 6) {
+    return res.status(400).json({ error: "La contraseña debe tener al menos 6 caracteres" });
+  }
+  if (String(password).length > 128) {
+    return res.status(400).json({ error: "Contraseña demasiado larga" });
   }
   const hash = await bcrypt.hash(password, 10);
   const result = await query(
@@ -2535,9 +2601,9 @@ app.post("/api/admin/users", requireRole(ACCESS.admin), async (req, res) => {
   );
   await req.audit({ action: "CREATE_USER", entityId: result.insertId, detail: email });
   res.status(201).json({ id: result.insertId });
-});
+}));
 
-app.put("/api/admin/users/:id", requireRole(ACCESS.admin), async (req, res) => {
+app.put("/api/admin/users/:id", requireRole(ACCESS.admin), asyncHandler(async (req, res) => {
   const { name, email, is_active } = req.body || {};
   await query(
     "UPDATE usuarios SET nombre = ?, usuario = ?, activo = ? WHERE id = ?",
@@ -2545,12 +2611,18 @@ app.put("/api/admin/users/:id", requireRole(ACCESS.admin), async (req, res) => {
   );
   await req.audit({ action: "UPDATE_USER", entityId: req.params.id, detail: email });
   res.json({ ok: true });
-});
+}));
 
-app.put("/api/admin/users/:id/password", requireRole(ACCESS.admin), async (req, res) => {
+app.put("/api/admin/users/:id/password", requireRole(ACCESS.admin), asyncHandler(async (req, res) => {
   const { password } = req.body || {};
   if (!password) {
     return res.status(400).json({ error: "Contraseña requerida" });
+  }
+  if (String(password).length < 6) {
+    return res.status(400).json({ error: "La contraseña debe tener al menos 6 caracteres" });
+  }
+  if (String(password).length > 128) {
+    return res.status(400).json({ error: "Contraseña demasiado larga" });
   }
   const hash = await bcrypt.hash(password, 10);
   await query("UPDATE usuarios SET hash_contrasena = ? WHERE id = ?", [
@@ -2559,9 +2631,9 @@ app.put("/api/admin/users/:id/password", requireRole(ACCESS.admin), async (req, 
   ]);
   await req.audit({ action: "UPDATE_USER_PASSWORD", entityId: req.params.id });
   res.json({ ok: true });
-});
+}));
 
-app.put("/api/admin/users/:id/roles", requireRole(ACCESS.admin), async (req, res) => {
+app.put("/api/admin/users/:id/roles", requireRole(ACCESS.admin), asyncHandler(async (req, res) => {
   const { role_ids } = req.body || {};
   if (!Array.isArray(role_ids)) {
     return res.status(400).json({ error: "role_ids debe ser un arreglo" });
@@ -2575,7 +2647,7 @@ app.put("/api/admin/users/:id/roles", requireRole(ACCESS.admin), async (req, res
   }
   await req.audit({ action: "SET_ROLES", entityId: req.params.id });
   res.json({ ok: true });
-});
+}));
 
 async function start() {
   await ensureBaseRoles();
@@ -2605,6 +2677,12 @@ async function start() {
   for (const table of traceTables) {
     await ensureTraceColumns(table);
   }
+  // Middleware global de manejo de errores (captura los errores de asyncHandler)
+  app.use((err, req, res, _next) => {
+    console.error(`[${new Date().toISOString()}] ${req.method} ${req.path}:`, err);
+    res.status(err.status || 500).json({ error: "Error interno del servidor" });
+  });
+
   app.listen(PORT, () => {
     console.log(`Ionlife API escuchando en puerto ${PORT}`);
   });
