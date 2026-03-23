@@ -215,15 +215,43 @@ async function ensurePriceTypes() {
 
 async function ensureDevolucionesRegistroTable() {
   // Migración: agregar constraint único en instalaciones existentes sin el constraint
-  const constraint = await query(
-    `SELECT CONSTRAINT_NAME FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
-     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'devoluciones_registro'
-     AND CONSTRAINT_NAME = 'uniq_camion_fecha'`
+  const indexes = await query(
+    `SHOW INDEX FROM devoluciones_registro WHERE Key_name = 'uniq_camion_fecha'`
   );
-  if (constraint.length === 0) {
+  if (indexes.length === 0) {
+    // Deduplicar filas dejando solo la de mayor id por (camion_id, fecha)
     await query(
-      "ALTER TABLE devoluciones_registro ADD UNIQUE KEY uniq_camion_fecha (camion_id, fecha)"
+      `DELETE dr FROM devoluciones_registro dr
+       INNER JOIN (
+         SELECT MIN(id) AS id_borrar, camion_id, fecha
+         FROM devoluciones_registro
+         GROUP BY camion_id, fecha
+         HAVING COUNT(*) > 1
+       ) dup ON dr.camion_id = dup.camion_id AND dr.fecha = dup.fecha AND dr.id = dup.id_borrar`
     );
+    try {
+      await query(
+        "ALTER TABLE devoluciones_registro ADD UNIQUE KEY uniq_camion_fecha (camion_id, fecha)"
+      );
+    } catch (e) {
+      if (e.code === "ER_DUP_ENTRY" || (e.message && e.message.includes("Duplicate entry"))) {
+        // Segunda pasada: eliminar todos los duplicados excepto el MAX(id)
+        await query(
+          `DELETE dr FROM devoluciones_registro dr
+           INNER JOIN (
+             SELECT MAX(id) AS id_keep, camion_id, fecha
+             FROM devoluciones_registro
+             GROUP BY camion_id, fecha
+             HAVING COUNT(*) > 1
+           ) keep ON dr.camion_id = keep.camion_id AND dr.fecha = keep.fecha AND dr.id != keep.id_keep`
+        );
+        await query(
+          "ALTER TABLE devoluciones_registro ADD UNIQUE KEY uniq_camion_fecha (camion_id, fecha)"
+        );
+      } else {
+        throw e;
+      }
+    }
   }
 }
 
