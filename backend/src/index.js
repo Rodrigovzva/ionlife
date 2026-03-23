@@ -338,9 +338,10 @@ app.get("/api/driver/entregas", requireAuth, asyncHandler(async (req, res) => {
     ? "DATE(COALESCE(e.programado_en, p.fecha_programada)) = ?"
     : todayClause;
   const dateParams = date ? [date] : [];
+  const notCancelled = "AND e.estado <> 'Cancelado'";
   if (isAdmin) {
     const rows = await query(
-      `${baseQuery} WHERE ${dateClause} ${groupByClause}`,
+      `${baseQuery} WHERE ${dateClause} ${notCancelled} ${groupByClause}`,
       dateParams
     );
     return res.json(rows);
@@ -352,11 +353,11 @@ app.get("/api/driver/entregas", requireAuth, asyncHandler(async (req, res) => {
   const driverName = req.user?.name;
   const rows = driverId
     ? await query(
-        `${baseQuery} WHERE r.id = ? AND ${dateClause} ${groupByClause}`,
+        `${baseQuery} WHERE r.id = ? AND ${dateClause} ${notCancelled} ${groupByClause}`,
         [driverId, ...dateParams]
       )
     : await query(
-        `${baseQuery} WHERE LOWER(r.nombre) = LOWER(?) AND ${dateClause} ${groupByClause}`,
+        `${baseQuery} WHERE LOWER(r.nombre) = LOWER(?) AND ${dateClause} ${notCancelled} ${groupByClause}`,
         [driverName, ...dateParams]
       );
   res.json(rows);
