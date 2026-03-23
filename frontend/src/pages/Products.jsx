@@ -50,6 +50,12 @@ export default function Products() {
     setEditForm({ name: "", description: "", price: "", active: true });
   }
 
+  async function handleDeactivate(product) {
+    if (!window.confirm(`¿Desactivar el producto "${product.name}"?`)) return;
+    await api.delete(`/api/products/${product.id}`);
+    load();
+  }
+
   async function saveEdit() {
     await api.put(`/api/products/${editId}`, {
       name: editForm.name,
@@ -171,13 +177,24 @@ export default function Products() {
                     </button>
                   </div>
                 ) : (
-                  <button
-                    className="btn btn-outline btn-sm"
-                    type="button"
-                    onClick={() => startEdit(p)}
-                  >
-                    Editar
-                  </button>
+                  <div style={{ display: "flex", gap: 4 }}>
+                    <button
+                      className="btn btn-outline btn-sm"
+                      type="button"
+                      onClick={() => startEdit(p)}
+                    >
+                      Editar
+                    </button>
+                    {p.active && (
+                      <button
+                        className="btn btn-danger btn-sm"
+                        type="button"
+                        onClick={() => handleDeactivate(p)}
+                      >
+                        Desactivar
+                      </button>
+                    )}
+                  </div>
                 )}
               </td>
             </tr>

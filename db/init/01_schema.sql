@@ -292,6 +292,28 @@ CREATE TABLE IF NOT EXISTS auditoria (
   FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL
 );
 
+CREATE TABLE IF NOT EXISTS devoluciones_registro (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  fecha DATE NOT NULL,
+  camion_id INT NOT NULL,
+  repartidor_id INT NULL,
+  pedido_id INT NULL,
+  monto_ventas DECIMAL(10,2) NOT NULL DEFAULT 0,
+  gastos_gasolina DECIMAL(10,2) NOT NULL DEFAULT 0,
+  gastos_almuerzo DECIMAL(10,2) NOT NULL DEFAULT 0,
+  gastos_otros DECIMAL(10,2) NOT NULL DEFAULT 0,
+  monto_neto_caja DECIMAL(10,2) NOT NULL DEFAULT 0,
+  usuario_id INT NULL,
+  creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_camion_fecha (camion_id, fecha),
+  KEY idx_fecha (fecha),
+  KEY idx_camion (camion_id),
+  FOREIGN KEY (camion_id) REFERENCES camiones(id) ON DELETE CASCADE,
+  FOREIGN KEY (repartidor_id) REFERENCES repartidores(id) ON DELETE SET NULL,
+  FOREIGN KEY (pedido_id) REFERENCES pedidos(id) ON DELETE SET NULL,
+  FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL
+);
+
 INSERT IGNORE INTO roles (nombre) VALUES
 ('Administrador del sistema'),
 ('Supervisor de call center'),

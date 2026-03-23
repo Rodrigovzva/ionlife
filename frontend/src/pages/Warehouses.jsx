@@ -34,6 +34,16 @@ export default function Warehouses() {
     loadProducts();
   }, []);
 
+  async function handleDeleteWarehouse(warehouse) {
+    if (!window.confirm(`¿Eliminar el almacén "${warehouse.name}"?\nSe eliminará también todo su inventario.`)) return;
+    await api.delete(`/api/warehouses/${warehouse.id}`);
+    if (selectedId === warehouse.id) {
+      setSelectedId(null);
+      setInventory([]);
+    }
+    load();
+  }
+
   async function handleCreate(e) {
     e.preventDefault();
     setInventoryError("");
@@ -107,7 +117,7 @@ export default function Warehouses() {
           <h4>Lista</h4>
           <ul>
             {warehouses.map((w) => (
-              <li key={w.id}>
+              <li key={w.id} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
                 <button
                   className="btn btn-outline"
                   onClick={() => {
@@ -116,6 +126,13 @@ export default function Warehouses() {
                   }}
                 >
                   {w.name}
+                </button>
+                <button
+                  className="btn btn-danger btn-sm"
+                  type="button"
+                  onClick={() => handleDeleteWarehouse(w)}
+                >
+                  Eliminar
                 </button>
               </li>
             ))}

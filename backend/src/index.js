@@ -203,91 +203,8 @@ async function ensureAdminUser() {
   }
 }
 
-async function ensureOrderColumns() {
-  const columns = await query(
-    "SHOW COLUMNS FROM pedidos LIKE 'creado_por_usuario_id'"
-  );
-  if (columns.length === 0) {
-    await query("ALTER TABLE pedidos ADD COLUMN creado_por_usuario_id INT NULL");
-  }
-  const programada = await query(
-    "SHOW COLUMNS FROM pedidos LIKE 'fecha_programada'"
-  );
-  if (programada.length === 0) {
-    await query("ALTER TABLE pedidos ADD COLUMN fecha_programada DATE NULL");
-  }
-  const fk = await query(
-    "SELECT CONSTRAINT_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'pedidos' AND COLUMN_NAME = 'creado_por_usuario_id' AND REFERENCED_TABLE_NAME = 'usuarios'"
-  );
-  if (fk.length === 0) {
-    await query(
-      "ALTER TABLE pedidos ADD CONSTRAINT fk_pedidos_creado_por_usuario FOREIGN KEY (creado_por_usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL"
-    );
-  }
-}
-
-async function ensureTraceColumns(table) {
-  const created = await query(
-    `SHOW COLUMNS FROM ${table} LIKE 'creado_por_usuario_id'`
-  );
-  if (created.length === 0) {
-    await query(
-      `ALTER TABLE ${table} ADD COLUMN creado_por_usuario_id INT NULL`
-    );
-  }
-  const updated = await query(
-    `SHOW COLUMNS FROM ${table} LIKE 'actualizado_por_usuario_id'`
-  );
-  if (updated.length === 0) {
-    await query(
-      `ALTER TABLE ${table} ADD COLUMN actualizado_por_usuario_id INT NULL`
-    );
-  }
-  const createdAt = await query(
-    `SHOW COLUMNS FROM ${table} LIKE 'fecha_creacion'`
-  );
-  if (createdAt.length === 0) {
-    await query(
-      `ALTER TABLE ${table} ADD COLUMN fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP`
-    );
-  }
-  const updatedAt = await query(
-    `SHOW COLUMNS FROM ${table} LIKE 'fecha_actualizacion'`
-  );
-  if (updatedAt.length === 0) {
-    await query(
-      `ALTER TABLE ${table} ADD COLUMN fecha_actualizacion TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP`
-    );
-  }
-  const fkCreated = await query(
-    `SELECT CONSTRAINT_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = 'creado_por_usuario_id' AND REFERENCED_TABLE_NAME = 'usuarios'`,
-    [table]
-  );
-  if (fkCreated.length === 0) {
-    await query(
-      `ALTER TABLE ${table} ADD CONSTRAINT fk_${table}_creado_por FOREIGN KEY (creado_por_usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL`
-    );
-  }
-  const fkUpdated = await query(
-    `SELECT CONSTRAINT_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = 'actualizado_por_usuario_id' AND REFERENCED_TABLE_NAME = 'usuarios'`,
-    [table]
-  );
-  if (fkUpdated.length === 0) {
-    await query(
-      `ALTER TABLE ${table} ADD CONSTRAINT fk_${table}_actualizado_por FOREIGN KEY (actualizado_por_usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL`
-    );
-  }
-}
-
 async function ensurePriceTypes() {
-  await query(
-    `CREATE TABLE IF NOT EXISTS tipos_precio (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      nombre VARCHAR(120) NOT NULL UNIQUE,
-      activo TINYINT(1) NOT NULL DEFAULT 1,
-      fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )`
-  );
+  // Migración: eliminar columna obsoleta en instalaciones existentes
   const columns = await query(
     "SHOW COLUMNS FROM tipos_precio LIKE 'ajuste_unidades'"
   );
@@ -296,58 +213,18 @@ async function ensurePriceTypes() {
   }
 }
 
-async function ensureProductPriceTypes() {
-  await query(
-    `CREATE TABLE IF NOT EXISTS tipos_precio_producto (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      tipo_precio_id INT NOT NULL,
-      producto_id INT NOT NULL,
-      precio DECIMAL(10,2) NOT NULL,
-      activo TINYINT(1) NOT NULL DEFAULT 1,
-      fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE KEY uniq_tipo_producto (tipo_precio_id, producto_id),
-      FOREIGN KEY (tipo_precio_id) REFERENCES tipos_precio(id) ON DELETE CASCADE,
-      FOREIGN KEY (producto_id) REFERENCES productos(id) ON DELETE CASCADE
-    )`
+async function ensureDevolucionesRegistroTable() {
+  // Migración: agregar constraint único en instalaciones existentes sin el constraint
+  const constraint = await query(
+    `SELECT CONSTRAINT_NAME FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'devoluciones_registro'
+     AND CONSTRAINT_NAME = 'uniq_camion_fecha'`
   );
-}
-
-async function ensureOrderItemPriceTypeColumn() {
-  const columns = await query(
-    "SHOW COLUMNS FROM items_pedido LIKE 'tipo_precio_id'"
-  );
-  if (columns.length === 0) {
-    await query("ALTER TABLE items_pedido ADD COLUMN tipo_precio_id INT NULL");
-  }
-  const fk = await query(
-    "SELECT CONSTRAINT_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'items_pedido' AND COLUMN_NAME = 'tipo_precio_id' AND REFERENCED_TABLE_NAME = 'tipos_precio'"
-  );
-  if (fk.length === 0) {
+  if (constraint.length === 0) {
     await query(
-      "ALTER TABLE items_pedido ADD CONSTRAINT fk_items_pedido_tipo_precio FOREIGN KEY (tipo_precio_id) REFERENCES tipos_precio(id) ON DELETE SET NULL"
+      "ALTER TABLE devoluciones_registro ADD UNIQUE KEY uniq_camion_fecha (camion_id, fecha)"
     );
   }
-}
-
-async function ensureDevolucionesRegistroTable() {
-  await query(
-    `CREATE TABLE IF NOT EXISTS devoluciones_registro (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      fecha DATE NOT NULL,
-      camion_id INT NOT NULL,
-      repartidor_id INT NULL,
-      pedido_id INT NULL,
-      monto_ventas DECIMAL(10,2) NOT NULL DEFAULT 0,
-      gastos_gasolina DECIMAL(10,2) NOT NULL DEFAULT 0,
-      gastos_almuerzo DECIMAL(10,2) NOT NULL DEFAULT 0,
-      gastos_otros DECIMAL(10,2) NOT NULL DEFAULT 0,
-      monto_neto_caja DECIMAL(10,2) NOT NULL DEFAULT 0,
-      usuario_id INT NULL,
-      creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      KEY idx_fecha (fecha),
-      KEY idx_camion (camion_id)
-    )`
-  );
 }
 
 app.post("/api/auth/login", loginRateLimit, asyncHandler(async (req, res) => {
@@ -898,21 +775,14 @@ app.post(
       req.user?.id || null,
     ]
   );
-  const existing = await query(
-    "SELECT id, cantidad FROM inventario WHERE almacen_id = ? AND producto_id = ?",
-    [warehouse_id, product_id]
+  await query(
+    `INSERT INTO inventario (almacen_id, producto_id, cantidad, stock_minimo, creado_por_usuario_id, actualizado_por_usuario_id)
+     VALUES (?, ?, ?, 0, ?, ?)
+     ON DUPLICATE KEY UPDATE
+       cantidad = cantidad + VALUES(cantidad),
+       actualizado_por_usuario_id = VALUES(actualizado_por_usuario_id)`,
+    [warehouse_id, product_id, qty, req.user?.id || null, req.user?.id || null]
   );
-  if (existing.length === 0) {
-    await query(
-      "INSERT INTO inventario (almacen_id, producto_id, cantidad, stock_minimo, creado_por_usuario_id, actualizado_por_usuario_id) VALUES (?, ?, ?, 0, ?, ?)",
-      [warehouse_id, product_id, qty, req.user?.id || null, req.user?.id || null]
-    );
-  } else {
-    await query(
-      "UPDATE inventario SET cantidad = cantidad + ?, actualizado_por_usuario_id = ? WHERE id = ?",
-      [qty, req.user?.id || null, existing[0].id]
-    );
-  }
   await req.audit({
     action: "MOVE",
     entityId: product_id,
@@ -1955,27 +1825,14 @@ app.post("/api/logistics/returns", requireRole(ACCESS.logistics), asyncHandler(a
           req.user?.id || null,
         ]
       );
-      const existing = await query(
-        "SELECT id FROM inventario WHERE almacen_id = ? AND producto_id = ?",
-        [warehouseId, item.producto_id]
+      await query(
+        `INSERT INTO inventario (almacen_id, producto_id, cantidad, stock_minimo, creado_por_usuario_id, actualizado_por_usuario_id)
+         VALUES (?, ?, ?, 0, ?, ?)
+         ON DUPLICATE KEY UPDATE
+           cantidad = cantidad + VALUES(cantidad),
+           actualizado_por_usuario_id = VALUES(actualizado_por_usuario_id)`,
+        [warehouseId, item.producto_id, item.cantidad, req.user?.id || null, req.user?.id || null]
       );
-      if (existing.length === 0) {
-        await query(
-          "INSERT INTO inventario (almacen_id, producto_id, cantidad, stock_minimo, creado_por_usuario_id, actualizado_por_usuario_id) VALUES (?, ?, ?, 0, ?, ?)",
-          [
-            warehouseId,
-            item.producto_id,
-            item.cantidad,
-            req.user?.id || null,
-            req.user?.id || null,
-          ]
-        );
-      } else {
-        await query(
-          "UPDATE inventario SET cantidad = cantidad + ?, actualizado_por_usuario_id = ? WHERE almacen_id = ? AND producto_id = ?",
-          [item.cantidad, req.user?.id || null, warehouseId, item.producto_id]
-        );
-      }
     }
     await query(
       "UPDATE pedidos SET estado = 'Reprogramado', actualizado_por_usuario_id = ? WHERE id = ?",
@@ -2652,31 +2509,8 @@ app.put("/api/admin/users/:id/roles", requireRole(ACCESS.admin), asyncHandler(as
 async function start() {
   await ensureBaseRoles();
   await ensureAdminUser();
-  await ensureOrderColumns();
-  await ensurePriceTypes();
-  await ensureProductPriceTypes();
-  await ensureOrderItemPriceTypeColumn();
-  await ensureDevolucionesRegistroTable();
-  const traceTables = [
-    "clientes",
-    "direcciones_clientes",
-    "productos",
-    "almacenes",
-    "inventario",
-    "movimientos_inventario",
-    "pedidos",
-    "items_pedido",
-    "camiones",
-    "repartidores",
-    "entregas",
-    "pagos",
-    "tipos_cliente",
-    "tipos_precio",
-    "tipos_precio_producto",
-  ];
-  for (const table of traceTables) {
-    await ensureTraceColumns(table);
-  }
+  await ensurePriceTypes();            // migración: elimina columna ajuste_unidades obsoleta
+  await ensureDevolucionesRegistroTable(); // migración: agrega unique constraint camion+fecha
   // Middleware global de manejo de errores (captura los errores de asyncHandler)
   app.use((err, req, res, _next) => {
     console.error(`[${new Date().toISOString()}] ${req.method} ${req.path}:`, err);

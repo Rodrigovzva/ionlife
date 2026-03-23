@@ -242,6 +242,22 @@ export default function Customers({ user }) {
     loadCustomers(0);
   }
 
+  async function handleDelete(customer) {
+    if (!window.confirm(`¿Eliminar al cliente "${customer.nombre_completo}"?\nEsta acción eliminará también sus direcciones y pedidos asociados.`)) return;
+    try {
+      await api.delete(`/api/customers/${customer.id}`);
+      if (selectedCustomerId === customer.id) {
+        setSelectedCustomerId(null);
+        resetForm();
+      }
+      if (searchActive) fetchSearch(resultsOffset);
+      else loadCustomers(customersOffset);
+    } catch (err) {
+      const msg = err?.response?.data?.error || err?.message || "Error desconocido";
+      setEditMessage(`No se pudo eliminar: ${msg}`);
+    }
+  }
+
   async function handleUpdate(e) {
     e.preventDefault();
     if (!editId) return;
@@ -570,16 +586,30 @@ export default function Customers({ user }) {
               <td>{c.fecha_registro ? new Date(c.fecha_registro).toLocaleString() : "-"}</td>
               <td>{c.fecha_actualizacion ? new Date(c.fecha_actualizacion).toLocaleString() : "-"}</td>
               <td>
-                <button
-                  className="btn btn-outline btn-sm"
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    startEdit(c);
-                  }}
-                >
-                  Editar
-                </button>
+                <div style={{ display: "flex", gap: 4 }}>
+                  <button
+                    className="btn btn-outline btn-sm"
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      startEdit(c);
+                    }}
+                  >
+                    Editar
+                  </button>
+                  {!isDriver && (
+                    <button
+                      className="btn btn-danger btn-sm"
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(c);
+                      }}
+                    >
+                      Eliminar
+                    </button>
+                  )}
+                </div>
               </td>
             </tr>
           ))}

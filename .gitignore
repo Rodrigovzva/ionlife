@@ -4,6 +4,8 @@ config/deploy-credentials.env
 .env.backup
 .env.local
 *.env.local
+.env.production
+*.env
 
 # Dependencias
 node_modules/
