@@ -162,7 +162,13 @@ function getTodayLaPaz() {
 }
 
 const app = express();
-app.use(cors());
+app.disable('x-powered-by');
+app.use(cors({
+  origin: ['https://ionlife.sisvel.sbs'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+  allowedHeaders: ['Authorization', 'Content-Type'],
+  credentials: false,
+}));
 app.use(express.json());
 app.use(morgan("dev"));
 
@@ -939,7 +945,7 @@ app.put("/api/orders/:id", requireAuth, asyncHandler(async (req, res) => {
     return res.status(400).json({ error: "Datos incompletos" });
   }
   const [order] = await query(
-    "SELECT id, cliente_id, estado FROM pedidos WHERE id = ?",
+    "SELECT id, cliente_id, estado, fecha_programada FROM pedidos WHERE id = ?",
     [req.params.id]
   );
   if (!order) {
@@ -1040,17 +1046,42 @@ app.put("/api/orders/:id", requireAuth, asyncHandler(async (req, res) => {
       price_type_id: priceTypeId,
     });
   }
+  const newDateOnly = toDateOnly(scheduled_date) || null;
+  const oldDateStr = order.fecha_programada
+    ? String(order.fecha_programada).slice(0, 10)
+    : null;
+  const dateChanged =
+    (newDateOnly || null) !== (oldDateStr || null);
+  let nextEstado = order.estado;
+  if (order.estado === "Reprogramado" && newDateOnly && dateChanged) {
+    nextEstado = "Pendiente";
+  }
   await query(
-    "UPDATE pedidos SET cliente_id = ?, direccion_id = ?, notas = ?, fecha_programada = ?, actualizado_por_usuario_id = ? WHERE id = ?",
+    "UPDATE pedidos SET cliente_id = ?, direccion_id = ?, notas = ?, fecha_programada = ?, estado = ?, actualizado_por_usuario_id = ? WHERE id = ?",
     [
       customer_id ? Number(customer_id) : order.cliente_id,
       Number(address_id),
       notes || null,
-      toDateOnly(scheduled_date) || null,
+      newDateOnly,
+      nextEstado,
       req.user?.id || null,
       req.params.id,
     ]
   );
+  if (order.estado === "Reprogramado" && nextEstado === "Pendiente" && newDateOnly && dateChanged) {
+    await query(
+      `UPDATE entregas SET estado = 'Pendiente', programado_en = NULL, actualizado_por_usuario_id = ?
+       WHERE pedido_id = ? AND estado NOT IN ('Entregado','Cancelado')`,
+      [req.user?.id || null, req.params.id]
+    );
+    await query(
+      "INSERT INTO historial_estado_pedido (pedido_id, estado, nota) VALUES (?, 'Pendiente', ?)",
+      [
+        req.params.id,
+        `Nueva fecha de entrega ${newDateOnly}; pedido pendiente para despacho`,
+      ]
+    );
+  }
   await query("DELETE FROM items_pedido WHERE pedido_id = ?", [req.params.id]);
   for (const item of normalizedItems) {
     await query(
