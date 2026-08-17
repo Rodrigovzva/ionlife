@@ -34,9 +34,22 @@ a {
   flex-direction: column;
 }
 
+/* Misma caja útil que el nav: ancho máximo + sangría horizontal coherente (escritorio) */
 .container {
-  width: min(1600px, 98%);
-  margin: 0 auto;
+  width: 100%;
+  max-width: 1600px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: clamp(20px, 3vw, 40px);
+  padding-right: clamp(20px, 3vw, 40px);
+  box-sizing: border-box;
+}
+
+/* Solo en la ruta /mis-entregas: menú y contenido comparten caja más ancha */
+.app--mis-entregas-wide .container {
+  max-width: min(100vw - 28px, 2200px);
+  padding-left: clamp(16px, 2vw, 28px);
+  padding-right: clamp(16px, 2vw, 28px);
 }
 
 /* Vista móvil de entregas */
@@ -65,13 +78,15 @@ a {
 
 @media (max-width: 1024px) {
   .container {
-    width: 96%;
+    padding-left: clamp(16px, 2.5vw, 28px);
+    padding-right: clamp(16px, 2.5vw, 28px);
   }
 }
 
 @media (max-width: 768px) {
   .container {
-    width: 94%;
+    padding-left: clamp(14px, 4vw, 22px);
+    padding-right: clamp(14px, 4vw, 22px);
   }
 }
 
@@ -352,9 +367,52 @@ textarea {
   min-width: 100%;
 }
 
-/* Mis entregas: pantalla más ancha y sin scroll horizontal */
-.container.page-mis-entregas {
-  width: min(1600px, 98%);
+/* Mis entregas: ancho máximo = .app--mis-entregas-wide .container (mismo que el nav) */
+.page-mis-entregas .mis-entregas-card--main {
+  padding: 0;
+  overflow: hidden;
+}
+
+.page-mis-entregas .mis-entregas-card-header {
+  padding: 20px clamp(16px, 2vw, 24px) 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0;
+}
+
+.page-mis-entregas .mis-entregas-card-header h2 {
+  margin: 0 0 16px;
+  font-size: 1.35rem;
+  letter-spacing: -0.02em;
+}
+
+.page-mis-entregas .mis-entregas-toolbar {
+  display: grid;
+  gap: 12px 16px;
+  padding: 16px clamp(16px, 2vw, 24px);
+  align-items: end;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.page-mis-entregas .mis-entregas-toolbar .mis-entregas-search {
+  min-width: 0;
+}
+
+@media (min-width: 1100px) {
+  .page-mis-entregas .mis-entregas-toolbar {
+    grid-template-columns: 200px 200px minmax(280px, 1fr);
+  }
+}
+
+.page-mis-entregas .mis-entregas-table-wrap {
+  padding: 0 clamp(12px, 1.5vw, 20px) 16px;
+}
+
+.page-mis-entregas .mis-entregas-card:not(.mis-entregas-card--main) {
+  margin-top: 20px;
+}
+
+.page-mis-entregas .mis-entregas-card:not(.mis-entregas-card--main) h4 {
+  margin-top: 0;
 }
 
 .table-wrap-no-scroll {
@@ -385,20 +443,136 @@ textarea {
 }
 
 .table-deliveries .col-address {
-  min-width: 260px;
-  width: 26%;
+  min-width: 200px;
+  width: 18%;
 }
 
 .table-deliveries .col-order {
-  min-width: 300px;
-  width: 30%;
+  min-width: 220px;
+  width: 22%;
+}
+
+@media (min-width: 1200px) {
+  .page-mis-entregas .table-deliveries {
+    table-layout: fixed;
+    width: 100%;
+  }
+
+  .page-mis-entregas .table-deliveries th:nth-child(1),
+  .page-mis-entregas .table-deliveries td:nth-child(1) {
+    width: 3%;
+  }
+
+  .page-mis-entregas .table-deliveries th:nth-child(2),
+  .page-mis-entregas .table-deliveries td:nth-child(2) {
+    width: 11%;
+  }
+
+  .page-mis-entregas .table-deliveries th:nth-child(3),
+  .page-mis-entregas .table-deliveries td:nth-child(3) {
+    width: 16%;
+  }
+
+  .page-mis-entregas .table-deliveries th:nth-child(4),
+  .page-mis-entregas .table-deliveries td:nth-child(4) {
+    width: 6%;
+  }
+
+  .page-mis-entregas .table-deliveries th:nth-child(5),
+  .page-mis-entregas .table-deliveries td:nth-child(5) {
+    width: 8%;
+  }
+
+  .page-mis-entregas .table-deliveries th:nth-child(6),
+  .page-mis-entregas .table-deliveries td:nth-child(6) {
+    width: 6%;
+  }
+
+  .page-mis-entregas .table-deliveries th:nth-child(7),
+  .page-mis-entregas .table-deliveries td:nth-child(7) {
+    width: 8%;
+  }
+
+  .page-mis-entregas .table-deliveries th:nth-child(8),
+  .page-mis-entregas .table-deliveries td:nth-child(8) {
+    width: 10%;
+  }
+
+  .page-mis-entregas .table-deliveries th:nth-child(9),
+  .page-mis-entregas .table-deliveries td:nth-child(9) {
+    width: 7%;
+  }
+
+  .page-mis-entregas .table-deliveries th:nth-child(10),
+  .page-mis-entregas .table-deliveries td:nth-child(10) {
+    width: 5%;
+    max-width: 118px;
+  }
+
+  .page-mis-entregas .table-deliveries th:nth-child(11),
+  .page-mis-entregas .table-deliveries td:nth-child(11) {
+    width: 4.5%;
+    max-width: 100px;
+  }
+
+  .page-mis-entregas .table-deliveries th:nth-child(12),
+  .page-mis-entregas .table-deliveries td:nth-child(12) {
+    width: 4.5%;
+    max-width: 100px;
+  }
+
+  .page-mis-entregas .table-deliveries th:nth-child(13),
+  .page-mis-entregas .table-deliveries td:nth-child(13) {
+    width: 22%;
+    min-width: 310px;
+  }
+
+  .page-mis-entregas .table-deliveries th,
+  .page-mis-entregas .table-deliveries td {
+    font-size: 0.9rem;
+    padding: 10px 12px;
+  }
+
+  .page-mis-entregas .table-deliveries th:nth-child(10),
+  .page-mis-entregas .table-deliveries td:nth-child(10),
+  .page-mis-entregas .table-deliveries th:nth-child(11),
+  .page-mis-entregas .table-deliveries td:nth-child(11),
+  .page-mis-entregas .table-deliveries th:nth-child(12),
+  .page-mis-entregas .table-deliveries td:nth-child(12) {
+    font-size: 0.8rem;
+    padding: 8px 6px;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 }
 
 .page-mis-entregas .mis-entregas-actions {
-  display: flex;
-  gap: 8px;
+  display: inline-flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
   align-items: center;
-  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-start;
+}
+
+.page-mis-entregas .mis-entregas-actions .btn-sm {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.page-mis-entregas .mis-entregas-actions select {
+  flex: 0 0 auto;
+  min-width: 128px;
+  max-width: 155px;
+  padding: 6px 8px;
+  font-size: 0.82rem;
+}
+
+.page-mis-entregas .table-deliveries th:nth-child(13),
+.page-mis-entregas .table-deliveries td:nth-child(13) {
+  vertical-align: middle;
 }
 
 @media (max-width: 1024px) {
@@ -423,6 +597,9 @@ textarea {
     font-size: 0.82rem;
     padding: 6px 8px;
   }
+}
+
+@media (max-width: 480px) {
   .page-mis-entregas .mis-entregas-actions {
     flex-direction: column;
     align-items: stretch;
@@ -572,7 +749,8 @@ textarea {
 
 @media (max-width: 720px) {
   .container {
-    width: min(100%, 96%);
+    padding-left: clamp(12px, 4vw, 18px);
+    padding-right: clamp(12px, 4vw, 18px);
   }
   .nav-user {
     width: 100%;

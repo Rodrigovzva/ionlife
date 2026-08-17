@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import api from "./api";
 import Login from "./pages/Login.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
@@ -23,8 +23,10 @@ function PrivateRoute({ user, children, denyDriver }) {
 }
 
 export default function App() {
+  const location = useLocation();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const wideMisEntregas = location.pathname === "/mis-entregas";
 
   useEffect(() => {
     const token = localStorage.getItem("ionlife_token");
@@ -52,7 +54,11 @@ export default function App() {
   }
 
   return (
-    <div className="app">
+    <div
+      className={
+        wideMisEntregas ? "app app--mis-entregas-wide" : "app"
+      }
+    >
       {user && <Nav user={user} onLogout={() => setUser(null)} />}
       <Routes>
         <Route

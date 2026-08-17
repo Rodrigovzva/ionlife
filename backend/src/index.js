@@ -791,6 +791,7 @@ app.get(
 app.post(
   "/api/inventory/move",
   requireAuth,
+  requireRole(ACCESS.warehouses),
   auditMiddleware("inventory"),
   asyncHandler(async (req, res) => {
   const { warehouse_id, product_id, qty, type, order_id, note } = req.body || {};
@@ -924,6 +925,17 @@ app.put("/api/orders/:id", requireAuth, asyncHandler(async (req, res) => {
   if (!isAdmin && !canOrders && !isDriver) {
     return res.status(403).json({ error: "Forbidden" });
   }
+  const { customer_id, address_id, notes, scheduled_date, items } = req.body || {};
+  if (!address_id || !items || items.length === 0) {
+    return res.status(400).json({ error: "Datos incompletos" });
+  }
+  const [order] = await query(
+    "SELECT id, cliente_id, estado, fecha_programada FROM pedidos WHERE id = ?",
+    [req.params.id]
+  );
+  if (!order) {
+    return res.status(404).json({ error: "Pedido no encontrado" });
+  }
   if (isDriver && !isAdmin && !canOrders) {
     const driverId = req.user?.driver_id;
     const driverName = req.user?.name;
@@ -939,17 +951,9 @@ app.put("/api/orders/:id", requireAuth, asyncHandler(async (req, res) => {
     if (assigned.length === 0) {
       return res.status(403).json({ error: "Forbidden" });
     }
-  }
-  const { customer_id, address_id, notes, scheduled_date, items } = req.body || {};
-  if (!address_id || !items || items.length === 0) {
-    return res.status(400).json({ error: "Datos incompletos" });
-  }
-  const [order] = await query(
-    "SELECT id, cliente_id, estado, fecha_programada FROM pedidos WHERE id = ?",
-    [req.params.id]
-  );
-  if (!order) {
-    return res.status(404).json({ error: "Pedido no encontrado" });
+    if (customer_id && Number(customer_id) !== Number(order.cliente_id)) {
+      return res.status(403).json({ error: "No puede cambiar el cliente del pedido asignado" });
+    }
   }
   if (order.estado === "Entregado") {
     return res.status(409).json({ error: "No se puede editar un pedido entregado" });

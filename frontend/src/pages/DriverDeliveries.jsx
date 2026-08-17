@@ -134,10 +134,16 @@ export default function DriverDeliveries() {
 
   return (
     <div className="container page page-mis-entregas">
-      <h2>Mis entregas</h2>
-      <div className="card">
-        {error && <div className="error" style={{ marginBottom: 8 }}>{error}</div>}
-        <div className="form-row" style={{ marginBottom: 8, flexWrap: "wrap", gap: 12 }}>
+      <div className="card mis-entregas-card mis-entregas-card--main">
+        <header className="mis-entregas-card-header">
+          <h2>Mis entregas</h2>
+        </header>
+        {error && (
+          <div className="error" style={{ margin: "0 clamp(16px, 2vw, 24px) 12px" }}>
+            {error}
+          </div>
+        )}
+        <div className="mis-entregas-toolbar">
           <div className="form-field">
             <label>Fecha</label>
             <input
@@ -160,7 +166,7 @@ export default function DriverDeliveries() {
               ))}
             </select>
           </div>
-          <div className="form-field" style={{ flex: "1 1 260px", minWidth: 200 }}>
+          <div className="form-field mis-entregas-search">
             <label>Buscar</label>
             <input
               type="search"
@@ -171,7 +177,7 @@ export default function DriverDeliveries() {
             />
           </div>
         </div>
-        <div className="table-wrap-no-scroll">
+        <div className="table-wrap-no-scroll mis-entregas-table-wrap">
           <table className="table table-deliveries">
             <thead>
               <tr>
@@ -258,7 +264,7 @@ export default function DriverDeliveries() {
           </table>
         </div>
       </div>
-      <div className="card" style={{ marginTop: 16 }}>
+      <div className="card mis-entregas-card">
         <h4>Ventas realizadas</h4>
         {salesError && <div className="error" style={{ marginBottom: 8 }}>{salesError}</div>}
         <div style={{ marginBottom: 8 }}>
@@ -271,7 +277,7 @@ export default function DriverDeliveries() {
             Bs. {filteredSales.reduce((sum, s) => sum + Number(s.total || 0), 0).toFixed(2)}
           </strong>
         </div>
-        <div className="table-wrap-no-scroll">
+        <div className="table-wrap-no-scroll mis-entregas-table-wrap" style={{ marginTop: 12 }}>
           <table className="table table-sales">
             <thead>
               <tr>
