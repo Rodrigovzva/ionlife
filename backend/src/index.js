@@ -1349,8 +1349,25 @@ app.get("/api/logistics/pending-orders", requireRole(ACCESS.logistics), asyncHan
   if (allowedTrucks !== null) {
     return res.json([]);
   }
+  const { from, to } = req.query || {};
+  const isValidDate = (v) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v);
+  const params = [];
+  let dateCondition = "DATE(CONVERT_TZ(p.fecha_creacion,'+00:00','-04:00')) >= DATE(CONVERT_TZ(NOW(),'+00:00','-04:00')) - INTERVAL 1 DAY";
+  if (isValidDate(from) || isValidDate(to)) {
+    const conditions = [];
+    if (isValidDate(from)) {
+      conditions.push("DATE(CONVERT_TZ(p.fecha_creacion,'+00:00','-04:00')) >= ?");
+      params.push(from);
+    }
+    if (isValidDate(to)) {
+      conditions.push("DATE(CONVERT_TZ(p.fecha_creacion,'+00:00','-04:00')) <= ?");
+      params.push(to);
+    }
+    dateCondition = conditions.join(" AND ");
+  }
   const rows = await query(
-    "SELECT p.id, p.estado as status, p.notas as notes, c.nombre_completo as customer_name, c.zona, c.direccion, c.telefono_principal as phone, p.fecha_creacion as created_at, p.fecha_programada as scheduled_date FROM pedidos p JOIN clientes c ON c.id = p.cliente_id WHERE p.estado IN ('Pendiente', 'Reprogramado', 'Creado') ORDER BY p.id DESC"
+    `SELECT p.id, p.estado as status, p.notas as notes, c.nombre_completo as customer_name, c.zona, c.direccion, c.telefono_principal as phone, p.fecha_creacion as created_at, p.fecha_programada as scheduled_date FROM pedidos p JOIN clientes c ON c.id = p.cliente_id WHERE p.estado IN ('Pendiente', 'Reprogramado', 'Creado') AND ${dateCondition} ORDER BY p.id DESC`,
+    params
   );
   res.json(rows);
 }));
@@ -1792,29 +1809,71 @@ app.get("/api/logistics/truck-orders", requireRole(ACCESS.logistics), asyncHandl
       COALESCE(dc.direccion, c.direccion) as address,
       p.notas as notes,
       p.fecha_creacion as created_at,
-      GROUP_CONCAT(CONCAT(pr.nombre, " x", oi.cantidad) SEPARATOR ", ") as items,
-      COALESCE(SUM(oi.cantidad * oi.precio), 0) as total,
-      COALESCE(SUM(CASE WHEN LOWER(pr.nombre) LIKE '%600%' THEN oi.cantidad ELSE 0 END), 0) as packs_600,
-      COALESCE(SUM(CASE WHEN LOWER(pr.nombre) LIKE '%1 lt%' OR LOWER(pr.nombre) LIKE '%1lt%' THEN oi.cantidad ELSE 0 END), 0) as packs_1lt,
-      COALESCE(SUM(CASE WHEN LOWER(pr.nombre) LIKE '%2 lt%' OR LOWER(pr.nombre) LIKE '%2lt%' THEN oi.cantidad ELSE 0 END), 0) as packs_2lt,
-      COALESCE(SUM(CASE WHEN LOWER(pr.nombre) LIKE '%bidon%' OR LOWER(pr.nombre) LIKE '%bidón%' THEN oi.cantidad ELSE 0 END), 0) as bidon_5,
-      COALESCE(SUM(CASE WHEN LOWER(pr.nombre) LIKE '%recarga%' THEN oi.cantidad ELSE 0 END), 0) as recarga,
-      COALESCE(SUM(CASE WHEN LOWER(pr.nombre) LIKE '%base%' THEN oi.cantidad ELSE 0 END), 0) as base,
-      COALESCE(SUM(CASE WHEN LOWER(pr.nombre) LIKE '%botellon%' OR LOWER(pr.nombre) LIKE '%botellón%' THEN oi.cantidad ELSE 0 END), 0) as botellon,
-      COALESCE(SUM(CASE WHEN LOWER(pr.nombre) LIKE '%kit completo%' THEN oi.cantidad ELSE 0 END), 0) as kit_completo,
-      COALESCE(SUM(CASE WHEN LOWER(pr.nombre) LIKE '%purificada%' THEN oi.cantidad ELSE 0 END), 0) as botellon_purificada,
+      cls.items,
+      cls.total,
+      cls.packs_600,
+      cls.packs_1lt,
+      cls.packs_2lt,
+      cls.bidon_5,
+      cls.recarga,
+      cls.base,
+      cls.botellon,
+      cls.kit_completo,
+      cls.botellon_purificada,
       cam.placa as truck_plate,
       r.nombre as driver_name
      FROM entregas e
      JOIN pedidos p ON p.id = e.pedido_id
      JOIN clientes c ON c.id = p.cliente_id
      LEFT JOIN direcciones_clientes dc ON dc.id = p.direccion_id
-     JOIN items_pedido oi ON oi.pedido_id = p.id
-     JOIN productos pr ON pr.id = oi.producto_id
      JOIN camiones cam ON cam.id = e.camion_id
      JOIN repartidores r ON r.id = e.repartidor_id
+     JOIN (
+       SELECT
+         pedido_id,
+         GROUP_CONCAT(CONCAT(nombre, " x", cantidad) SEPARATOR ", ") as items,
+         COALESCE(SUM(cantidad * precio), 0) as total,
+         COALESCE(SUM(CASE WHEN cat = 'packs_600' THEN cantidad ELSE 0 END), 0) as packs_600,
+         COALESCE(SUM(CASE WHEN cat = 'packs_1lt' THEN cantidad ELSE 0 END), 0) as packs_1lt,
+         COALESCE(SUM(CASE WHEN cat = 'packs_2lt' THEN cantidad ELSE 0 END), 0) as packs_2lt,
+         COALESCE(SUM(CASE WHEN cat = 'bidon_5' THEN cantidad ELSE 0 END), 0) as bidon_5,
+         COALESCE(SUM(CASE WHEN cat = 'recarga' THEN cantidad ELSE 0 END), 0) as recarga,
+         COALESCE(SUM(CASE WHEN cat = 'base' THEN cantidad ELSE 0 END), 0) as base,
+         COALESCE(SUM(CASE WHEN cat = 'botellon' THEN cantidad ELSE 0 END), 0) as botellon,
+         COALESCE(SUM(CASE WHEN cat = 'kit_completo' THEN cantidad ELSE 0 END), 0) as kit_completo,
+         COALESCE(SUM(CASE WHEN cat = 'botellon_purificada' THEN cantidad ELSE 0 END), 0) as botellon_purificada
+       FROM (
+         SELECT
+           pedido_id,
+           cantidad,
+           precio,
+           nombre,
+           CASE
+             WHEN n LIKE '%kit%' THEN 'kit_completo'
+             WHEN n LIKE '%recarga%' THEN 'recarga'
+             WHEN n LIKE '%purificada%' THEN 'botellon_purificada'
+             WHEN n LIKE '%base%' THEN 'base'
+             WHEN n LIKE '%bidon%' OR n LIKE '%5 lt%' OR n LIKE '%5lt%' THEN 'bidon_5'
+             WHEN n LIKE '%600%' THEN 'packs_600'
+             WHEN n LIKE '%2 lt%' OR n LIKE '%2lt%' OR n LIKE '%2 litro%' THEN 'packs_2lt'
+             WHEN n LIKE '%1 lt%' OR n LIKE '%1lt%' OR n LIKE '%1 litro%' THEN 'packs_1lt'
+             WHEN n LIKE '%botellon%' THEN 'botellon'
+             ELSE NULL
+           END as cat
+         FROM (
+           SELECT
+             oi.pedido_id,
+             oi.cantidad,
+             oi.precio,
+             pr.nombre,
+             REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LOWER(TRIM(pr.nombre)), 'á', 'a'), 'é', 'e'), 'í', 'i'), 'ó', 'o'), 'ú', 'u') as n
+           FROM items_pedido oi
+           JOIN productos pr ON pr.id = oi.producto_id
+         ) named
+       ) classified
+       GROUP BY pedido_id
+     ) cls ON cls.pedido_id = p.id
      WHERE e.camion_id = ?${dateClause}
-     GROUP BY p.id, p.estado, p.fecha_programada, c.nombre_completo, c.telefono_principal, c.telefono_secundario, c.zona, address, p.fecha_creacion, cam.placa, r.nombre
      ORDER BY p.id DESC`,
     [truck_id, ...dateParams]
   );

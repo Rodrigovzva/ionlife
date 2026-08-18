@@ -57,6 +57,13 @@ export default function Logistics({ user }) {
   const [drivers, setDrivers] = useState([]);
   const [deliveries, setDeliveries] = useState([]);
   const [pendingOrders, setPendingOrders] = useState([]);
+  const [pendingDateFrom, setPendingDateFrom] = useState("");
+  const [pendingDateTo, setPendingDateTo] = useState("");
+  const [pendingStatusUpdates, setPendingStatusUpdates] = useState({});
+  const [pendingStatusLoading, setPendingStatusLoading] = useState({});
+  const [pendingStatusError, setPendingStatusError] = useState("");
+  const [pendingReprogramOrderId, setPendingReprogramOrderId] = useState(null);
+  const [pendingReprogramDate, setPendingReprogramDate] = useState("");
   const [bulkForm, setBulkForm] = useState({
     truck_id: "",
     driver_id: "",
@@ -203,11 +210,60 @@ export default function Logistics({ user }) {
     setDeliveries(res.data);
   }
 
-  async function loadPendingOrders() {
-    const res = await api.get("/api/logistics/pending-orders");
+  async function loadPendingOrders(fromValue, toValue) {
+    const params = {};
+    const fromDate = fromValue !== undefined ? fromValue : pendingDateFrom;
+    const toDate = toValue !== undefined ? toValue : pendingDateTo;
+    if (fromDate) params.from = fromDate;
+    if (toDate) params.to = toDate;
+    const res = await api.get("/api/logistics/pending-orders", { params });
     setPendingOrders(res.data || []);
     setBulkSelection({});
     setBulkResult(null);
+  }
+
+  async function sendPendingStatusUpdate(orderId, nextStatus, scheduledDate = null) {
+    setPendingStatusError("");
+    setPendingStatusLoading((prev) => ({ ...prev, [orderId]: true }));
+    try {
+      const body = { status: nextStatus };
+      if (nextStatus === "Reprogramado" && scheduledDate) {
+        body.scheduled_date = scheduledDate;
+      }
+      await api.patch(`/api/orders/${orderId}/status`, body);
+      setPendingStatusUpdates((prev) => ({ ...prev, [orderId]: "" }));
+      setPendingReprogramOrderId(null);
+      setPendingReprogramDate("");
+      await loadPendingOrders();
+    } catch (err) {
+      const msg = err?.response?.data?.error || "No se pudo actualizar el estado.";
+      setPendingStatusError(msg);
+    } finally {
+      setPendingStatusLoading((prev) => ({ ...prev, [orderId]: false }));
+    }
+  }
+
+  function handlePendingUpdateStatus(orderId) {
+    const nextStatus = pendingStatusUpdates[orderId];
+    if (!nextStatus) return;
+    if (nextStatus === "Reprogramado") {
+      setPendingReprogramDate(todayIso);
+      setPendingReprogramOrderId(orderId);
+      return;
+    }
+    sendPendingStatusUpdate(orderId, nextStatus);
+  }
+
+  function handleConfirmPendingReprogram() {
+    if (!pendingReprogramOrderId || !pendingReprogramDate) return;
+    sendPendingStatusUpdate(pendingReprogramOrderId, "Reprogramado", pendingReprogramDate);
+  }
+
+  function handleCancelPendingOrder(orderId) {
+    if (!window.confirm(`¿Cancelar el pedido #${orderId}? Esta acción marcará el pedido como Cancelado.`)) {
+      return;
+    }
+    sendPendingStatusUpdate(orderId, "Cancelado");
   }
 
   async function loadTruckSummary(truckId) {
@@ -1044,14 +1100,35 @@ export default function Logistics({ user }) {
         {!isDriver && (
         <div className="card">
           <h4>Asignar pedidos pendientes (masivo)</h4>
-          <div className="form-row">
-            <button
-              className="btn btn-outline"
-              type="button"
-              onClick={loadPendingOrders}
-            >
-              Cargar pedidos pendientes
-            </button>
+          <div className="orders-filters" style={{ marginBottom: 12 }}>
+            <div className="form-field">
+              <label htmlFor="pending-filter-from">Fecha inicio</label>
+              <input
+                id="pending-filter-from"
+                type="date"
+                value={pendingDateFrom}
+                onChange={(e) => setPendingDateFrom(e.target.value)}
+              />
+            </div>
+            <div className="form-field">
+              <label htmlFor="pending-filter-to">Fecha fin</label>
+              <input
+                id="pending-filter-to"
+                type="date"
+                value={pendingDateTo}
+                onChange={(e) => setPendingDateTo(e.target.value)}
+              />
+            </div>
+            <div className="form-field">
+              <label>&nbsp;</label>
+              <button
+                className="btn btn-outline"
+                type="button"
+                onClick={() => loadPendingOrders()}
+              >
+                Cargar pedidos pendientes
+              </button>
+            </div>
           </div>
           <form onSubmit={assignBulk} className="form" style={{ marginTop: 8 }}>
             <div className="form-row">
@@ -1098,6 +1175,47 @@ export default function Logistics({ user }) {
               )}
             </div>
           )}
+          {pendingStatusError && <div className="error" style={{ marginTop: 8 }}>{pendingStatusError}</div>}
+          {pendingReprogramOrderId && (
+            <div className="card" style={{ marginTop: 12, marginBottom: 4, maxWidth: 400 }}>
+              <h4>Reprogramar pedido #{pendingReprogramOrderId}</h4>
+              <p style={{ margin: "0 0 12px", color: "var(--muted)" }}>
+                Indique la nueva fecha programada para la entrega:
+              </p>
+              <div className="form-row">
+                <div className="form-field">
+                  <label htmlFor="pending-reprogram-date">Fecha programada</label>
+                  <input
+                    id="pending-reprogram-date"
+                    type="date"
+                    value={pendingReprogramDate}
+                    onChange={(e) => setPendingReprogramDate(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                <button
+                  className="btn"
+                  type="button"
+                  onClick={handleConfirmPendingReprogram}
+                  disabled={!pendingReprogramDate || pendingStatusLoading[pendingReprogramOrderId]}
+                >
+                  {pendingStatusLoading[pendingReprogramOrderId] ? "Guardando..." : "Confirmar"}
+                </button>
+                <button
+                  className="btn btn-outline"
+                  type="button"
+                  onClick={() => {
+                    setPendingReprogramOrderId(null);
+                    setPendingReprogramDate("");
+                  }}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+          <div className="table-scroll">
           <table className="table" style={{ marginTop: 12 }}>
             <thead>
               <tr>
@@ -1120,6 +1238,7 @@ export default function Logistics({ user }) {
                 <th>Tel. principal</th>
                 <th>Fecha creación</th>
                 <th>Fecha programada</th>
+                <th>Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -1141,15 +1260,55 @@ export default function Logistics({ user }) {
                   <td>{p.phone || "-"}</td>
                   <td>{p.created_at ? (() => { const d = new Date(p.created_at); return Number.isNaN(d.getTime()) ? "-" : d.toLocaleDateString("es") + " " + d.toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" }); })() : "-"}</td>
                   <td>{formatScheduledDate(p.scheduled_date)}</td>
+                  <td>
+                    <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                      <select
+                        value={pendingStatusUpdates[p.id] || ""}
+                        onChange={(e) =>
+                          setPendingStatusUpdates((prev) => ({
+                            ...prev,
+                            [p.id]: e.target.value,
+                          }))
+                        }
+                        style={{ fontSize: 12 }}
+                      >
+                        <option value="">Cambiar estado</option>
+                        <option>Pendiente</option>
+                        <option>Despachado</option>
+                        <option>Entregado</option>
+                        <option>Reprogramado</option>
+                      </select>
+                      <button
+                        className="btn btn-outline btn-sm"
+                        type="button"
+                        disabled={!pendingStatusUpdates[p.id] || pendingStatusLoading[p.id]}
+                        onClick={() => handlePendingUpdateStatus(p.id)}
+                      >
+                        {pendingStatusLoading[p.id] ? "Guardando..." : "Actualizar"}
+                      </button>
+                      {p.status !== "Cancelado" && (
+                        <button
+                          className="btn btn-sm"
+                          type="button"
+                          style={{ background: "#fee2e2", color: "#991b1b", border: "1px solid #fca5a5" }}
+                          disabled={pendingStatusLoading[p.id]}
+                          onClick={() => handleCancelPendingOrder(p.id)}
+                        >
+                          Cancelar pedido
+                        </button>
+                      )}
+                    </div>
+                  </td>
                 </tr>
               ))}
               {pendingOrders.length === 0 && (
                 <tr>
-                  <td colSpan={10}>No hay pedidos pendientes.</td>
+                  <td colSpan={11}>No hay pedidos pendientes.</td>
                 </tr>
               )}
             </tbody>
           </table>
+          </div>
         </div>
         )}
         {!isDriver && (

@@ -44,6 +44,7 @@ export default function Orders() {
     fecha_registro: getTodayLaPaz(),
   }));
   const [addressHint, setAddressHint] = useState("");
+  const [customerHistory, setCustomerHistory] = useState(null);
   const [form, setForm] = useState({
     customer_id: "",
     customer_name: "",
@@ -137,6 +138,7 @@ export default function Orders() {
     ]);
     setEditId(null);
     setAddressHint("");
+    setCustomerHistory(null);
   }
 
   useEffect(() => {
@@ -531,6 +533,10 @@ export default function Orders() {
       customer_type: cliente.tipo_cliente || "",
       address_text: cliente.direccion || "",
     }));
+    const history = orders
+      .filter((o) => String(o.customer_id) === String(cliente.id))
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    setCustomerHistory(history);
     try {
       const res = await api.get(`/api/customers/${cliente.id}/addresses`);
       const addresses = res.data || [];
@@ -758,6 +764,60 @@ export default function Orders() {
           {addressHint && <div className="tag">{addressHint}</div>}
           {orderError && <div className="error">{orderError}</div>}
           {orderSuccess && <div className="tag" style={{ marginTop: 8 }}>{orderSuccess}</div>}
+          {customerHistory && (
+            <div className="card" style={{ background: "var(--bg)", marginTop: 8 }}>
+              <h4>
+                Historial de pedidos
+                {customerHistory.length > 0 ? ` (${customerHistory.length})` : ""}
+              </h4>
+              {customerHistory.length === 0 ? (
+                <div style={{ color: "var(--muted)" }}>
+                  Este cliente no tiene pedidos anteriores.
+                </div>
+              ) : (
+                <div className="table-scroll">
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>ID</th>
+                        <th>Creado</th>
+                        <th>Programada</th>
+                        <th>Detalle</th>
+                        <th>Estado</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {customerHistory.slice(0, 10).map((o) => (
+                        <tr key={o.id}>
+                          <td>{o.id}</td>
+                          <td>
+                            {o.created_at
+                              ? new Date(o.created_at).toLocaleDateString("es")
+                              : "-"}
+                          </td>
+                          <td>
+                            {o.scheduled_date
+                              ? new Date(
+                                  o.scheduled_date.slice(0, 10) + "T12:00:00"
+                                ).toLocaleDateString("es")
+                              : "-"}
+                          </td>
+                          <td className="order-detail-cell">
+                            {o.order_detail || "-"}
+                          </td>
+                          <td>
+                            <span className={statusClass(o.status)}>
+                              {o.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
           <div className="card" style={{ background: "var(--bg)" }}>
             <h4>Productos</h4>
             {items.map((item, index) => (
