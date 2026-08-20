@@ -12,6 +12,37 @@ function statusClass(status) {
   return `tag status-${normalized}`;
 }
 
+function qtyCell(value) {
+  const n = Number(value || 0);
+  return n > 0 ? String(n) : "";
+}
+
+function productCells(row) {
+  return [
+    qtyCell(row.recarga),
+    qtyCell(row.botellon_purificada),
+    qtyCell(row.botellon),
+    qtyCell(row.kit_completo),
+    qtyCell(row.base),
+    qtyCell(row.bidon_5),
+    qtyCell(row.packs_2lt),
+    qtyCell(row.packs_1lt),
+    qtyCell(row.packs_600),
+  ];
+}
+
+const PRODUCT_HEADERS = [
+  "Recarga",
+  "Purificada",
+  "Alcalina",
+  "Kit",
+  "Base",
+  "Bidón 5",
+  "P2LT",
+  "P1LT",
+  "600cc",
+];
+
 export default function Reports() {
   const [sales, setSales] = useState([]);
   const [ordersByStatus, setOrdersByStatus] = useState([]);
@@ -131,7 +162,9 @@ export default function Reports() {
         (s, idx) =>
           `<tr><td>${idx + 1}</td><td>${s.customer_name}</td><td>${s.address || "-"}</td><td>${s.status}</td><td>${
             s.created_at ? new Date(s.created_at).toLocaleString() : "-"
-          }</td><td>${fmtScheduled(s.scheduled_date)}</td><td>${s.truck_plate || "-"}</td><td>${s.driver_name || "-"}</td><td>${s.zone || "-"}</td><td>${s.order_detail || "-"}</td><td>Bs. ${Number(s.total || 0).toFixed(2)}</td></tr>`
+          }</td><td>${fmtScheduled(s.scheduled_date)}</td><td>${s.truck_plate || "-"}</td><td>${s.driver_name || "-"}</td><td>${s.zone || "-"}</td>${productCells(s)
+            .map((cell) => `<td>${cell}</td>`)
+            .join("")}<td>Bs. ${Number(s.total || 0).toFixed(2)}</td></tr>`
       )
       .join("");
 
@@ -156,9 +189,9 @@ export default function Reports() {
           <div class="meta">${summaryFilterText}</div>
           <table>
             <thead>
-              <tr><th>Nº</th><th>Nombre</th><th>Dirección</th><th>Estado</th><th>Fecha</th><th>Fecha programada</th><th>Camión</th><th>Repartidor</th><th>Zona</th><th>Detalle</th><th>Total</th></tr>
+              <tr><th>Nº</th><th>Nombre</th><th>Dirección</th><th>Estado</th><th>Fecha</th><th>Fecha programada</th><th>Camión</th><th>Repartidor</th><th>Zona</th>${PRODUCT_HEADERS.map((h) => `<th>${h}</th>`).join("")}<th>Total</th></tr>
             </thead>
-            <tbody>${summaryRowsHtml || "<tr><td colspan='11'>Sin datos.</td></tr>"}</tbody>
+            <tbody>${summaryRowsHtml || `<tr><td colspan='${9 + PRODUCT_HEADERS.length}'>Sin datos.</td></tr>`}</tbody>
           </table>
         </body>
       </html>
@@ -237,7 +270,9 @@ export default function Reports() {
               <th>Camión</th>
               <th>Repartidor</th>
               <th>Zona</th>
-              <th>Detalle</th>
+              {PRODUCT_HEADERS.map((h) => (
+                <th key={h}>{h}</th>
+              ))}
               <th>Total</th>
             </tr>
           </thead>
@@ -253,13 +288,15 @@ export default function Reports() {
                 <td>{s.truck_plate || "-"}</td>
                 <td>{s.driver_name || "-"}</td>
                 <td>{s.zone || "-"}</td>
-                <td>{s.order_detail || "-"}</td>
+                {productCells(s).map((cell, i) => (
+                  <td key={i}>{cell || "-"}</td>
+                ))}
                 <td>Bs. {Number(s.total || 0).toFixed(2)}</td>
               </tr>
             ))}
             {summaryRows.length === 0 && (
               <tr>
-                <td colSpan={11}>Sin datos.</td>
+                <td colSpan={9 + PRODUCT_HEADERS.length}>Sin datos.</td>
               </tr>
             )}
           </tbody>

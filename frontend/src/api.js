@@ -25,4 +25,17 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// Token vencido o inválido: limpiar la sesión y volver a login en vez de dejar
+// la UI mostrando datos/errores como si la sesión siguiera activa.
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error?.response?.status === 401 && window.location.pathname !== "/login") {
+      localStorage.removeItem("ionlife_token");
+      window.location.assign("/login");
+    }
+    return Promise.reject(error);
+  }
+);
+
 export default api;

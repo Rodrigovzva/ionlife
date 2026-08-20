@@ -465,8 +465,7 @@ export default function Orders() {
         const fixedPrice = item.price_type_id
           ? getFixedPrice(productId, item.price_type_id)
           : null;
-        const nextPrice =
-          fixedPrice !== null && fixedPrice > 0 ? fixedPrice : basePrice;
+        const nextPrice = fixedPrice !== null ? fixedPrice : basePrice;
         return {
           ...item,
           product_id: productId,
@@ -490,8 +489,7 @@ export default function Orders() {
           (p) => String(p.id) === String(item.product_id)
         );
         const basePrice = product ? Number(product.price) : Number(item.price || 0);
-        const nextPrice =
-          fixedPrice !== null && fixedPrice > 0 ? fixedPrice : basePrice;
+        const nextPrice = fixedPrice !== null ? fixedPrice : basePrice;
         return {
           ...item,
           price_type_id: priceTypeId,
@@ -618,7 +616,7 @@ export default function Orders() {
       : "";
     if (!fechaIso) return true;
     if (!order.created_at) return false;
-    const orderDate = new Date(order.created_at).toISOString().slice(0, 10);
+    const orderDate = new Date(order.created_at).toLocaleDateString("en-CA", { timeZone: "America/La_Paz" });
     return orderDate === fechaIso;
   });
   const pendientesTotal = filteredOrders.filter(

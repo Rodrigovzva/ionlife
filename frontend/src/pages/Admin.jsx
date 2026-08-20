@@ -718,7 +718,9 @@ export default function Admin() {
             <input
               placeholder="Nuevo tipo de cliente"
               value={tipoForm.nombre}
-              onChange={(e) => setTipoForm({ nombre: e.target.value })}
+              onChange={(e) =>
+                setTipoForm({ ...tipoForm, nombre: e.target.value })
+              }
             />
             <input
               placeholder="Descuento por unidad (Bs.)"

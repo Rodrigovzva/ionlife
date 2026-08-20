@@ -667,7 +667,7 @@ export default function Logistics({ user }) {
                   <th>Teléfono</th>
                   <th>Recarga</th>
                   <th>Purificada</th>
-                  <th>Botellón</th>
+                  <th>Alcalina</th>
                   <th>Kit</th>
                   <th>Base</th>
                   <th>Bidón 5</th>
@@ -692,7 +692,7 @@ export default function Logistics({ user }) {
                     <th>Pedidos</th>
                     <th>Recarga</th>
                     <th>Purificada</th>
-                    <th>Botellón</th>
+                    <th>Alcalina</th>
                     <th>Kit completo</th>
                     <th>Base</th>
                     <th>Bidón 5 LT</th>
@@ -1274,7 +1274,6 @@ export default function Logistics({ user }) {
                       >
                         <option value="">Cambiar estado</option>
                         <option>Pendiente</option>
-                        <option>Despachado</option>
                         <option>Entregado</option>
                         <option>Reprogramado</option>
                       </select>
@@ -1391,15 +1390,15 @@ export default function Logistics({ user }) {
                       <th>Zona</th>
                       <th>Tel. principal</th>
                       <th>Tel. secundario</th>
-                      <th>Packs 600cc</th>
-                      <th>Packs 1 LT</th>
-                      <th>Packs 2 LT</th>
-                      <th>Bidón 5 LT</th>
                       <th>Recarga</th>
-                      <th>Base</th>
-                      <th>Botellón</th>
+                      <th>Purificada</th>
+                      <th>Alcalina</th>
                       <th>Kit completo</th>
-                      <th>Botellón purificada</th>
+                      <th>Base</th>
+                      <th>Bidón 5 LT</th>
+                      <th>Packs 2 LT</th>
+                      <th>Packs 1 LT</th>
+                      <th>Packs 600cc</th>
                       <th>Precio</th>
                     </tr>
                   </thead>
@@ -1413,15 +1412,15 @@ export default function Logistics({ user }) {
                         <td>{o.zona || "-"}</td>
                         <td>{o.phone || "-"}</td>
                         <td>{o.phone_secondary || "-"}</td>
-                        <td>{Number(o.packs_600 || 0)}</td>
-                        <td>{Number(o.packs_1lt || 0)}</td>
-                        <td>{Number(o.packs_2lt || 0)}</td>
-                        <td>{Number(o.bidon_5 || 0)}</td>
-                        <td>{Number(o.recarga || 0)}</td>
-                        <td>{Number(o.base || 0)}</td>
-                        <td>{Number(o.botellon || 0)}</td>
-                        <td>{Number(o.kit_completo || 0)}</td>
-                        <td>{Number(o.botellon_purificada || 0)}</td>
+                        <td>{Number(o.recarga || 0) || "-"}</td>
+                        <td>{Number(o.botellon_purificada || 0) || "-"}</td>
+                        <td>{Number(o.botellon || 0) || "-"}</td>
+                        <td>{Number(o.kit_completo || 0) || "-"}</td>
+                        <td>{Number(o.base || 0) || "-"}</td>
+                        <td>{Number(o.bidon_5 || 0) || "-"}</td>
+                        <td>{Number(o.packs_2lt || 0) || "-"}</td>
+                        <td>{Number(o.packs_1lt || 0) || "-"}</td>
+                        <td>{Number(o.packs_600 || 0) || "-"}</td>
                         <td>Bs. {Number(o.total || 0).toFixed(2)}</td>
                       </tr>
                     ))}
@@ -1443,15 +1442,15 @@ export default function Logistics({ user }) {
                       <tr>
                         <th>Camión</th>
                         <th>Nro pedidos</th>
-                        <th>Packs 600cc</th>
-                        <th>Packs 1 LT</th>
-                        <th>Packs 2 LT</th>
-                        <th>Bidón 5 LT</th>
                         <th>Recarga</th>
-                        <th>Base</th>
-                        <th>Botellón</th>
+                        <th>Purificada</th>
+                        <th>Alcalina</th>
                         <th>Kit completo</th>
-                        <th>Botellón purificada</th>
+                        <th>Base</th>
+                        <th>Bidón 5 LT</th>
+                        <th>Pack 2 LT</th>
+                        <th>Pack 1 LT</th>
+                        <th>Pack 600cc</th>
                         <th>Precio</th>
                       </tr>
                     </thead>
@@ -1460,15 +1459,15 @@ export default function Logistics({ user }) {
                         <tr key={plate}>
                           <td>{plate}</td>
                           <td>{s.orders}</td>
-                          <td>{s.packs_600}</td>
-                          <td>{s.packs_1lt}</td>
-                          <td>{s.packs_2lt}</td>
-                          <td>{s.bidon_5}</td>
-                          <td>{s.recarga}</td>
-                          <td>{s.base}</td>
-                          <td>{s.botellon}</td>
-                          <td>{s.kit_completo}</td>
-                          <td>{s.botellon_purificada}</td>
+                          <td>{s.recarga || "-"}</td>
+                          <td>{s.botellon_purificada || "-"}</td>
+                          <td>{s.botellon || "-"}</td>
+                          <td>{s.kit_completo || "-"}</td>
+                          <td>{s.base || "-"}</td>
+                          <td>{s.bidon_5 || "-"}</td>
+                          <td>{s.packs_2lt || "-"}</td>
+                          <td>{s.packs_1lt || "-"}</td>
+                          <td>{s.packs_600 || "-"}</td>
                           <td>Bs. {s.total.toFixed(2)}</td>
                         </tr>
                       ))}

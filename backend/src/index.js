@@ -62,13 +62,35 @@ const ROLE_NAMES = [
   "Jefe de logística",
 ];
 
-async function getAllowedTruckIdsForDriver(req) {
+// true solo si el usuario NO tiene ningún rol de oficina de logística (es exclusivamente Repartidor).
+function isDriverOnlyRequest(req) {
   const roles = req.user?.roles || [];
   const isDriver = roles.includes("Repartidor");
   const isAdmin = roles.includes("Administrador del sistema");
   const isJefe = roles.includes("Jefe de logística");
   const isSupervisor = roles.includes("Supervisor de call center");
-  if (!isDriver || isAdmin || isJefe || isSupervisor) return null;
+  return isDriver && !isAdmin && !isJefe && !isSupervisor;
+}
+
+// Verifica que la entrega (por id de `entregas`) esté asignada al repartidor autenticado,
+// para evitar que un repartidor modifique entregas de otros (IDOR).
+async function isDeliveryOwnedByDriver(req, deliveryId) {
+  const driverId = req.user?.driver_id;
+  const driverName = req.user?.name;
+  const rows = driverId
+    ? await query(
+        "SELECT e.id FROM entregas e JOIN repartidores r ON r.id = e.repartidor_id WHERE e.id = ? AND r.id = ? LIMIT 1",
+        [deliveryId, driverId]
+      )
+    : await query(
+        "SELECT e.id FROM entregas e JOIN repartidores r ON r.id = e.repartidor_id WHERE e.id = ? AND LOWER(r.nombre) = LOWER(?) LIMIT 1",
+        [deliveryId, driverName]
+      );
+  return rows.length > 0;
+}
+
+async function getAllowedTruckIdsForDriver(req) {
+  if (!isDriverOnlyRequest(req)) return null;
   const driverId = req.user?.driver_id;
   const driverName = req.user?.name;
   let truckIds = [];
@@ -109,6 +131,7 @@ const ACCESS = {
     "Supervisor de call center",
     "Operador de call center",
     "Repartidor",
+    "Jefe de logística",
   ],
   products: [
     "Administrador del sistema",
@@ -130,6 +153,12 @@ const ACCESS = {
     "Administrador del sistema",
     "Jefe de logística",
     "Repartidor",
+    "Supervisor de call center",
+  ],
+  // Igual que logistics pero sin "Repartidor": gestión de flota/reasignación es solo para personal de oficina.
+  logisticsManage: [
+    "Administrador del sistema",
+    "Jefe de logística",
     "Supervisor de call center",
   ],
   reports: [
@@ -160,6 +189,111 @@ function getTodayLaPaz() {
   const get = (type) => parts.find((p) => p.type === type).value;
   return `${get("year")}-${get("month")}-${get("day")}`;
 }
+
+class InsufficientStockError extends Error {}
+
+// Descuenta del inventario los ítems de un pedido al confirmarse la entrega.
+// Idempotente: si ya existe un movimiento SALIDA para el pedido, no vuelve a descontar.
+// Corre en una transacción con locks (FOR UPDATE) sobre el pedido y las filas de inventario
+// afectadas para que dos confirmaciones concurrentes del mismo pedido, o dos pedidos que
+// compiten por el mismo producto, no descuenten stock dos veces ni dejen cantidad negativa.
+async function deductInventoryOnDelivery(pedidoId, userId) {
+  try {
+    await withTransaction(async (exec) => {
+      await exec("SELECT id FROM pedidos WHERE id = ? FOR UPDATE", [pedidoId]);
+      const existing = await exec(
+        "SELECT id FROM movimientos_inventario WHERE pedido_id = ? AND tipo = 'SALIDA' LIMIT 1",
+        [pedidoId]
+      );
+      if (existing.length > 0) {
+        return;
+      }
+      const items = await exec(
+        "SELECT producto_id, cantidad FROM items_pedido WHERE pedido_id = ?",
+        [pedidoId]
+      );
+      for (const item of items) {
+        const [inv] = await exec(
+          "SELECT almacen_id, cantidad FROM inventario WHERE producto_id = ? ORDER BY cantidad DESC LIMIT 1 FOR UPDATE",
+          [item.producto_id]
+        );
+        if (!inv || inv.cantidad < item.cantidad) {
+          throw new InsufficientStockError("Sin existencias suficientes en almacenes.");
+        }
+        await exec(
+          "INSERT INTO movimientos_inventario (almacen_id, producto_id, cantidad, tipo, pedido_id, nota, creado_por_usuario_id, actualizado_por_usuario_id) VALUES (?, ?, ?, 'SALIDA', ?, ?, ?, ?)",
+          [inv.almacen_id, item.producto_id, -item.cantidad, pedidoId, "Entrega confirmada", userId, userId]
+        );
+        await exec(
+          "UPDATE inventario SET cantidad = cantidad - ?, actualizado_por_usuario_id = ? WHERE almacen_id = ? AND producto_id = ?",
+          [item.cantidad, userId, inv.almacen_id, item.producto_id]
+        );
+      }
+    });
+    return { ok: true };
+  } catch (err) {
+    if (err instanceof InsufficientStockError) {
+      return { ok: false, error: err.message };
+    }
+    throw err;
+  }
+}
+
+/** Subconsulta SQL: clasifica ítems de pedido por columnas de hoja de ruta/reportes. */
+const ORDER_ITEMS_CLASSIFIED_SUBQUERY = `
+  SELECT
+    pedido_id,
+    GROUP_CONCAT(CONCAT(nombre, " x", cantidad) SEPARATOR ", ") as items,
+    COALESCE(SUM(cantidad * precio), 0) as total,
+    COALESCE(SUM(CASE WHEN cat = 'packs_600' THEN cantidad ELSE 0 END), 0) as packs_600,
+    COALESCE(SUM(CASE WHEN cat = 'packs_1lt' THEN cantidad ELSE 0 END), 0) as packs_1lt,
+    COALESCE(SUM(CASE WHEN cat = 'packs_2lt' THEN cantidad ELSE 0 END), 0) as packs_2lt,
+    COALESCE(SUM(CASE WHEN cat = 'bidon_5' THEN cantidad ELSE 0 END), 0) as bidon_5,
+    COALESCE(SUM(CASE WHEN cat = 'recarga' THEN cantidad ELSE 0 END), 0) as recarga,
+    COALESCE(SUM(CASE WHEN cat = 'base' THEN cantidad ELSE 0 END), 0) as base,
+    COALESCE(SUM(CASE WHEN cat = 'botellon' THEN cantidad ELSE 0 END), 0) as botellon,
+    COALESCE(SUM(CASE WHEN cat = 'kit_completo' THEN cantidad ELSE 0 END), 0) as kit_completo,
+    COALESCE(SUM(CASE WHEN cat = 'botellon_purificada' THEN cantidad ELSE 0 END), 0) as botellon_purificada
+  FROM (
+    SELECT
+      pedido_id,
+      cantidad,
+      precio,
+      nombre,
+      CASE
+        WHEN n LIKE '%kit%' THEN 'kit_completo'
+        WHEN n LIKE '%recarga%' THEN 'recarga'
+        WHEN n LIKE '%purific%' THEN 'botellon_purificada'
+        WHEN n LIKE '%alcalin%' THEN 'botellon'
+        WHEN n LIKE '%base%' THEN 'base'
+        WHEN n LIKE '%bidon%' OR n LIKE '%5 lt%' OR n LIKE '%5lt%' THEN 'bidon_5'
+        WHEN n LIKE '%600%' THEN 'packs_600'
+        WHEN n LIKE '%2 lt%' OR n LIKE '%2lt%' OR n LIKE '%2 litro%' THEN 'packs_2lt'
+        WHEN n LIKE '%1 lt%' OR n LIKE '%1lt%' OR n LIKE '%1 litro%' THEN 'packs_1lt'
+        WHEN n LIKE '%botellon%' THEN 'botellon'
+        ELSE NULL
+      END as cat
+    FROM (
+      SELECT
+        oi.pedido_id,
+        oi.cantidad,
+        oi.precio,
+        pr.nombre,
+        CONCAT(
+          REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LOWER(TRIM(pr.nombre)), 'á', 'a'), 'é', 'e'), 'í', 'i'), 'ó', 'o'), 'ú', 'u'),
+          ' ',
+          COALESCE(
+            REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LOWER(TRIM(tp.nombre)), 'á', 'a'), 'é', 'e'), 'í', 'i'), 'ó', 'o'), 'ú', 'u'),
+            ''
+          )
+        ) as n
+      FROM items_pedido oi
+      JOIN productos pr ON pr.id = oi.producto_id
+      LEFT JOIN tipos_precio tp ON tp.id = oi.tipo_precio_id
+    ) named
+  ) classified
+  GROUP BY pedido_id
+`;
 
 const app = express();
 app.disable('x-powered-by');
@@ -1275,42 +1409,9 @@ app.patch("/api/orders/:id/status", requireRole(ACCESS.orders), asyncHandler(asy
     [req.params.id, status, note || (status === "Reprogramado" ? `Fecha programada: ${toDateOnly(scheduled_date)}` : null)]
   );
   if (status === "Entregado") {
-    const existing = await query(
-      "SELECT id FROM movimientos_inventario WHERE pedido_id = ? AND tipo = 'SALIDA' LIMIT 1",
-      [req.params.id]
-    );
-    if (existing.length === 0) {
-      const items = await query(
-        "SELECT producto_id, cantidad FROM items_pedido WHERE pedido_id = ?",
-        [req.params.id]
-      );
-      for (const item of items) {
-        const [inv] = await query(
-          "SELECT almacen_id, cantidad FROM inventario WHERE producto_id = ? ORDER BY cantidad DESC LIMIT 1",
-          [item.producto_id]
-        );
-        if (!inv || inv.cantidad < item.cantidad) {
-          return res.status(400).json({
-            error: "Sin existencias suficientes en almacenes.",
-          });
-        }
-        await query(
-          "INSERT INTO movimientos_inventario (almacen_id, producto_id, cantidad, tipo, pedido_id, nota, creado_por_usuario_id, actualizado_por_usuario_id) VALUES (?, ?, ?, 'SALIDA', ?, ?, ?, ?)",
-          [
-            inv.almacen_id,
-            item.producto_id,
-            -item.cantidad,
-            req.params.id,
-            status === "Entregado" ? "Entrega confirmada" : "Confirmación de pedido",
-            req.user?.id || null,
-            req.user?.id || null,
-          ]
-        );
-        await query(
-          "UPDATE inventario SET cantidad = cantidad - ?, actualizado_por_usuario_id = ? WHERE almacen_id = ? AND producto_id = ?",
-          [item.cantidad, req.user?.id || null, inv.almacen_id, item.producto_id]
-        );
-      }
+    const result = await deductInventoryOnDelivery(req.params.id, req.user?.id || null);
+    if (!result.ok) {
+      return res.status(400).json({ error: result.error });
     }
   }
   await req.audit({
@@ -1372,7 +1473,7 @@ app.get("/api/logistics/pending-orders", requireRole(ACCESS.logistics), asyncHan
   res.json(rows);
 }));
 
-app.post("/api/logistics/trucks", requireRole(ACCESS.logistics), asyncHandler(async (req, res) => {
+app.post("/api/logistics/trucks", requireRole(ACCESS.logisticsManage), asyncHandler(async (req, res) => {
   const { plate, capacity, active } = req.body || {};
   if (!plate) {
     return res.status(400).json({ error: "Placa requerida" });
@@ -1385,7 +1486,7 @@ app.post("/api/logistics/trucks", requireRole(ACCESS.logistics), asyncHandler(as
   res.status(201).json({ id: result.insertId });
 }));
 
-app.put("/api/logistics/trucks/:id", requireRole(ACCESS.logistics), asyncHandler(async (req, res) => {
+app.put("/api/logistics/trucks/:id", requireRole(ACCESS.logisticsManage), asyncHandler(async (req, res) => {
   const { plate, capacity, active } = req.body || {};
   await query(
     "UPDATE camiones SET placa = ?, capacidad = ?, activo = ?, actualizado_por_usuario_id = ? WHERE id = ?",
@@ -1402,7 +1503,7 @@ app.get("/api/logistics/drivers", requireRole(ACCESS.logistics), asyncHandler(as
   res.json(rows);
 }));
 
-app.post("/api/logistics/drivers", requireRole(ACCESS.logistics), asyncHandler(async (req, res) => {
+app.post("/api/logistics/drivers", requireRole(ACCESS.logisticsManage), asyncHandler(async (req, res) => {
   const { name, phone, active } = req.body || {};
   if (!name) {
     return res.status(400).json({ error: "Nombre requerido" });
@@ -1415,7 +1516,7 @@ app.post("/api/logistics/drivers", requireRole(ACCESS.logistics), asyncHandler(a
   res.status(201).json({ id: result.insertId });
 }));
 
-app.put("/api/logistics/drivers/:id", requireRole(ACCESS.logistics), asyncHandler(async (req, res) => {
+app.put("/api/logistics/drivers/:id", requireRole(ACCESS.logisticsManage), asyncHandler(async (req, res) => {
   const { name, phone, active } = req.body || {};
   await query(
     "UPDATE repartidores SET nombre = ?, telefono = ?, activo = ?, actualizado_por_usuario_id = ? WHERE id = ?",
@@ -1474,13 +1575,16 @@ app.post("/api/logistics/deliveries/bulk", requireRole(ACCESS.logistics), asyncH
   }
   let assigned = 0;
   let updated = 0;
-  const skipped = 0;
+  let skipped = 0;
   const auditItems = [];
 
   await withTransaction(async (exec) => {
     for (const rawId of order_ids) {
       const orderId = Number(rawId);
-      if (!orderId) continue;
+      if (!orderId) {
+        skipped += 1;
+        continue;
+      }
       const existing = await exec(
         "SELECT id FROM entregas WHERE pedido_id = ? LIMIT 1",
         [orderId]
@@ -1533,6 +1637,9 @@ app.patch(
     if (!status) {
       return res.status(400).json({ error: "Estado requerido" });
     }
+    if (isDriverOnlyRequest(req) && !(await isDeliveryOwnedByDriver(req, req.params.id))) {
+      return res.status(403).json({ error: "No autorizado para esta entrega" });
+    }
     await query(
       "UPDATE entregas SET estado = ?, actualizado_por_usuario_id = ? WHERE id = ?",
       [status, req.user?.id || null, req.params.id]
@@ -1553,6 +1660,10 @@ app.patch(
         [req.params.id]
       );
       if (delivery) {
+        const result = await deductInventoryOnDelivery(delivery.pedido_id, req.user?.id || null);
+        if (!result.ok) {
+          return res.status(400).json({ error: result.error });
+        }
         await query(
           "UPDATE pedidos SET estado = 'Entregado', actualizado_por_usuario_id = ? WHERE id = ?",
           [req.user?.id || null, delivery.pedido_id]
@@ -1657,7 +1768,7 @@ app.get("/api/logistics/deliveries/search", requireRole(ACCESS.logistics), async
 
 app.patch(
   "/api/logistics/deliveries/:id/reassign",
-  requireRole(ACCESS.logistics),
+  requireRole(ACCESS.logisticsManage),
   asyncHandler(async (req, res) => {
     const { truck_id, driver_id } = req.body || {};
     if (!truck_id || !driver_id) {
@@ -1682,7 +1793,7 @@ app.patch(
 
 app.post(
   "/api/logistics/deliveries/reassign-bulk",
-  requireRole(ACCESS.logistics),
+  requireRole(ACCESS.logisticsManage),
   asyncHandler(async (req, res) => {
     const { delivery_ids, truck_id, driver_id } = req.body || {};
     if (!Array.isArray(delivery_ids) || delivery_ids.length === 0 || !truck_id || !driver_id) {
@@ -1828,51 +1939,7 @@ app.get("/api/logistics/truck-orders", requireRole(ACCESS.logistics), asyncHandl
      LEFT JOIN direcciones_clientes dc ON dc.id = p.direccion_id
      JOIN camiones cam ON cam.id = e.camion_id
      JOIN repartidores r ON r.id = e.repartidor_id
-     JOIN (
-       SELECT
-         pedido_id,
-         GROUP_CONCAT(CONCAT(nombre, " x", cantidad) SEPARATOR ", ") as items,
-         COALESCE(SUM(cantidad * precio), 0) as total,
-         COALESCE(SUM(CASE WHEN cat = 'packs_600' THEN cantidad ELSE 0 END), 0) as packs_600,
-         COALESCE(SUM(CASE WHEN cat = 'packs_1lt' THEN cantidad ELSE 0 END), 0) as packs_1lt,
-         COALESCE(SUM(CASE WHEN cat = 'packs_2lt' THEN cantidad ELSE 0 END), 0) as packs_2lt,
-         COALESCE(SUM(CASE WHEN cat = 'bidon_5' THEN cantidad ELSE 0 END), 0) as bidon_5,
-         COALESCE(SUM(CASE WHEN cat = 'recarga' THEN cantidad ELSE 0 END), 0) as recarga,
-         COALESCE(SUM(CASE WHEN cat = 'base' THEN cantidad ELSE 0 END), 0) as base,
-         COALESCE(SUM(CASE WHEN cat = 'botellon' THEN cantidad ELSE 0 END), 0) as botellon,
-         COALESCE(SUM(CASE WHEN cat = 'kit_completo' THEN cantidad ELSE 0 END), 0) as kit_completo,
-         COALESCE(SUM(CASE WHEN cat = 'botellon_purificada' THEN cantidad ELSE 0 END), 0) as botellon_purificada
-       FROM (
-         SELECT
-           pedido_id,
-           cantidad,
-           precio,
-           nombre,
-           CASE
-             WHEN n LIKE '%kit%' THEN 'kit_completo'
-             WHEN n LIKE '%recarga%' THEN 'recarga'
-             WHEN n LIKE '%purificada%' THEN 'botellon_purificada'
-             WHEN n LIKE '%base%' THEN 'base'
-             WHEN n LIKE '%bidon%' OR n LIKE '%5 lt%' OR n LIKE '%5lt%' THEN 'bidon_5'
-             WHEN n LIKE '%600%' THEN 'packs_600'
-             WHEN n LIKE '%2 lt%' OR n LIKE '%2lt%' OR n LIKE '%2 litro%' THEN 'packs_2lt'
-             WHEN n LIKE '%1 lt%' OR n LIKE '%1lt%' OR n LIKE '%1 litro%' THEN 'packs_1lt'
-             WHEN n LIKE '%botellon%' THEN 'botellon'
-             ELSE NULL
-           END as cat
-         FROM (
-           SELECT
-             oi.pedido_id,
-             oi.cantidad,
-             oi.precio,
-             pr.nombre,
-             REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LOWER(TRIM(pr.nombre)), 'á', 'a'), 'é', 'e'), 'í', 'i'), 'ó', 'o'), 'ú', 'u') as n
-           FROM items_pedido oi
-           JOIN productos pr ON pr.id = oi.producto_id
-         ) named
-       ) classified
-       GROUP BY pedido_id
-     ) cls ON cls.pedido_id = p.id
+     JOIN (${ORDER_ITEMS_CLASSIFIED_SUBQUERY}) cls ON cls.pedido_id = p.id
      WHERE e.camion_id = ?${dateClause}
      ORDER BY p.id DESC`,
     [truck_id, ...dateParams]
@@ -2307,8 +2374,17 @@ app.get(
         cam.placa as truck_plate,
         rep.nombre as driver_name,
         u.nombre as seller_name,
-        GROUP_CONCAT(CONCAT(pr.nombre, ' x', oi.cantidad) SEPARATOR ', ') as order_detail,
-        SUM(oi.cantidad * oi.precio) as total
+        cls.items as order_detail,
+        cls.total,
+        cls.packs_600,
+        cls.packs_1lt,
+        cls.packs_2lt,
+        cls.bidon_5,
+        cls.recarga,
+        cls.base,
+        cls.botellon,
+        cls.kit_completo,
+        cls.botellon_purificada
        FROM pedidos p
        JOIN clientes c ON c.id = p.cliente_id
        LEFT JOIN direcciones_clientes dc ON dc.id = p.direccion_id
@@ -2316,10 +2392,8 @@ app.get(
        LEFT JOIN camiones cam ON cam.id = e.camion_id
        LEFT JOIN repartidores rep ON rep.id = e.repartidor_id
        LEFT JOIN usuarios u ON u.id = p.creado_por_usuario_id
-       JOIN items_pedido oi ON oi.pedido_id = p.id
-       JOIN productos pr ON pr.id = oi.producto_id
+       JOIN (${ORDER_ITEMS_CLASSIFIED_SUBQUERY}) cls ON cls.pedido_id = p.id
        WHERE ${where.join(" AND ")}
-       GROUP BY p.id, CASE WHEN e.estado IN ('Entregado','Cancelado') THEN e.estado ELSE p.estado END, p.fecha_creacion, p.fecha_programada, c.nombre_completo, address, cam.placa, rep.nombre, u.nombre
        ORDER BY p.id DESC`,
       params
     );

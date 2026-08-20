@@ -38,6 +38,7 @@ export default function DriverDeliveries() {
   const [searchQuery, setSearchQuery] = useState("");
   const [sales, setSales] = useState([]);
   const [statusUpdates, setStatusUpdates] = useState({});
+  const [reprogramDates, setReprogramDates] = useState({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [salesError, setSalesError] = useState("");
@@ -120,12 +121,15 @@ export default function DriverDeliveries() {
   async function updateStatus(deliveryId) {
     const status = statusUpdates[deliveryId];
     if (!status) return;
+    if (status === "Reprogramado" && !reprogramDates[deliveryId]) return;
     setLoading(true);
     try {
       await api.patch(`/api/logistics/deliveries/${deliveryId}/status`, {
         status,
+        scheduled_date: status === "Reprogramado" ? reprogramDates[deliveryId] : undefined,
       });
       setStatusUpdates((prev) => ({ ...prev, [deliveryId]: "" }));
+      setReprogramDates((prev) => ({ ...prev, [deliveryId]: "" }));
       load();
     } finally {
       setLoading(false);
@@ -237,11 +241,27 @@ export default function DriverDeliveries() {
                         <option>Cancelado</option>
                         <option>Reprogramado</option>
                       </select>
+                      {statusUpdates[d.id] === "Reprogramado" && (
+                        <input
+                          type="date"
+                          value={reprogramDates[d.id] || ""}
+                          onChange={(e) =>
+                            setReprogramDates((prev) => ({
+                              ...prev,
+                              [d.id]: e.target.value,
+                            }))
+                          }
+                        />
+                      )}
                       <button
                         className="btn btn-outline btn-sm"
                         type="button"
                         onClick={() => updateStatus(d.id)}
-                        disabled={!statusUpdates[d.id] || loading}
+                        disabled={
+                          !statusUpdates[d.id] ||
+                          loading ||
+                          (statusUpdates[d.id] === "Reprogramado" && !reprogramDates[d.id])
+                        }
                       >
                         {loading ? "Guardando..." : "Actualizar"}
                       </button>
