@@ -13,6 +13,7 @@ import Admin from "./pages/Admin.jsx";
 import DriverDeliveries from "./pages/DriverDeliveries.jsx";
 import EntregasMovil from "./pages/EntregasMovil.jsx";
 import Nav from "./components/Nav.jsx";
+import ChatPanel from "./components/ChatPanel.jsx";
 
 // Debe reflejar el objeto ACCESS de backend/src/index.js: es una guarda de UI,
 // la autorización real la hace el backend en cada endpoint.
@@ -75,6 +76,7 @@ export default function App() {
       }
     >
       {user && <Nav user={user} onLogout={() => setUser(null)} />}
+      {user && <ChatPanel user={user} />}
       <Routes>
         <Route
           path="/login"
@@ -115,8 +117,11 @@ export default function App() {
         <Route
           path="/pedidos"
           element={
-            <PrivateRoute user={user} allow={ACCESS.orders}>
-              <Orders />
+            <PrivateRoute
+              user={user}
+              allow={[...ACCESS.orders, "Repartidor"]}
+            >
+              <Orders user={user} />
             </PrivateRoute>
           }
         />

@@ -314,6 +314,25 @@ CREATE TABLE IF NOT EXISTS devoluciones_registro (
   FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL
 );
 
+CREATE TABLE IF NOT EXISTS mensajes_chat (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  usuario_id INT NOT NULL,
+  usuario_nombre VARCHAR(120) NOT NULL,
+  sala VARCHAR(20) NOT NULL DEFAULT 'global',
+  contenido TEXT NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_sala_created (sala, created_at),
+  FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS chat_lecturas (
+  usuario_id INT NOT NULL,
+  sala VARCHAR(20) NOT NULL,
+  last_read_at DATETIME NOT NULL,
+  PRIMARY KEY (usuario_id, sala),
+  FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
 INSERT IGNORE INTO roles (nombre) VALUES
 ('Administrador del sistema'),
 ('Supervisor de call center'),

@@ -8,6 +8,13 @@ const jwt = require("jsonwebtoken");
 const { query, pool, withTransaction } = require("./db");
 const { requireAuth, requireRole } = require("./auth");
 const { auditMiddleware } = require("./audit");
+const {
+  ensureChatTables,
+  getMensajes,
+  saveMensaje,
+  getNoLeidos,
+  marcarLeido,
+} = require("./chat");
 
 // Wrapper para capturar errores async en handlers de Express
 const asyncHandler = (fn) => (req, res, next) =>
@@ -262,8 +269,8 @@ const ORDER_ITEMS_CLASSIFIED_SUBQUERY = `
       nombre,
       CASE
         WHEN n LIKE '%kit%' THEN 'kit_completo'
+        WHEN n LIKE '%purificada%' THEN 'botellon_purificada'
         WHEN n LIKE '%recarga%' THEN 'recarga'
-        WHEN n LIKE '%purific%' THEN 'botellon_purificada'
         WHEN n LIKE '%alcalin%' THEN 'botellon'
         WHEN n LIKE '%base%' THEN 'base'
         WHEN n LIKE '%bidon%' OR n LIKE '%5 lt%' OR n LIKE '%5lt%' THEN 'bidon_5'
@@ -307,6 +314,30 @@ app.use(express.json());
 app.use(morgan("dev"));
 
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
+
+app.get("/api/chat/mensajes", requireAuth, asyncHandler(async (req, res) => {
+  const mensajes = await getMensajes(req.query.limit || 50);
+  res.json(mensajes);
+}));
+
+app.post("/api/chat/mensajes", requireAuth, asyncHandler(async (req, res) => {
+  const msg = await saveMensaje(
+    req.user.id,
+    req.user.name || req.user.email || "Usuario",
+    req.body?.contenido
+  );
+  res.status(201).json(msg);
+}));
+
+app.get("/api/chat/no-leidos", requireAuth, asyncHandler(async (req, res) => {
+  const count = await getNoLeidos(req.user.id);
+  res.json({ global: count });
+}));
+
+app.post("/api/chat/marcar-leido", requireAuth, asyncHandler(async (req, res) => {
+  await marcarLeido(req.user.id);
+  res.json({ ok: true });
+}));
 
 async function ensureBaseRoles() {
   for (const role of ROLE_NAMES) {
@@ -2708,9 +2739,13 @@ async function start() {
   await ensureAdminUser();
   await ensurePriceTypes();            // migración: elimina columna ajuste_unidades obsoleta
   await ensureDevolucionesRegistroTable(); // migración: agrega unique constraint camion+fecha
+  await ensureChatTables();
   // Middleware global de manejo de errores (captura los errores de asyncHandler)
   app.use((err, req, res, _next) => {
     console.error(`[${new Date().toISOString()}] ${req.method} ${req.path}:`, err);
+    if (err.status) {
+      return res.status(err.status).json({ error: err.message || "Error" });
+    }
     res.status(err.status || 500).json({ error: "Error interno del servidor" });
   });
 

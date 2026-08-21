@@ -13,9 +13,21 @@ function statusClass(status) {
   return `tag status-${normalized}`;
 }
 
-export default function Orders() {
+export default function Orders({ user }) {
   const location = useLocation();
   const navigate = useNavigate();
+  const roles = user?.roles || [];
+  const canManageOrders = roles.some((role) =>
+    [
+      "Administrador del sistema",
+      "Jefe de logística",
+      "Supervisor de call center",
+      "Operador de call center",
+    ].includes(role)
+  );
+  const isDriverEditor =
+    roles.includes("Repartidor") && !canManageOrders;
+  const ordersHomePath = isDriverEditor ? "/entregas-movil" : "/pedidos";
   const [orders, setOrders] = useState([]);
   
   const [statusUpdates, setStatusUpdates] = useState({});
@@ -322,7 +334,7 @@ export default function Orders() {
       });
       setOrderSuccess("Pedido actualizado correctamente.");
       resetForm();
-      navigate("/pedidos");
+      navigate(ordersHomePath);
       load();
     } catch (err) {
       const data = err?.response?.data;
@@ -625,7 +637,17 @@ export default function Orders() {
 
   return (
     <div className="container page">
-      <h2>Pedidos</h2>
+      <h2>{isDriverEditor ? "Ajustar pedido" : "Pedidos"}</h2>
+      {isDriverEditor && !editId && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <p style={{ margin: 0 }}>
+            Seleccione <strong>Editar pedido</strong> desde{" "}
+            <a href="/entregas-movil">Entregas móvil</a> para ajustar productos
+            si el cliente cambia el pedido en ruta.
+          </p>
+        </div>
+      )}
+      {!isDriverEditor && (
       <div className="card" style={{ marginBottom: 16 }}>
         <h4>Buscar cliente</h4>
         <form onSubmit={handleSearch} className="form">
@@ -710,10 +732,13 @@ export default function Orders() {
           </table>
         )}
       </div>
+      )}
+      {(!isDriverEditor || editId) && (
       <div className="card">
         {editId && (
           <div className="tag" style={{ marginBottom: 8 }}>
             Editando pedido #{editId}
+            {isDriverEditor ? " (ajuste en ruta)" : ""}
           </div>
         )}
         <form onSubmit={editId ? handleUpdate : handleCreate} className="form orders-form-compact">
@@ -721,12 +746,14 @@ export default function Orders() {
             <input
               placeholder="Nombre cliente"
               value={form.customer_name}
+              readOnly={isDriverEditor}
               onChange={(e) =>
                 setForm({ ...form, customer_name: e.target.value })
               }
             />
             <select
               value={form.customer_type}
+              disabled={isDriverEditor}
               onChange={(e) =>
                 setForm({ ...form, customer_type: e.target.value })
               }
@@ -934,15 +961,18 @@ export default function Orders() {
                 type="button"
                 onClick={() => {
                   resetForm();
-                  navigate("/pedidos");
+                  navigate(ordersHomePath);
                 }}
               >
-                Cancelar edición
+                {isDriverEditor ? "Volver a entregas" : "Cancelar edición"}
               </button>
             )}
           </div>
         </form>
       </div>
+      )}
+      {!isDriverEditor && (
+      <>
       <div style={{ marginTop: 16 }}>
         <div className="card orders-filters-card" style={{ marginBottom: 12 }}>
           <h4 style={{ marginTop: 0, marginBottom: 12 }}>Filtros del listado</h4>
@@ -1090,6 +1120,8 @@ export default function Orders() {
             </button>
           </div>
         </div>
+      )}
+      </>
       )}
     </div>
   );
