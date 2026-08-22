@@ -1,11 +1,13 @@
 import { Link, NavLink, useNavigate } from "react-router-dom";
 
+function hasModule(user, moduleKey) {
+  if (!user) return false;
+  if (user.roles?.includes("Administrador del sistema")) return true;
+  return (user.modules || []).includes(moduleKey);
+}
+
 export default function Nav({ user, onLogout }) {
   const navigate = useNavigate();
-  const isAdmin = user?.roles?.includes("Administrador del sistema");
-  const isDriver = user?.roles?.includes("Repartidor");
-  const isJefeLogistica = user?.roles?.includes("Jefe de logística");
-  const showDeliveries = isDriver || isAdmin || isJefeLogistica;
 
   function handleLogout() {
     localStorage.removeItem("ionlife_token");
@@ -19,30 +21,34 @@ export default function Nav({ user, onLogout }) {
         <Link className="nav-brand" to="/">Ionlife</Link>
         <div className="nav-links">
           <NavLink className="nav-link" to="/">Inicio</NavLink>
-          {isDriver ? (
+          {hasModule(user, "customers") && (
+            <NavLink className="nav-link" to="/clientes">Clientes</NavLink>
+          )}
+          {hasModule(user, "products") && (
+            <NavLink className="nav-link" to="/productos">Productos</NavLink>
+          )}
+          {hasModule(user, "warehouses") && (
+            <NavLink className="nav-link" to="/almacenes">Almacenes</NavLink>
+          )}
+          {hasModule(user, "orders") && (
+            <NavLink className="nav-link" to="/pedidos">Pedidos</NavLink>
+          )}
+          {hasModule(user, "logistics") && (
+            <NavLink className="nav-link" to="/logistica">Logística</NavLink>
+          )}
+          {hasModule(user, "reports") && (
+            <NavLink className="nav-link" to="/reportes">Reportes</NavLink>
+          )}
+          {hasModule(user, "deliveries") && (
             <>
-              <NavLink className="nav-link" to="/clientes">Clientes</NavLink>
-              <NavLink className="nav-link" to="/logistica">Logística</NavLink>
+              {!user?.roles?.includes("Repartidor") && (
+                <NavLink className="nav-link" to="/mis-entregas">Mis entregas</NavLink>
+              )}
               <NavLink className="nav-link" to="/entregas-movil">Entregas móvil</NavLink>
             </>
-          ) : (
-            <>
-              <NavLink className="nav-link" to="/clientes">Clientes</NavLink>
-              <NavLink className="nav-link" to="/productos">Productos</NavLink>
-              <NavLink className="nav-link" to="/almacenes">Almacenes</NavLink>
-              <NavLink className="nav-link" to="/pedidos">Pedidos</NavLink>
-              <NavLink className="nav-link" to="/logistica">Logística</NavLink>
-              <NavLink className="nav-link" to="/reportes">Reportes</NavLink>
-              {showDeliveries && (
-                <>
-                  <NavLink className="nav-link" to="/mis-entregas">Mis entregas</NavLink>
-                  <NavLink className="nav-link" to="/entregas-movil">Entregas móvil</NavLink>
-                </>
-              )}
-              {isAdmin && (
-                <NavLink className="nav-link" to="/admin">Administración</NavLink>
-              )}
-            </>
+          )}
+          {hasModule(user, "admin") && (
+            <NavLink className="nav-link" to="/admin">Administración</NavLink>
           )}
         </div>
         <div className="nav-user">

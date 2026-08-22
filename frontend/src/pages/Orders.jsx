@@ -17,16 +17,12 @@ export default function Orders({ user }) {
   const location = useLocation();
   const navigate = useNavigate();
   const roles = user?.roles || [];
-  const canManageOrders = roles.some((role) =>
-    [
-      "Administrador del sistema",
-      "Jefe de logística",
-      "Supervisor de call center",
-      "Operador de call center",
-    ].includes(role)
-  );
+  const modules = user?.modules || [];
+  const canManageOrders =
+    roles.includes("Administrador del sistema") || modules.includes("orders");
   const isDriverEditor =
-    roles.includes("Repartidor") && !canManageOrders;
+    !canManageOrders &&
+    (roles.includes("Repartidor") || modules.includes("deliveries"));
   const ordersHomePath = isDriverEditor ? "/entregas-movil" : "/pedidos";
   const [orders, setOrders] = useState([]);
   

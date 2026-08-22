@@ -20,6 +20,7 @@ function sameRoleIds(a = [], b = []) {
 export default function Admin() {
   const [users, setUsers] = useState([]);
   const [roles, setRoles] = useState([]);
+  const [moduleCatalog, setModuleCatalog] = useState([]);
   const [tiposCliente, setTiposCliente] = useState([]);
   const [tiposPrecio, setTiposPrecio] = useState([]);
   const [products, setProducts] = useState([]);
@@ -79,6 +80,9 @@ export default function Admin() {
   const [roleSuccess, setRoleSuccess] = useState("");
   const [editRoleId, setEditRoleId] = useState(null);
   const [editRoleName, setEditRoleName] = useState("");
+  const [editModulesRoleId, setEditModulesRoleId] = useState(null);
+  const [draftModules, setDraftModules] = useState([]);
+  const [modulesSaving, setModulesSaving] = useState(false);
 
   async function load() {
     const [u, r, t, tp, pr, pp, tr, dr] = await Promise.all([
@@ -92,7 +96,13 @@ export default function Admin() {
       api.get("/api/logistics/drivers"),
     ]);
     setUsers(u.data);
-    setRoles(r.data);
+    const rolesPayload = r.data;
+    if (Array.isArray(rolesPayload)) {
+      setRoles(rolesPayload);
+    } else {
+      setRoles(rolesPayload?.roles || []);
+      setModuleCatalog(rolesPayload?.modules || []);
+    }
     setTiposCliente(t.data);
     setTiposPrecio(tp.data || []);
     setProducts(pr.data || []);
@@ -283,6 +293,45 @@ export default function Admin() {
   function cancelEditRole() {
     setEditRoleId(null);
     setEditRoleName("");
+  }
+
+  function startEditRoleModules(role) {
+    setEditModulesRoleId(role.id);
+    setDraftModules([...(role.modules || [])]);
+    setRoleError("");
+    setRoleSuccess("");
+  }
+
+  function cancelEditRoleModules() {
+    setEditModulesRoleId(null);
+    setDraftModules([]);
+  }
+
+  function toggleDraftModule(moduleKey) {
+    setDraftModules((prev) =>
+      prev.includes(moduleKey)
+        ? prev.filter((m) => m !== moduleKey)
+        : [...prev, moduleKey]
+    );
+  }
+
+  async function handleSaveRoleModules() {
+    if (!editModulesRoleId) return;
+    setModulesSaving(true);
+    setRoleError("");
+    setRoleSuccess("");
+    try {
+      await api.put(`/api/admin/roles/${editModulesRoleId}/modules`, {
+        modules: draftModules,
+      });
+      setRoleSuccess("Permisos del rol actualizados. Los usuarios deben volver a iniciar sesión o refrescar.");
+      cancelEditRoleModules();
+      await load();
+    } catch (err) {
+      setRoleError(err?.response?.data?.error || "No se pudieron guardar los permisos.");
+    } finally {
+      setModulesSaving(false);
+    }
   }
 
   async function handleUpdateRole(e) {
@@ -623,10 +672,14 @@ export default function Admin() {
       </div>
       <div className="card" style={{ marginTop: 16 }}>
         <h4>Roles del sistema</h4>
+        <p className="admin-roles-help">
+          Cree roles (ej. <strong>Vendedor</strong>) y marque qué módulos pueden ver.
+          Ejemplo: solo <strong>Clientes</strong> y <strong>Pedidos</strong>.
+        </p>
         <form onSubmit={handleCreateRole} className="form">
           <div className="form-row">
             <input
-              placeholder="Nombre del nuevo rol"
+              placeholder="Nombre del nuevo rol (ej. Vendedor)"
               value={roleForm.name}
               onChange={(e) => setRoleForm({ name: e.target.value })}
             />
@@ -640,62 +693,124 @@ export default function Admin() {
             <tr>
               <th>ID</th>
               <th>Nombre</th>
+              <th>Módulos</th>
               <th>Usuarios</th>
               <th>Acciones</th>
             </tr>
           </thead>
           <tbody>
-            {roles.map((r) => (
-              <tr key={r.id}>
-                <td>{r.id}</td>
-                <td>
-                  {editRoleId === r.id ? (
-                    <input
-                      value={editRoleName}
-                      onChange={(e) => setEditRoleName(e.target.value)}
-                    />
-                  ) : (
-                    r.name
-                  )}
-                </td>
-                <td>{Number(r.users_count || 0)}</td>
-                <td>
-                  {editRoleId === r.id ? (
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <button
-                        className="btn btn-sm"
-                        type="button"
-                        onClick={handleUpdateRole}
-                      >
-                        Guardar
-                      </button>
-                      <button
-                        className="btn btn-outline btn-sm"
-                        type="button"
-                        onClick={cancelEditRole}
-                      >
-                        Cancelar
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      className="btn btn-outline btn-sm"
-                      type="button"
-                      onClick={() => startEditRole(r)}
-                    >
-                      Editar
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
+            {roles.map((r) => {
+              const moduleLabels = (r.modules || [])
+                .map((key) => moduleCatalog.find((m) => m.key === key)?.label || key)
+                .join(", ");
+              return (
+                <tr key={r.id}>
+                  <td>{r.id}</td>
+                  <td>
+                    {editRoleId === r.id ? (
+                      <input
+                        value={editRoleName}
+                        onChange={(e) => setEditRoleName(e.target.value)}
+                      />
+                    ) : (
+                      r.name
+                    )}
+                  </td>
+                  <td style={{ maxWidth: 280, whiteSpace: "normal" }}>
+                    {moduleLabels || <span className="admin-roles-meta">Sin módulos</span>}
+                  </td>
+                  <td>{Number(r.users_count || 0)}</td>
+                  <td>
+                    {editRoleId === r.id ? (
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <button
+                          className="btn btn-sm"
+                          type="button"
+                          onClick={handleUpdateRole}
+                        >
+                          Guardar
+                        </button>
+                        <button
+                          className="btn btn-outline btn-sm"
+                          type="button"
+                          onClick={cancelEditRole}
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    ) : (
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <button
+                          className="btn btn-outline btn-sm"
+                          type="button"
+                          onClick={() => startEditRole(r)}
+                        >
+                          Renombrar
+                        </button>
+                        <button
+                          className="btn btn-outline btn-sm"
+                          type="button"
+                          onClick={() => startEditRoleModules(r)}
+                        >
+                          Módulos
+                        </button>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
             {roles.length === 0 && (
               <tr>
-                <td colSpan={4}>No hay roles registrados.</td>
+                <td colSpan={5}>No hay roles registrados.</td>
               </tr>
             )}
           </tbody>
         </table>
+
+        {editModulesRoleId && (
+          <div className="admin-modules-editor">
+            <h4>
+              Módulos de{" "}
+              {roles.find((r) => String(r.id) === String(editModulesRoleId))?.name || "rol"}
+            </h4>
+            <p className="admin-roles-help">
+              Marque lo que este rol podrá ver en el menú y usar en el sistema.
+            </p>
+            <div className="admin-modules-grid">
+              {moduleCatalog.map((mod) => (
+                <label key={mod.key} className="admin-module-item">
+                  <input
+                    type="checkbox"
+                    checked={draftModules.includes(mod.key)}
+                    onChange={() => toggleDraftModule(mod.key)}
+                  />
+                  <span>
+                    <strong>{mod.label}</strong>
+                    <span className="admin-roles-meta">{mod.path}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+            <div className="admin-roles-actions" style={{ marginTop: 12 }}>
+              <button
+                className="btn"
+                type="button"
+                disabled={modulesSaving}
+                onClick={handleSaveRoleModules}
+              >
+                {modulesSaving ? "Guardando..." : "Guardar módulos"}
+              </button>
+              <button
+                className="btn btn-outline"
+                type="button"
+                onClick={cancelEditRoleModules}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
       </div>
       <div className="grid grid-2" style={{ marginTop: 16 }}>
         <div className="card">

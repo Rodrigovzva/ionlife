@@ -15,6 +15,26 @@ const {
   getNoLeidos,
   marcarLeido,
 } = require("./chat");
+const {
+  MODULE_CATALOG,
+  ensureRolePermissionsTable,
+  getModulesForRoleNames,
+  getRoleModulesMap,
+  setRoleModules,
+  getAccess,
+} = require("./permissions");
+
+/** Matriz dinámica de roles por módulo (se recarga desde BD). */
+const ACCESS = new Proxy(
+  {},
+  {
+    get(_target, prop) {
+      if (typeof prop !== "string") return undefined;
+      const matrix = getAccess();
+      return matrix[prop] || [];
+    },
+  }
+);
 
 // Wrapper para capturar errores async en handlers de Express
 const asyncHandler = (fn) => (req, res, next) =>
@@ -131,51 +151,6 @@ async function getAllowedTruckIdsForDriver(req) {
   }
   return truckIds;
 }
-
-const ACCESS = {
-  customers: [
-    "Administrador del sistema",
-    "Supervisor de call center",
-    "Operador de call center",
-    "Repartidor",
-    "Jefe de logística",
-  ],
-  products: [
-    "Administrador del sistema",
-    "Supervisor de call center",
-    "Encargado de almacén",
-    "Repartidor",
-  ],
-  warehouses: [
-    "Administrador del sistema",
-    "Encargado de almacén",
-  ],
-  orders: [
-    "Administrador del sistema",
-    "Jefe de logística",
-    "Supervisor de call center",
-    "Operador de call center",
-  ],
-  logistics: [
-    "Administrador del sistema",
-    "Jefe de logística",
-    "Repartidor",
-    "Supervisor de call center",
-  ],
-  // Igual que logistics pero sin "Repartidor": gestión de flota/reasignación es solo para personal de oficina.
-  logisticsManage: [
-    "Administrador del sistema",
-    "Jefe de logística",
-    "Supervisor de call center",
-  ],
-  reports: [
-    "Administrador del sistema",
-    "Supervisor de call center",
-    "Jefe de logística",
-    "Repartidor",
-  ],
-  admin: ["Administrador del sistema"],
-};
 
 function toDateOnly(value) {
   if (value == null || value === "") return null;
@@ -456,6 +431,7 @@ app.post("/api/auth/login", loginRateLimit, asyncHandler(async (req, res) => {
     [user.id]
   );
   const roleNames = roles.map((r) => r.name);
+  const modules = await getModulesForRoleNames(roleNames);
   let driver = null;
   const [driverExact] = await query(
     "SELECT id FROM repartidores WHERE LOWER(nombre) = LOWER(?) LIMIT 1",
@@ -473,19 +449,38 @@ app.post("/api/auth/login", loginRateLimit, asyncHandler(async (req, res) => {
   loginAttempts.delete(req.ip || req.socket?.remoteAddress || "unknown");
 
   const token = jwt.sign(
-    { id: user.id, email: user.email, name: user.name, roles: roleNames, driver_id: driver?.id || null },
+    {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      roles: roleNames,
+      modules,
+      driver_id: driver?.id || null,
+    },
     JWT_SECRET,
     { expiresIn: "8h" }
   );
   return res.json({
     token,
-    user: { id: user.id, name: user.name, email: user.email, roles: roleNames },
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      roles: roleNames,
+      modules,
+    },
   });
 }));
 
-app.get("/api/auth/me", requireAuth, (req, res) => {
-  res.json({ user: req.user });
-});
+app.get("/api/auth/me", requireAuth, asyncHandler(async (req, res) => {
+  const modules = await getModulesForRoleNames(req.user?.roles || []);
+  res.json({
+    user: {
+      ...req.user,
+      modules,
+    },
+  });
+}));
 
 app.use("/api/customers", requireAuth, auditMiddleware("customers"));
 app.use("/api/products", requireAuth, auditMiddleware("products"));
@@ -2492,15 +2487,15 @@ app.get("/api/reports/performance", requireRole(ACCESS.reports), asyncHandler(as
 }));
 
 app.get("/api/admin/roles", requireRole(ACCESS.admin), asyncHandler(async (_req, res) => {
-  const roles = await query(
-    `SELECT r.id, r.nombre as name,
-            COUNT(ur.usuario_id) as users_count
-     FROM roles r
-     LEFT JOIN usuarios_roles ur ON ur.rol_id = r.id
-     GROUP BY r.id, r.nombre
-     ORDER BY r.nombre`
-  );
-  res.json(roles);
+  const roles = await getRoleModulesMap();
+  res.json({
+    roles,
+    modules: MODULE_CATALOG,
+  });
+}));
+
+app.get("/api/admin/modules", requireRole(ACCESS.admin), asyncHandler(async (_req, res) => {
+  res.json(MODULE_CATALOG);
 }));
 
 app.post("/api/admin/roles", requireRole(ACCESS.admin), asyncHandler(async (req, res) => {
@@ -2535,6 +2530,20 @@ app.put("/api/admin/roles/:id", requireRole(ACCESS.admin), asyncHandler(async (r
     }
     throw err;
   }
+}));
+
+app.put("/api/admin/roles/:id/modules", requireRole(ACCESS.admin), asyncHandler(async (req, res) => {
+  const modules = Array.isArray(req.body?.modules) ? req.body.modules : null;
+  if (!modules) {
+    return res.status(400).json({ error: "modules debe ser un arreglo" });
+  }
+  const saved = await setRoleModules(req.params.id, modules);
+  await req.audit({
+    action: "UPDATE_ROLE_MODULES",
+    entityId: req.params.id,
+    detail: saved.join(","),
+  });
+  res.json({ ok: true, modules: saved });
 }));
 
 app.get("/api/admin/tipos-cliente", requireRole(ACCESS.admin), asyncHandler(async (_req, res) => {
@@ -2765,6 +2774,7 @@ async function start() {
   await ensurePriceTypes();            // migración: elimina columna ajuste_unidades obsoleta
   await ensureDevolucionesRegistroTable(); // migración: agrega unique constraint camion+fecha
   await ensureChatTables();
+  await ensureRolePermissionsTable();
   // Middleware global de manejo de errores (captura los errores de asyncHandler)
   app.use((err, req, res, _next) => {
     console.error(`[${new Date().toISOString()}] ${req.method} ${req.path}:`, err);

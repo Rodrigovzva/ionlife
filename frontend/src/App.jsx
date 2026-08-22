@@ -15,24 +15,21 @@ import EntregasMovil from "./pages/EntregasMovil.jsx";
 import Nav from "./components/Nav.jsx";
 import ChatPanel from "./components/ChatPanel.jsx";
 
-// Debe reflejar el objeto ACCESS de backend/src/index.js: es una guarda de UI,
-// la autorización real la hace el backend en cada endpoint.
-const ACCESS = {
-  customers: ["Administrador del sistema", "Supervisor de call center", "Operador de call center", "Repartidor", "Jefe de logística"],
-  products: ["Administrador del sistema", "Supervisor de call center", "Encargado de almacén", "Repartidor"],
-  warehouses: ["Administrador del sistema", "Encargado de almacén"],
-  orders: ["Administrador del sistema", "Jefe de logística", "Supervisor de call center", "Operador de call center"],
-  logistics: ["Administrador del sistema", "Jefe de logística", "Repartidor", "Supervisor de call center"],
-  reports: ["Administrador del sistema", "Supervisor de call center", "Jefe de logística", "Repartidor"],
-  admin: ["Administrador del sistema"],
-};
+function userHasModule(user, moduleKey) {
+  if (!user) return false;
+  if (user.roles?.includes("Administrador del sistema")) return true;
+  return (user.modules || []).includes(moduleKey);
+}
 
-function PrivateRoute({ user, children, denyDriver, allow }) {
+function PrivateRoute({ user, children, allowModules, denyDriver }) {
   if (!user) return <Navigate to="/login" replace />;
-  if (denyDriver && user?.roles?.includes("Repartidor")) {
+  if (denyDriver && user?.roles?.includes("Repartidor") && !userHasModule(user, "admin")) {
     return <Navigate to="/entregas-movil" replace />;
   }
-  if (allow && !allow.some((role) => user?.roles?.includes(role))) {
+  if (
+    allowModules &&
+    !allowModules.some((moduleKey) => userHasModule(user, moduleKey))
+  ) {
     return <Navigate to="/" replace />;
   }
   return children;
@@ -93,7 +90,7 @@ export default function App() {
         <Route
           path="/clientes"
           element={
-            <PrivateRoute user={user} allow={ACCESS.customers}>
+            <PrivateRoute user={user} allowModules={["customers"]}>
               <Customers user={user} />
             </PrivateRoute>
           }
@@ -101,7 +98,7 @@ export default function App() {
         <Route
           path="/productos"
           element={
-            <PrivateRoute user={user} allow={ACCESS.products}>
+            <PrivateRoute user={user} allowModules={["products"]}>
               <Products />
             </PrivateRoute>
           }
@@ -109,7 +106,7 @@ export default function App() {
         <Route
           path="/almacenes"
           element={
-            <PrivateRoute user={user} allow={ACCESS.warehouses}>
+            <PrivateRoute user={user} allowModules={["warehouses"]}>
               <Warehouses />
             </PrivateRoute>
           }
@@ -117,10 +114,7 @@ export default function App() {
         <Route
           path="/pedidos"
           element={
-            <PrivateRoute
-              user={user}
-              allow={[...ACCESS.orders, "Repartidor"]}
-            >
+            <PrivateRoute user={user} allowModules={["orders", "deliveries"]}>
               <Orders user={user} />
             </PrivateRoute>
           }
@@ -128,7 +122,7 @@ export default function App() {
         <Route
           path="/logistica"
           element={
-            <PrivateRoute user={user} allow={ACCESS.logistics}>
+            <PrivateRoute user={user} allowModules={["logistics"]}>
               <Logistics user={user} />
             </PrivateRoute>
           }
@@ -136,7 +130,7 @@ export default function App() {
         <Route
           path="/reportes"
           element={
-            <PrivateRoute user={user} allow={ACCESS.reports}>
+            <PrivateRoute user={user} allowModules={["reports"]}>
               <Reports />
             </PrivateRoute>
           }
@@ -144,7 +138,7 @@ export default function App() {
         <Route
           path="/admin"
           element={
-            <PrivateRoute user={user} allow={ACCESS.admin}>
+            <PrivateRoute user={user} allowModules={["admin"]}>
               <Admin />
             </PrivateRoute>
           }
@@ -152,7 +146,7 @@ export default function App() {
         <Route
           path="/mis-entregas"
           element={
-            <PrivateRoute user={user} denyDriver allow={ACCESS.logistics}>
+            <PrivateRoute user={user} denyDriver allowModules={["deliveries", "logistics"]}>
               <DriverDeliveries />
             </PrivateRoute>
           }
@@ -160,7 +154,7 @@ export default function App() {
         <Route
           path="/entregas-movil"
           element={
-            <PrivateRoute user={user} allow={ACCESS.logistics}>
+            <PrivateRoute user={user} allowModules={["deliveries", "logistics"]}>
               <EntregasMovil />
             </PrivateRoute>
           }

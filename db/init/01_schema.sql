@@ -49,6 +49,13 @@ CREATE TABLE IF NOT EXISTS usuarios_roles (
   FOREIGN KEY (rol_id) REFERENCES roles(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS roles_permisos (
+  rol_id INT NOT NULL,
+  modulo VARCHAR(40) NOT NULL,
+  PRIMARY KEY (rol_id, modulo),
+  FOREIGN KEY (rol_id) REFERENCES roles(id) ON DELETE CASCADE
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS clientes (
   id INT AUTO_INCREMENT PRIMARY KEY,
   nombre_completo VARCHAR(180) NOT NULL,
