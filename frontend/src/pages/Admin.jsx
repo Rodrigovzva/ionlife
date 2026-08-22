@@ -1,5 +1,21 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import api from "../api";
+
+const ROLE_HINTS = {
+  "Administrador del sistema": "Acceso total: usuarios, roles, configuración y todos los módulos.",
+  "Supervisor de call center": "Pedidos, clientes, reportes y supervisión de call center.",
+  "Operador de call center": "Crear y gestionar pedidos y clientes.",
+  "Encargado de almacén": "Productos, almacenes e inventario.",
+  "Jefe de logística": "Logística, camiones, entregas y reportes.",
+  "Repartidor": "Entregas móviles, logística asignada y ajuste de pedidos en ruta.",
+};
+
+function sameRoleIds(a = [], b = []) {
+  const left = [...a].map(Number).sort((x, y) => x - y);
+  const right = [...b].map(Number).sort((x, y) => x - y);
+  if (left.length !== right.length) return false;
+  return left.every((id, i) => id === right[i]);
+}
 
 export default function Admin() {
   const [users, setUsers] = useState([]);
@@ -51,7 +67,13 @@ export default function Admin() {
   const [roleAssign, setRoleAssign] = useState({
     user_id: "",
     role_ids: [],
+    original_role_ids: [],
   });
+  const [roleAssignError, setRoleAssignError] = useState("");
+  const [roleAssignSuccess, setRoleAssignSuccess] = useState("");
+  const [roleAssignLoading, setRoleAssignLoading] = useState(false);
+  const [roleUserQuery, setRoleUserQuery] = useState("");
+  const [roleShowInactive, setRoleShowInactive] = useState(false);
   const [roleForm, setRoleForm] = useState({ name: "" });
   const [roleError, setRoleError] = useState("");
   const [roleSuccess, setRoleSuccess] = useState("");
@@ -77,6 +99,17 @@ export default function Admin() {
     setPreciosProducto(pp.data || []);
     setTrucks(tr.data || []);
     setDrivers(dr.data || []);
+    setRoleAssign((prev) => {
+      if (!prev.user_id) return prev;
+      const fresh = (u.data || []).find((user) => String(user.id) === String(prev.user_id));
+      if (!fresh) return prev;
+      const ids = (fresh.role_ids || []).map(Number);
+      return {
+        ...prev,
+        role_ids: ids,
+        original_role_ids: ids,
+      };
+    });
   }
 
   useEffect(() => {
@@ -167,16 +200,67 @@ export default function Admin() {
 
   async function handleAssignRoles(e) {
     e.preventDefault();
-    if (!roleAssign.user_id) return;
-    await api.put(`/api/admin/users/${roleAssign.user_id}/roles`, {
-      role_ids: roleAssign.role_ids.map(Number),
+    setRoleAssignError("");
+    setRoleAssignSuccess("");
+    if (!roleAssign.user_id) {
+      setRoleAssignError("Seleccione un usuario.");
+      return;
+    }
+    setRoleAssignLoading(true);
+    try {
+      await api.put(`/api/admin/users/${roleAssign.user_id}/roles`, {
+        role_ids: roleAssign.role_ids.map(Number),
+      });
+      const selected = users.find((u) => String(u.id) === String(roleAssign.user_id));
+      setRoleAssignSuccess(
+        `Roles actualizados para ${selected?.name || "el usuario"}.`
+      );
+      await load();
+    } catch (err) {
+      setRoleAssignError(
+        err?.response?.data?.error || "No se pudieron actualizar los roles."
+      );
+    } finally {
+      setRoleAssignLoading(false);
+    }
+  }
+
+  function selectUserForRoles(userId) {
+    const user = users.find((u) => String(u.id) === String(userId));
+    const ids = user?.role_ids ? user.role_ids.map(Number) : [];
+    setRoleAssignError("");
+    setRoleAssignSuccess("");
+    setRoleAssign({
+      user_id: userId ? String(userId) : "",
+      role_ids: ids,
+      original_role_ids: ids,
     });
-    load();
+  }
+
+  function resetRoleSelection() {
+    setRoleAssign((prev) => ({
+      ...prev,
+      role_ids: [...prev.original_role_ids],
+    }));
+    setRoleAssignError("");
+    setRoleAssignSuccess("");
+  }
+
+  function clearAllRoles() {
+    setRoleAssign((prev) => ({ ...prev, role_ids: [] }));
+  }
+
+  function selectAllRoles() {
+    setRoleAssign((prev) => ({
+      ...prev,
+      role_ids: roles.map((r) => Number(r.id)),
+    }));
   }
 
   async function handleCreateRole(e) {
     e.preventDefault();
     setRoleError("");
+    setRoleSuccess("");
     if (!roleForm.name.trim()) {
       setRoleError("Nombre requerido.");
       return;
@@ -184,6 +268,7 @@ export default function Admin() {
     try {
       await api.post("/api/admin/roles", { name: roleForm.name.trim() });
       setRoleForm({ name: "" });
+      setRoleSuccess("Rol creado correctamente.");
       load();
     } catch (err) {
       setRoleError(err?.response?.data?.error || "No se pudo crear el rol.");
@@ -328,16 +413,42 @@ export default function Admin() {
   }
 
   function toggleRole(roleId) {
+    const id = Number(roleId);
     setRoleAssign((prev) => {
-      const exists = prev.role_ids.includes(roleId);
+      const exists = prev.role_ids.map(Number).includes(id);
       return {
         ...prev,
         role_ids: exists
-          ? prev.role_ids.filter((id) => id !== roleId)
-          : [...prev.role_ids, roleId],
+          ? prev.role_ids.map(Number).filter((rid) => rid !== id)
+          : [...prev.role_ids.map(Number), id],
       };
     });
+    setRoleAssignSuccess("");
   }
+
+  const selectedRoleUser = useMemo(
+    () => users.find((u) => String(u.id) === String(roleAssign.user_id)) || null,
+    [users, roleAssign.user_id]
+  );
+
+  const roleUsersFiltered = useMemo(() => {
+    const q = roleUserQuery.trim().toLowerCase();
+    return users.filter((u) => {
+      if (!roleShowInactive && !u.is_active) return false;
+      if (!q) return true;
+      const haystack = `${u.name || ""} ${u.email || ""} ${u.roles || ""}`.toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [users, roleUserQuery, roleShowInactive]);
+
+  const roleAssignDirty = !sameRoleIds(
+    roleAssign.role_ids,
+    roleAssign.original_role_ids
+  );
+
+  const selectedRoleNames = roles
+    .filter((r) => roleAssign.role_ids.map(Number).includes(Number(r.id)))
+    .map((r) => r.name);
 
   return (
     <div className="container page">
@@ -378,44 +489,144 @@ export default function Admin() {
             <button className="btn" type="submit">Crear usuario</button>
           </form>
         </div>
-        <div className="card">
+        <div className="card" id="asignar-roles">
           <h4>Asignar roles</h4>
+          <p className="admin-roles-help">
+            Busque un usuario, revise sus roles actuales y guarde solo cuando termine de marcar.
+          </p>
+          <div className="form-row admin-roles-filters">
+            <input
+              type="search"
+              placeholder="Buscar por nombre, usuario o rol..."
+              value={roleUserQuery}
+              onChange={(e) => setRoleUserQuery(e.target.value)}
+            />
+            <label className="admin-roles-check">
+              <input
+                type="checkbox"
+                checked={roleShowInactive}
+                onChange={(e) => setRoleShowInactive(e.target.checked)}
+              />
+              Mostrar inactivos
+            </label>
+          </div>
           <form onSubmit={handleAssignRoles} className="form">
             <select
               value={roleAssign.user_id}
-              onChange={(e) =>
-                setRoleAssign({ ...roleAssign, user_id: e.target.value })
-              }
+              onChange={(e) => selectUserForRoles(e.target.value)}
             >
               <option value="">Seleccione un usuario</option>
-              {users.map((u) => (
+              {roleUsersFiltered.map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.name} ({u.email})
+                  {!u.is_active ? " [Inactivo]" : ""}
+                  {u.roles ? ` — ${u.roles}` : " — sin roles"}
                 </option>
               ))}
             </select>
-            <div className="grid">
-              {roles.map((r) => (
-                <label key={r.id} style={{ display: "flex", gap: 8 }}>
-                  <input
-                    type="checkbox"
-                    checked={roleAssign.role_ids.includes(r.id)}
-                    onChange={() => toggleRole(r.id)}
-                  />
-                  {r.name}
-                </label>
-              ))}
+            {roleUsersFiltered.length === 0 && (
+              <div className="admin-roles-empty">No hay usuarios con ese filtro.</div>
+            )}
+
+            {selectedRoleUser && (
+              <div className="admin-roles-summary">
+                <div>
+                  <strong>{selectedRoleUser.name}</strong>
+                  <div className="admin-roles-meta">{selectedRoleUser.email}</div>
+                </div>
+                <div className="admin-roles-meta">
+                  Actuales: {selectedRoleUser.roles || "ninguno"}
+                </div>
+                <div className="admin-roles-meta">
+                  Selección: {selectedRoleNames.length ? selectedRoleNames.join(", ") : "ninguno"}
+                  {roleAssignDirty ? " (cambios sin guardar)" : ""}
+                </div>
+              </div>
+            )}
+
+            <div className="admin-roles-toolbar">
+              <button
+                className="btn btn-outline btn-sm"
+                type="button"
+                disabled={!roleAssign.user_id}
+                onClick={selectAllRoles}
+              >
+                Marcar todos
+              </button>
+              <button
+                className="btn btn-outline btn-sm"
+                type="button"
+                disabled={!roleAssign.user_id}
+                onClick={clearAllRoles}
+              >
+                Quitar todos
+              </button>
+              <button
+                className="btn btn-outline btn-sm"
+                type="button"
+                disabled={!roleAssign.user_id || !roleAssignDirty}
+                onClick={resetRoleSelection}
+              >
+                Deshacer cambios
+              </button>
             </div>
-            <button className="btn" type="submit">Actualizar roles</button>
+
+            <div className="admin-roles-list">
+              {roles.map((r) => {
+                const checked = roleAssign.role_ids
+                  .map(Number)
+                  .includes(Number(r.id));
+                return (
+                  <label
+                    key={r.id}
+                    className={`admin-role-item ${checked ? "is-checked" : ""} ${
+                      !roleAssign.user_id ? "is-disabled" : ""
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleRole(r.id)}
+                      disabled={!roleAssign.user_id}
+                    />
+                    <span className="admin-role-item__body">
+                      <span className="admin-role-item__name">{r.name}</span>
+                      <span className="admin-role-item__hint">
+                        {ROLE_HINTS[r.name] || "Rol personalizado del sistema."}
+                      </span>
+                    </span>
+                    <span className="tag admin-role-item__count">
+                      {Number(r.users_count || 0)} usuario
+                      {Number(r.users_count || 0) === 1 ? "" : "s"}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+
+            {roleAssignError && <div className="error">{roleAssignError}</div>}
+            {roleAssignSuccess && <div className="tag">{roleAssignSuccess}</div>}
+            <div className="admin-roles-actions">
+              <button
+                className="btn"
+                type="submit"
+                disabled={!roleAssign.user_id || !roleAssignDirty || roleAssignLoading}
+              >
+                {roleAssignLoading ? "Guardando..." : "Guardar roles"}
+              </button>
+              {roleAssignDirty && (
+                <span className="admin-roles-dirty">Hay cambios pendientes</span>
+              )}
+            </div>
           </form>
         </div>
       </div>
       <div className="card" style={{ marginTop: 16 }}>
-        <h4>Crear rol</h4>
+        <h4>Roles del sistema</h4>
         <form onSubmit={handleCreateRole} className="form">
           <div className="form-row">
             <input
-              placeholder="Nombre del rol"
+              placeholder="Nombre del nuevo rol"
               value={roleForm.name}
               onChange={(e) => setRoleForm({ name: e.target.value })}
             />
@@ -429,6 +640,7 @@ export default function Admin() {
             <tr>
               <th>ID</th>
               <th>Nombre</th>
+              <th>Usuarios</th>
               <th>Acciones</th>
             </tr>
           </thead>
@@ -446,6 +658,7 @@ export default function Admin() {
                     r.name
                   )}
                 </td>
+                <td>{Number(r.users_count || 0)}</td>
                 <td>
                   {editRoleId === r.id ? (
                     <div style={{ display: "flex", gap: 8 }}>
@@ -476,6 +689,11 @@ export default function Admin() {
                 </td>
               </tr>
             ))}
+            {roles.length === 0 && (
+              <tr>
+                <td colSpan={4}>No hay roles registrados.</td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -649,13 +867,27 @@ export default function Admin() {
                       </div>
                     </div>
                   ) : (
-                    <button
-                      className="btn btn-outline btn-sm"
-                      type="button"
-                      onClick={() => startEditUser(u)}
-                    >
-                      Editar
-                    </button>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <button
+                        className="btn btn-outline btn-sm"
+                        type="button"
+                        onClick={() => startEditUser(u)}
+                      >
+                        Editar
+                      </button>
+                      <button
+                        className="btn btn-outline btn-sm"
+                        type="button"
+                        onClick={() => {
+                          selectUserForRoles(u.id);
+                          document
+                            .getElementById("asignar-roles")
+                            ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                        }}
+                      >
+                        Roles
+                      </button>
+                    </div>
                   )}
                 </td>
               </tr>

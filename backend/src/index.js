@@ -2492,7 +2492,14 @@ app.get("/api/reports/performance", requireRole(ACCESS.reports), asyncHandler(as
 }));
 
 app.get("/api/admin/roles", requireRole(ACCESS.admin), asyncHandler(async (_req, res) => {
-  const roles = await query("SELECT id, nombre as name FROM roles ORDER BY nombre");
+  const roles = await query(
+    `SELECT r.id, r.nombre as name,
+            COUNT(ur.usuario_id) as users_count
+     FROM roles r
+     LEFT JOIN usuarios_roles ur ON ur.rol_id = r.id
+     GROUP BY r.id, r.nombre
+     ORDER BY r.nombre`
+  );
   res.json(roles);
 }));
 
@@ -2663,9 +2670,27 @@ app.put("/api/admin/precios-producto/:id", requireRole(ACCESS.admin), asyncHandl
 
 app.get("/api/admin/users", requireRole(ACCESS.admin), asyncHandler(async (_req, res) => {
   const rows = await query(
-    "SELECT u.id, u.nombre as name, u.usuario as email, u.activo as is_active, u.fecha_creacion as created_at, GROUP_CONCAT(r.nombre ORDER BY r.nombre SEPARATOR ', ') as roles FROM usuarios u LEFT JOIN usuarios_roles ur ON ur.usuario_id = u.id LEFT JOIN roles r ON r.id = ur.rol_id GROUP BY u.id ORDER BY u.id DESC"
+    `SELECT u.id, u.nombre as name, u.usuario as email, u.activo as is_active,
+            u.fecha_creacion as created_at,
+            GROUP_CONCAT(r.nombre ORDER BY r.nombre SEPARATOR ', ') as roles,
+            GROUP_CONCAT(r.id ORDER BY r.nombre) as role_ids
+     FROM usuarios u
+     LEFT JOIN usuarios_roles ur ON ur.usuario_id = u.id
+     LEFT JOIN roles r ON r.id = ur.rol_id
+     GROUP BY u.id
+     ORDER BY u.id DESC`
   );
-  res.json(rows);
+  res.json(
+    rows.map((row) => ({
+      ...row,
+      role_ids: row.role_ids
+        ? String(row.role_ids)
+            .split(",")
+            .map((id) => Number(id))
+            .filter((id) => Number.isFinite(id))
+        : [],
+    }))
+  );
 }));
 
 app.post("/api/admin/users", requireRole(ACCESS.admin), asyncHandler(async (req, res) => {
