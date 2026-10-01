@@ -1293,7 +1293,7 @@ app.post("/api/orders", requireRole(ACCESS.orders), asyncHandler(async (req, res
   const productIds = Array.from(requiredByProduct.keys());
   const placeholders = productIds.map(() => "?").join(", ");
   const stockRows = await query(
-    `SELECT p.id, p.nombre as name, COALESCE(SUM(i.cantidad), 0) as stock
+    `SELECT p.id, p.nombre as name, p.precio as price, COALESCE(SUM(i.cantidad), 0) as stock
      FROM productos p
      LEFT JOIN inventario i ON i.producto_id = p.id
      WHERE p.id IN (${placeholders})
@@ -1348,7 +1348,7 @@ app.post("/api/orders", requireRole(ACCESS.orders), asyncHandler(async (req, res
   for (const item of items) {
     const productId = Number(item.product_id);
     const priceTypeId = item.price_type_id ? Number(item.price_type_id) : null;
-    let basePrice = Number(item.price || 0);
+    let basePrice = Number(stockMap.get(productId)?.price || 0);
     if (priceTypeId) {
       const key = `${productId}:${priceTypeId}`;
       if (!priceTypeMap.has(key)) {
@@ -1358,7 +1358,7 @@ app.post("/api/orders", requireRole(ACCESS.orders), asyncHandler(async (req, res
       }
       basePrice = priceTypeMap.get(key);
     }
-    if (!priceTypeId && (!item.price || Number(item.price) <= 0)) {
+    if (!(basePrice > 0)) {
       return res.status(400).json({ error: "Precio inválido en productos" });
     }
     const discountUnit = Number(item.discount_unit || 0);

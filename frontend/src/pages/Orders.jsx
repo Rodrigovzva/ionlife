@@ -122,7 +122,30 @@ export default function Orders({ user }) {
 
   useEffect(() => {
     load();
+    function handleVisibility() {
+      if (document.visibilityState === "visible") load();
+    }
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, []);
+
+  useEffect(() => {
+    if (editId) return;
+    setItems((prev) =>
+      prev.map((item) => {
+        if (!item.product_id) return item;
+        const fixedPrice = item.price_type_id
+          ? getFixedPrice(item.product_id, item.price_type_id)
+          : null;
+        const product = products.find(
+          (p) => String(p.id) === String(item.product_id)
+        );
+        const nextPrice =
+          fixedPrice !== null ? fixedPrice : product ? Number(product.price) : item.price;
+        return nextPrice === item.price ? item : { ...item, price: nextPrice };
+      })
+    );
+  }, [products, preciosProducto]);
 
   function resetForm() {
     setForm({
@@ -593,7 +616,10 @@ export default function Orders({ user }) {
         (order.items || []).map((item) => ({
           product_id: String(item.producto_id || ""),
           quantity: Number(item.cantidad || 0),
-          price: Number(item.precio || 0),
+          price: item.tipo_precio_id
+            ? getFixedPrice(item.producto_id, item.tipo_precio_id) ??
+              Number(item.precio || 0)
+            : Number(item.precio || 0),
           discount_unit: 0,
           price_type_id: item.tipo_precio_id ? String(item.tipo_precio_id) : "",
           price_type_name: item.tipo_precio_id
