@@ -658,7 +658,7 @@ app.get("/api/customers", requireRole(() => ACCESS.customers), asyncHandler(asyn
   res.json({ rows, total: Number(total), limit: safeLimit, offset: safeOffset });
 }));
 
-app.get("/api/customers/search", requireRole(() => [...ACCESS.customers, ...ACCESS.orders]), asyncHandler(async (req, res) => {
+app.get("/api/customers/search", requireRole(() => [...ACCESS.customers, ...ACCESS.orders, ...ACCESS.warehouses]), asyncHandler(async (req, res) => {
   const { nombre, telefono, direccion, zona } = req.query || {};
   const conditions = [];
   const params = [];
@@ -1129,9 +1129,8 @@ app.get("/api/orders/:id", requireAuth, asyncHandler(async (req, res) => {
 
 // Valida los ítems de un pedido y calcula los precios en el servidor: el precio base sale
 // del catálogo (o del tipo de precio elegido) y el descuento por unidad no puede ser
-// negativo ni superar ese precio. Con `previousItems` (ajuste en ruta del repartidor),
-// el descuento de cada producto no puede superar el que ya tenía el pedido.
-async function buildOrderItems(items, { previousItems = null } = {}) {
+// negativo ni superar ese precio.
+async function buildOrderItems(items) {
   if (!Array.isArray(items) || items.length === 0) {
     throw httpError(400, "Datos incompletos");
   }
@@ -1146,9 +1145,7 @@ async function buildOrderItems(items, { previousItems = null } = {}) {
     const productId = Number(item.product_id);
     requiredByProduct.set(productId, (requiredByProduct.get(productId) || 0) + Number(item.quantity));
   }
-  const productIds = Array.from(
-    new Set([...requiredByProduct.keys(), ...(previousItems || []).map((i) => Number(i.producto_id))])
-  );
+  const productIds = Array.from(requiredByProduct.keys());
   const placeholders = productIds.map(() => "?").join(", ");
   const productRows = await query(
     `SELECT p.id, p.nombre as name, p.precio as price, COALESCE(SUM(i.cantidad), 0) as stock
@@ -1187,17 +1184,6 @@ async function buildOrderItems(items, { previousItems = null } = {}) {
       ? typedPriceMap.get(`${productId}:${priceTypeId}`)
       : Number(productMap.get(productId)?.price || 0);
 
-  let maxDiscountByProduct = null;
-  if (previousItems) {
-    maxDiscountByProduct = new Map();
-    for (const prev of previousItems) {
-      const productId = Number(prev.producto_id);
-      const base = basePriceFor(productId, prev.tipo_precio_id ? Number(prev.tipo_precio_id) : null);
-      const prevDiscount = base ? Math.max(0, base - Number(prev.precio || 0)) : 0;
-      maxDiscountByProduct.set(productId, Math.max(maxDiscountByProduct.get(productId) || 0, prevDiscount));
-    }
-  }
-
   const normalizedItems = [];
   for (const item of items) {
     const productId = Number(item.product_id);
@@ -1212,9 +1198,6 @@ async function buildOrderItems(items, { previousItems = null } = {}) {
     const discountUnit = Number(item.discount_unit || 0);
     if (!Number.isFinite(discountUnit) || discountUnit < 0 || discountUnit > basePrice) {
       throw httpError(400, "Descuento inválido en productos");
-    }
-    if (maxDiscountByProduct && discountUnit > (maxDiscountByProduct.get(productId) || 0) + 0.001) {
-      throw httpError(403, "No puede aumentar el descuento del pedido en ruta");
     }
     normalizedItems.push({
       product_id: productId,
@@ -1288,10 +1271,7 @@ app.put("/api/orders/:id", requireAuth, asyncHandler(async (req, res) => {
     targetCustomerId,
     targetCustomerId === order.cliente_id ? order.direccion_id : null
   );
-  const previousItems = isDriver && !isAdmin && !canOrders
-    ? await query("SELECT producto_id, precio, tipo_precio_id FROM items_pedido WHERE pedido_id = ?", [req.params.id])
-    : null;
-  const normalizedItems = await buildOrderItems(items, { previousItems });
+  const normalizedItems = await buildOrderItems(items);
   const newDateOnly = toDateOnly(scheduled_date) || null;
   const oldDateStr = order.fecha_programada
     ? String(order.fecha_programada).slice(0, 10)
