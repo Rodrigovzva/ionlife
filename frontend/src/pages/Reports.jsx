@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import api from "../api";
 import { getTodayLaPaz } from "../utils/dateUtils";
+import { escapeHtml } from "../utils/escapeHtml";
 
 function statusClass(status) {
   if (!status) return "tag";
@@ -160,9 +161,9 @@ export default function Reports() {
     const summaryRowsHtml = sortedSummaryRows
       .map(
         (s, idx) =>
-          `<tr><td>${idx + 1}</td><td>${s.customer_name}</td><td>${s.address || "-"}</td><td>${s.status}</td><td>${
+          `<tr><td>${idx + 1}</td><td>${escapeHtml(s.customer_name)}</td><td>${escapeHtml(s.address || "-")}</td><td>${escapeHtml(s.status)}</td><td>${
             s.created_at ? new Date(s.created_at).toLocaleString() : "-"
-          }</td><td>${fmtScheduled(s.scheduled_date)}</td><td>${s.truck_plate || "-"}</td><td>${s.driver_name || "-"}</td><td>${s.zone || "-"}</td>${productCells(s)
+          }</td><td>${fmtScheduled(s.scheduled_date)}</td><td>${escapeHtml(s.truck_plate || "-")}</td><td>${escapeHtml(s.driver_name || "-")}</td><td>${escapeHtml(s.zone || "-")}</td>${productCells(s)
             .map((cell) => `<td>${cell}</td>`)
             .join("")}<td>Bs. ${Number(s.total || 0).toFixed(2)}</td></tr>`
       )
@@ -186,7 +187,7 @@ export default function Reports() {
         <body>
           <h2>Resumen de estados de pedidos</h2>
           <div class="meta">Fecha impresión: ${now}</div>
-          <div class="meta">${summaryFilterText}</div>
+          <div class="meta">${escapeHtml(summaryFilterText)}</div>
           <table>
             <thead>
               <tr><th>Nº</th><th>Nombre</th><th>Dirección</th><th>Estado</th><th>Fecha</th><th>Fecha programada</th><th>Camión</th><th>Repartidor</th><th>Zona</th>${PRODUCT_HEADERS.map((h) => `<th>${h}</th>`).join("")}<th>Total</th></tr>

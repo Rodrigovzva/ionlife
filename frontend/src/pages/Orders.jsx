@@ -622,19 +622,27 @@ export default function Orders({ user }) {
         notes: order.notes || "",
       });
       setItems(
-        (order.items || []).map((item) => ({
-          product_id: String(item.producto_id || ""),
-          quantity: Number(item.cantidad || 0),
-          price: item.tipo_precio_id
-            ? getFixedPrice(item.producto_id, item.tipo_precio_id) ??
-              Number(item.precio || 0)
-            : Number(item.precio || 0),
-          discount_unit: 0,
-          price_type_id: item.tipo_precio_id ? String(item.tipo_precio_id) : "",
-          price_type_name: item.tipo_precio_id
-            ? getPriceTypeName(item.tipo_precio_id)
-            : "",
-        }))
+        (order.items || []).map((item) => {
+          // El backend calcula precio = base de catálogo − descuento; se recupera el
+          // descuento que ya tenía el ítem para que editar no cambie el precio acordado.
+          const storedPrice = Number(item.precio || 0);
+          const product = products.find((p) => String(p.id) === String(item.producto_id));
+          const basePrice = item.tipo_precio_id
+            ? getFixedPrice(item.producto_id, item.tipo_precio_id) ?? storedPrice
+            : product
+              ? Number(product.price)
+              : storedPrice;
+          return {
+            product_id: String(item.producto_id || ""),
+            quantity: Number(item.cantidad || 0),
+            price: basePrice,
+            discount_unit: Math.max(0, Number((basePrice - storedPrice).toFixed(2))),
+            price_type_id: item.tipo_precio_id ? String(item.tipo_precio_id) : "",
+            price_type_name: item.tipo_precio_id
+              ? getPriceTypeName(item.tipo_precio_id)
+              : "",
+          };
+        })
       );
       setAddressHint(
         addressMatch?.direccion

@@ -6,7 +6,7 @@ const morgan = require("morgan");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const { query, pool, withTransaction } = require("./db");
-const { requireAuth, requireRole } = require("./auth");
+const { requireAuth, requireRole, invalidateUserState } = require("./auth");
 const { auditMiddleware } = require("./audit");
 const {
   ensureChatTables,
@@ -138,17 +138,6 @@ async function getAllowedTruckIdsForDriver(req) {
     );
     truckIds = rows.map((r) => r.camion_id).filter(Boolean);
   }
-  if (truckIds.length === 0 && driverName && driverName.length > 1) {
-    const suffix = driverName.substring(1).toLowerCase();
-    const rows = await query(
-      `SELECT DISTINCT e.camion_id FROM entregas e
-       JOIN repartidores r ON r.id = e.repartidor_id
-       WHERE LOWER(r.nombre) LIKE ?
-       ORDER BY e.camion_id`,
-      [`%${suffix}%`]
-    );
-    truckIds = rows.map((r) => r.camion_id).filter(Boolean);
-  }
   return truckIds;
 }
 
@@ -172,53 +161,118 @@ function getTodayLaPaz() {
   return `${get("year")}-${get("month")}-${get("day")}`;
 }
 
-class InsufficientStockError extends Error {}
+function httpError(status, message) {
+  const err = new Error(message);
+  err.status = status;
+  return err;
+}
 
-// Descuenta del inventario los ítems de un pedido al confirmarse la entrega.
-// Idempotente: si ya existe un movimiento SALIDA para el pedido, no vuelve a descontar.
-// Corre en una transacción con locks (FOR UPDATE) sobre el pedido y las filas de inventario
-// afectadas para que dos confirmaciones concurrentes del mismo pedido, o dos pedidos que
-// compiten por el mismo producto, no descuenten stock dos veces ni dejen cantidad negativa.
-async function deductInventoryOnDelivery(pedidoId, userId) {
-  try {
-    await withTransaction(async (exec) => {
-      await exec("SELECT id FROM pedidos WHERE id = ? FOR UPDATE", [pedidoId]);
-      const existing = await exec(
-        "SELECT id FROM movimientos_inventario WHERE pedido_id = ? AND tipo = 'SALIDA' LIMIT 1",
-        [pedidoId]
-      );
-      if (existing.length > 0) {
-        return;
-      }
-      const items = await exec(
-        "SELECT producto_id, cantidad FROM items_pedido WHERE pedido_id = ?",
-        [pedidoId]
-      );
-      for (const item of items) {
-        const [inv] = await exec(
-          "SELECT almacen_id, cantidad FROM inventario WHERE producto_id = ? ORDER BY cantidad DESC LIMIT 1 FOR UPDATE",
-          [item.producto_id]
-        );
-        if (!inv || inv.cantidad < item.cantidad) {
-          throw new InsufficientStockError("Sin existencias suficientes en almacenes.");
-        }
-        await exec(
-          "INSERT INTO movimientos_inventario (almacen_id, producto_id, cantidad, tipo, pedido_id, nota, creado_por_usuario_id, actualizado_por_usuario_id) VALUES (?, ?, ?, 'SALIDA', ?, ?, ?, ?)",
-          [inv.almacen_id, item.producto_id, -item.cantidad, pedidoId, "Entrega confirmada", userId, userId]
-        );
-        await exec(
-          "UPDATE inventario SET cantidad = cantidad - ?, actualizado_por_usuario_id = ? WHERE almacen_id = ? AND producto_id = ?",
-          [item.cantidad, userId, inv.almacen_id, item.producto_id]
-        );
-      }
-    });
-    return { ok: true };
-  } catch (err) {
-    if (err instanceof InsufficientStockError) {
-      return { ok: false, error: err.message };
-    }
-    throw err;
+const ORDER_STATUSES = ["Creado", "Pendiente", "Despachado", "Entregado", "Cancelado", "Reprogramado"];
+
+// Movimientos que forman el neto descontado de un pedido: SALIDA (negativa) al entregar,
+// REVERSA_SALIDA / DEVOLUCION (positivas) al revertir. Neto < 0 => el pedido tiene stock descontado.
+const ORDER_STOCK_MOVEMENT_TYPES = "('SALIDA','REVERSA_SALIDA','DEVOLUCION')";
+
+// Descuenta del inventario los ítems de un pedido. Debe correr dentro de withTransaction.
+// Idempotente: si el pedido ya tiene stock descontado no vuelve a descontar. Usa locks
+// (FOR UPDATE) sobre el pedido y las filas de inventario para evitar dobles descuentos
+// o cantidades negativas con confirmaciones concurrentes.
+async function deductInventoryTx(exec, pedidoId, userId) {
+  await exec("SELECT id FROM pedidos WHERE id = ? FOR UPDATE", [pedidoId]);
+  const [net] = await exec(
+    `SELECT COALESCE(SUM(cantidad), 0) as total FROM movimientos_inventario
+     WHERE pedido_id = ? AND tipo IN ${ORDER_STOCK_MOVEMENT_TYPES}`,
+    [pedidoId]
+  );
+  if (Number(net.total) < 0) {
+    return;
   }
+  const items = await exec(
+    "SELECT producto_id, cantidad FROM items_pedido WHERE pedido_id = ?",
+    [pedidoId]
+  );
+  for (const item of items) {
+    const [inv] = await exec(
+      "SELECT almacen_id, cantidad FROM inventario WHERE producto_id = ? ORDER BY cantidad DESC LIMIT 1 FOR UPDATE",
+      [item.producto_id]
+    );
+    if (!inv || inv.cantidad < item.cantidad) {
+      throw httpError(400, "Sin existencias suficientes en almacenes.");
+    }
+    await exec(
+      "INSERT INTO movimientos_inventario (almacen_id, producto_id, cantidad, tipo, pedido_id, nota, creado_por_usuario_id, actualizado_por_usuario_id) VALUES (?, ?, ?, 'SALIDA', ?, ?, ?, ?)",
+      [inv.almacen_id, item.producto_id, -item.cantidad, pedidoId, "Entrega confirmada", userId, userId]
+    );
+    await exec(
+      "UPDATE inventario SET cantidad = cantidad - ?, actualizado_por_usuario_id = ? WHERE almacen_id = ? AND producto_id = ?",
+      [item.cantidad, userId, inv.almacen_id, item.producto_id]
+    );
+  }
+}
+
+// Repone en inventario lo descontado por un pedido (p. ej. al deshacer una venta o
+// cancelar un pedido entregado). Debe correr dentro de withTransaction. Idempotente.
+async function restoreInventoryTx(exec, pedidoId, userId) {
+  await exec("SELECT id FROM pedidos WHERE id = ? FOR UPDATE", [pedidoId]);
+  const rows = await exec(
+    `SELECT almacen_id, producto_id, SUM(cantidad) as neto FROM movimientos_inventario
+     WHERE pedido_id = ? AND tipo IN ${ORDER_STOCK_MOVEMENT_TYPES}
+     GROUP BY almacen_id, producto_id
+     HAVING SUM(cantidad) < 0`,
+    [pedidoId]
+  );
+  for (const row of rows) {
+    const qty = -Number(row.neto);
+    await exec(
+      "INSERT INTO movimientos_inventario (almacen_id, producto_id, cantidad, tipo, pedido_id, nota, creado_por_usuario_id, actualizado_por_usuario_id) VALUES (?, ?, ?, 'REVERSA_SALIDA', ?, ?, ?, ?)",
+      [row.almacen_id, row.producto_id, qty, pedidoId, "Entrega revertida", userId, userId]
+    );
+    await exec(
+      `INSERT INTO inventario (almacen_id, producto_id, cantidad, stock_minimo, creado_por_usuario_id, actualizado_por_usuario_id)
+       VALUES (?, ?, ?, 0, ?, ?)
+       ON DUPLICATE KEY UPDATE
+         cantidad = cantidad + VALUES(cantidad),
+         actualizado_por_usuario_id = VALUES(actualizado_por_usuario_id)`,
+      [row.almacen_id, row.producto_id, qty, userId, userId]
+    );
+  }
+}
+
+// Cambia el estado de un pedido y de su entrega a la vez, manteniendo el inventario
+// coherente: descuenta al pasar a Entregado y repone si sale de Entregado.
+// Debe correr dentro de withTransaction; si algo falla no queda nada a medias.
+async function applyOrderStatusTx(exec, { pedidoId, status, userId, scheduledDate = null, note = null }) {
+  if (!ORDER_STATUSES.includes(status)) {
+    throw httpError(400, "Estado inválido");
+  }
+  const [order] = await exec("SELECT id FROM pedidos WHERE id = ? FOR UPDATE", [pedidoId]);
+  if (!order) {
+    throw httpError(404, "Pedido no encontrado");
+  }
+  if (status === "Entregado") {
+    await deductInventoryTx(exec, pedidoId, userId);
+  } else {
+    await restoreInventoryTx(exec, pedidoId, userId);
+  }
+  await exec(
+    "UPDATE pedidos SET estado = ?, fecha_programada = COALESCE(?, fecha_programada), actualizado_por_usuario_id = ? WHERE id = ?",
+    [status, scheduledDate, userId, pedidoId]
+  );
+  if (status === "Entregado") {
+    await exec(
+      "UPDATE entregas SET estado = 'Entregado', entregado_en = COALESCE(entregado_en, NOW()), actualizado_por_usuario_id = ? WHERE pedido_id = ?",
+      [userId, pedidoId]
+    );
+  } else {
+    await exec(
+      "UPDATE entregas SET estado = ?, entregado_en = NULL, programado_en = COALESCE(?, programado_en), actualizado_por_usuario_id = ? WHERE pedido_id = ?",
+      [status, scheduledDate ? `${scheduledDate} 12:00:00` : null, userId, pedidoId]
+    );
+  }
+  await exec(
+    "INSERT INTO historial_estado_pedido (pedido_id, estado, nota) VALUES (?, ?, ?)",
+    [pedidoId, status, note]
+  );
 }
 
 /** Subconsulta SQL: clasifica ítems de pedido por columnas de hoja de ruta/reportes. */
@@ -279,6 +333,9 @@ const ORDER_ITEMS_CLASSIFIED_SUBQUERY = `
 
 const app = express();
 app.disable('x-powered-by');
+// Detrás de nginx/Docker: tomar la IP real del cliente de X-Forwarded-For solo cuando
+// la conexión viene de un proxy local o de red privada (evita falsificar la IP).
+app.set("trust proxy", "loopback, linklocal, uniquelocal");
 app.use(cors({
   origin: ['https://ionlife.sisvel.sbs'],
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
@@ -434,17 +491,10 @@ app.post("/api/auth/login", loginRateLimit, asyncHandler(async (req, res) => {
   const modules = await getModulesForRoleNames(roleNames);
   let driver = null;
   const [driverExact] = await query(
-    "SELECT id FROM repartidores WHERE LOWER(nombre) = LOWER(?) LIMIT 1",
+    "SELECT id FROM repartidores WHERE LOWER(TRIM(nombre)) = LOWER(TRIM(?)) LIMIT 1",
     [user.name]
   );
   if (driverExact) driver = driverExact;
-  if (!driver && user.name && user.name.length > 1) {
-    const [driverLike] = await query(
-      "SELECT id FROM repartidores WHERE LOWER(nombre) LIKE CONCAT('%', LOWER(SUBSTRING(?, 2)), '%') LIMIT 1",
-      [user.name]
-    );
-    if (driverLike) driver = driverLike;
-  }
   // Login exitoso: limpiar intentos fallidos de esta IP
   loginAttempts.delete(req.ip || req.socket?.remoteAddress || "unknown");
 
@@ -608,7 +658,7 @@ app.get("/api/customers", requireRole(() => ACCESS.customers), asyncHandler(asyn
   res.json({ rows, total: Number(total), limit: safeLimit, offset: safeOffset });
 }));
 
-app.get("/api/customers/search", requireAuth, asyncHandler(async (req, res) => {
+app.get("/api/customers/search", requireRole(() => [...ACCESS.customers, ...ACCESS.orders]), asyncHandler(async (req, res) => {
   const { nombre, telefono, direccion, zona } = req.query || {};
   const conditions = [];
   const params = [];
@@ -1077,6 +1127,120 @@ app.get("/api/orders/:id", requireAuth, asyncHandler(async (req, res) => {
   res.json({ ...order, items, history });
 }));
 
+// Valida los ítems de un pedido y calcula los precios en el servidor: el precio base sale
+// del catálogo (o del tipo de precio elegido) y el descuento por unidad no puede ser
+// negativo ni superar ese precio. Con `previousItems` (ajuste en ruta del repartidor),
+// el descuento de cada producto no puede superar el que ya tenía el pedido.
+async function buildOrderItems(items, { previousItems = null } = {}) {
+  if (!Array.isArray(items) || items.length === 0) {
+    throw httpError(400, "Datos incompletos");
+  }
+  const requiredByProduct = new Map();
+  for (const item of items) {
+    if (!item.product_id || !item.quantity || Number(item.quantity) <= 0) {
+      throw httpError(400, "Cantidad inválida en productos");
+    }
+    if (item.price_type_id && Number(item.price_type_id) <= 0) {
+      throw httpError(400, "Tipo de precio inválido");
+    }
+    const productId = Number(item.product_id);
+    requiredByProduct.set(productId, (requiredByProduct.get(productId) || 0) + Number(item.quantity));
+  }
+  const productIds = Array.from(
+    new Set([...requiredByProduct.keys(), ...(previousItems || []).map((i) => Number(i.producto_id))])
+  );
+  const placeholders = productIds.map(() => "?").join(", ");
+  const productRows = await query(
+    `SELECT p.id, p.nombre as name, p.precio as price, COALESCE(SUM(i.cantidad), 0) as stock
+     FROM productos p
+     LEFT JOIN inventario i ON i.producto_id = p.id
+     WHERE p.id IN (${placeholders})
+     GROUP BY p.id`,
+    productIds
+  );
+  const productMap = new Map(productRows.map((r) => [r.id, r]));
+  const insufficient = [];
+  for (const [productId, required] of requiredByProduct.entries()) {
+    const row = productMap.get(productId);
+    const stock = row ? Number(row.stock) : 0;
+    if (stock < required) {
+      insufficient.push({ product_id: productId, name: row?.name || "Producto", stock, required });
+    }
+  }
+  if (insufficient.length > 0) {
+    const err = httpError(400, "Sin existencias suficientes en almacenes.");
+    err.details = insufficient;
+    throw err;
+  }
+  const typedPriceRows = await query(
+    `SELECT tpp.producto_id, tpp.tipo_precio_id, tpp.precio
+     FROM tipos_precio_producto tpp
+     JOIN tipos_precio tp ON tp.id = tpp.tipo_precio_id
+     WHERE tpp.activo = 1 AND tp.activo = 1 AND tpp.producto_id IN (${placeholders})`,
+    productIds
+  );
+  const typedPriceMap = new Map(
+    typedPriceRows.map((r) => [`${r.producto_id}:${r.tipo_precio_id}`, Number(r.precio)])
+  );
+  const basePriceFor = (productId, priceTypeId) =>
+    priceTypeId
+      ? typedPriceMap.get(`${productId}:${priceTypeId}`)
+      : Number(productMap.get(productId)?.price || 0);
+
+  let maxDiscountByProduct = null;
+  if (previousItems) {
+    maxDiscountByProduct = new Map();
+    for (const prev of previousItems) {
+      const productId = Number(prev.producto_id);
+      const base = basePriceFor(productId, prev.tipo_precio_id ? Number(prev.tipo_precio_id) : null);
+      const prevDiscount = base ? Math.max(0, base - Number(prev.precio || 0)) : 0;
+      maxDiscountByProduct.set(productId, Math.max(maxDiscountByProduct.get(productId) || 0, prevDiscount));
+    }
+  }
+
+  const normalizedItems = [];
+  for (const item of items) {
+    const productId = Number(item.product_id);
+    const priceTypeId = item.price_type_id ? Number(item.price_type_id) : null;
+    const basePrice = basePriceFor(productId, priceTypeId);
+    if (priceTypeId && basePrice === undefined) {
+      throw httpError(400, "Tipo de precio sin precio definido para el producto.");
+    }
+    if (!(basePrice > 0)) {
+      throw httpError(400, "Precio inválido en productos");
+    }
+    const discountUnit = Number(item.discount_unit || 0);
+    if (!Number.isFinite(discountUnit) || discountUnit < 0 || discountUnit > basePrice) {
+      throw httpError(400, "Descuento inválido en productos");
+    }
+    if (maxDiscountByProduct && discountUnit > (maxDiscountByProduct.get(productId) || 0) + 0.001) {
+      throw httpError(403, "No puede aumentar el descuento del pedido en ruta");
+    }
+    normalizedItems.push({
+      product_id: productId,
+      quantity: Number(item.quantity),
+      price: basePrice - discountUnit,
+      price_type_id: priceTypeId,
+    });
+  }
+  return normalizedItems;
+}
+
+// `currentAddressId`: al editar se acepta la dirección que el pedido ya tenía aunque
+// haya sido borrada; cualquier otra debe existir y ser del cliente.
+async function assertAddressBelongsToCustomer(addressId, customerId, currentAddressId = null) {
+  if (currentAddressId && Number(addressId) === Number(currentAddressId)) {
+    return;
+  }
+  const [address] = await query(
+    "SELECT id FROM direcciones_clientes WHERE id = ? AND cliente_id = ?",
+    [addressId, customerId]
+  );
+  if (!address) {
+    throw httpError(400, "La dirección no pertenece al cliente del pedido");
+  }
+}
+
 app.put("/api/orders/:id", requireAuth, asyncHandler(async (req, res) => {
   const roles = req.user?.roles || [];
   const isAdmin = roles.includes("Administrador del sistema");
@@ -1090,7 +1254,7 @@ app.put("/api/orders/:id", requireAuth, asyncHandler(async (req, res) => {
     return res.status(400).json({ error: "Datos incompletos" });
   }
   const [order] = await query(
-    "SELECT id, cliente_id, estado, fecha_programada FROM pedidos WHERE id = ?",
+    "SELECT id, cliente_id, direccion_id, estado, fecha_programada FROM pedidos WHERE id = ?",
     [req.params.id]
   );
   if (!order) {
@@ -1118,98 +1282,16 @@ app.put("/api/orders/:id", requireAuth, asyncHandler(async (req, res) => {
   if (order.estado === "Entregado") {
     return res.status(409).json({ error: "No se puede editar un pedido entregado" });
   }
-  const requiredByProduct = new Map();
-  for (const item of items) {
-    if (!item.product_id || !item.quantity || Number(item.quantity) <= 0) {
-      return res.status(400).json({ error: "Cantidad inválida en productos" });
-    }
-    if (item.price_type_id && Number(item.price_type_id) <= 0) {
-      return res.status(400).json({ error: "Tipo de precio inválido" });
-    }
-    const productId = Number(item.product_id);
-    const qty = Number(item.quantity);
-    requiredByProduct.set(productId, (requiredByProduct.get(productId) || 0) + qty);
-  }
-  const productIds = Array.from(requiredByProduct.keys());
-  const placeholders = productIds.map(() => "?").join(", ");
-  const stockRows = await query(
-    `SELECT p.id, p.nombre as name, COALESCE(SUM(i.cantidad), 0) as stock
-     FROM productos p
-     LEFT JOIN inventario i ON i.producto_id = p.id
-     WHERE p.id IN (${placeholders})
-     GROUP BY p.id`,
-    productIds
+  const targetCustomerId = customer_id ? Number(customer_id) : order.cliente_id;
+  await assertAddressBelongsToCustomer(
+    Number(address_id),
+    targetCustomerId,
+    targetCustomerId === order.cliente_id ? order.direccion_id : null
   );
-  const stockMap = new Map(stockRows.map((r) => [r.id, r]));
-  const insufficient = [];
-  for (const [productId, required] of requiredByProduct.entries()) {
-    const row = stockMap.get(productId);
-    const stock = row ? Number(row.stock) : 0;
-    if (stock < required) {
-      insufficient.push({
-        product_id: productId,
-        name: row?.name || "Producto",
-        stock,
-        required,
-      });
-    }
-  }
-  if (insufficient.length > 0) {
-    return res.status(400).json({
-      error: "Sin existencias suficientes en almacenes.",
-      details: insufficient,
-    });
-  }
-  const priceTypeItems = items.filter((i) => i.price_type_id);
-  let priceTypeMap = new Map();
-  if (priceTypeItems.length > 0) {
-    const priceTypeIds = Array.from(
-      new Set(priceTypeItems.map((i) => Number(i.price_type_id)))
-    );
-    const productIdsForPrice = Array.from(
-      new Set(priceTypeItems.map((i) => Number(i.product_id)))
-    );
-    const typePlaceholders = priceTypeIds.map(() => "?").join(", ");
-    const productPlaceholders = productIdsForPrice.map(() => "?").join(", ");
-    const rows = await query(
-      `SELECT tpp.producto_id, tpp.tipo_precio_id, tpp.precio
-       FROM tipos_precio_producto tpp
-       JOIN tipos_precio tp ON tp.id = tpp.tipo_precio_id
-       WHERE tpp.activo = 1 AND tp.activo = 1
-       AND tpp.tipo_precio_id IN (${typePlaceholders})
-       AND tpp.producto_id IN (${productPlaceholders})`,
-      [...priceTypeIds, ...productIdsForPrice]
-    );
-    priceTypeMap = new Map(
-      rows.map((r) => [`${r.producto_id}:${r.tipo_precio_id}`, Number(r.precio)])
-    );
-  }
-  const normalizedItems = [];
-  for (const item of items) {
-    const productId = Number(item.product_id);
-    const priceTypeId = item.price_type_id ? Number(item.price_type_id) : null;
-    let basePrice = Number(item.price || 0);
-    if (priceTypeId) {
-      const key = `${productId}:${priceTypeId}`;
-      if (!priceTypeMap.has(key)) {
-        return res.status(400).json({
-          error: "Tipo de precio sin precio definido para el producto.",
-        });
-      }
-      basePrice = priceTypeMap.get(key);
-    }
-    if (!priceTypeId && (!item.price || Number(item.price) <= 0)) {
-      return res.status(400).json({ error: "Precio inválido en productos" });
-    }
-    const discountUnit = Number(item.discount_unit || 0);
-    const finalPrice = Math.max(0, basePrice - discountUnit);
-    normalizedItems.push({
-      product_id: productId,
-      quantity: Number(item.quantity),
-      price: finalPrice,
-      price_type_id: priceTypeId,
-    });
-  }
+  const previousItems = isDriver && !isAdmin && !canOrders
+    ? await query("SELECT producto_id, precio, tipo_precio_id FROM items_pedido WHERE pedido_id = ?", [req.params.id])
+    : null;
+  const normalizedItems = await buildOrderItems(items, { previousItems });
   const newDateOnly = toDateOnly(scheduled_date) || null;
   const oldDateStr = order.fecha_programada
     ? String(order.fecha_programada).slice(0, 10)
@@ -1220,47 +1302,53 @@ app.put("/api/orders/:id", requireAuth, asyncHandler(async (req, res) => {
   if (order.estado === "Reprogramado" && newDateOnly && dateChanged) {
     nextEstado = "Pendiente";
   }
-  await query(
-    "UPDATE pedidos SET cliente_id = ?, direccion_id = ?, notas = ?, fecha_programada = ?, estado = ?, actualizado_por_usuario_id = ? WHERE id = ?",
-    [
-      customer_id ? Number(customer_id) : order.cliente_id,
-      Number(address_id),
-      notes || null,
-      newDateOnly,
-      nextEstado,
-      req.user?.id || null,
-      req.params.id,
-    ]
-  );
-  if (order.estado === "Reprogramado" && nextEstado === "Pendiente" && newDateOnly && dateChanged) {
-    await query(
-      `UPDATE entregas SET estado = 'Pendiente', programado_en = NULL, actualizado_por_usuario_id = ?
-       WHERE pedido_id = ? AND estado NOT IN ('Entregado','Cancelado')`,
-      [req.user?.id || null, req.params.id]
-    );
-    await query(
-      "INSERT INTO historial_estado_pedido (pedido_id, estado, nota) VALUES (?, 'Pendiente', ?)",
+  await withTransaction(async (exec) => {
+    const [locked] = await exec("SELECT estado FROM pedidos WHERE id = ? FOR UPDATE", [req.params.id]);
+    if (locked?.estado === "Entregado") {
+      throw httpError(409, "No se puede editar un pedido entregado");
+    }
+    await exec(
+      "UPDATE pedidos SET cliente_id = ?, direccion_id = ?, notas = ?, fecha_programada = ?, estado = ?, actualizado_por_usuario_id = ? WHERE id = ?",
       [
+        targetCustomerId,
+        Number(address_id),
+        notes || null,
+        newDateOnly,
+        nextEstado,
+        req.user?.id || null,
         req.params.id,
-        `Nueva fecha de entrega ${newDateOnly}; pedido pendiente para despacho`,
       ]
     );
-  }
-  await query("DELETE FROM items_pedido WHERE pedido_id = ?", [req.params.id]);
-  for (const item of normalizedItems) {
-    await query(
-      "INSERT INTO items_pedido (pedido_id, producto_id, cantidad, precio, tipo_precio_id, creado_por_usuario_id, actualizado_por_usuario_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
-      [
-        req.params.id,
-        item.product_id,
-        item.quantity,
-        item.price,
-        item.price_type_id || null,
-        req.user?.id || null,
-        req.user?.id || null,
-      ]
-    );
-  }
+    if (order.estado === "Reprogramado" && nextEstado === "Pendiente") {
+      await exec(
+        `UPDATE entregas SET estado = 'Pendiente', programado_en = NULL, actualizado_por_usuario_id = ?
+         WHERE pedido_id = ? AND estado NOT IN ('Entregado','Cancelado')`,
+        [req.user?.id || null, req.params.id]
+      );
+      await exec(
+        "INSERT INTO historial_estado_pedido (pedido_id, estado, nota) VALUES (?, 'Pendiente', ?)",
+        [
+          req.params.id,
+          `Nueva fecha de entrega ${newDateOnly}; pedido pendiente para despacho`,
+        ]
+      );
+    }
+    await exec("DELETE FROM items_pedido WHERE pedido_id = ?", [req.params.id]);
+    for (const item of normalizedItems) {
+      await exec(
+        "INSERT INTO items_pedido (pedido_id, producto_id, cantidad, precio, tipo_precio_id, creado_por_usuario_id, actualizado_por_usuario_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [
+          req.params.id,
+          item.product_id,
+          item.quantity,
+          item.price,
+          item.price_type_id || null,
+          req.user?.id || null,
+          req.user?.id || null,
+        ]
+      );
+    }
+  });
   await req.audit({ action: "UPDATE", entityId: req.params.id });
   res.json({ ok: true });
 }));
@@ -1278,168 +1366,69 @@ app.post("/api/orders", requireRole(() => ACCESS.orders), asyncHandler(async (re
   if (!customer_id || !address_id || !items || items.length === 0) {
     return res.status(400).json({ error: "Datos incompletos" });
   }
-  const requiredByProduct = new Map();
-  for (const item of items) {
-    if (!item.product_id || !item.quantity || Number(item.quantity) <= 0) {
-      return res.status(400).json({ error: "Cantidad inválida en productos" });
-    }
-    if (item.price_type_id && Number(item.price_type_id) <= 0) {
-      return res.status(400).json({ error: "Tipo de precio inválido" });
-    }
-    const productId = Number(item.product_id);
-    const qty = Number(item.quantity);
-    requiredByProduct.set(productId, (requiredByProduct.get(productId) || 0) + qty);
-  }
-  const productIds = Array.from(requiredByProduct.keys());
-  const placeholders = productIds.map(() => "?").join(", ");
-  const stockRows = await query(
-    `SELECT p.id, p.nombre as name, p.precio as price, COALESCE(SUM(i.cantidad), 0) as stock
-     FROM productos p
-     LEFT JOIN inventario i ON i.producto_id = p.id
-     WHERE p.id IN (${placeholders})
-     GROUP BY p.id`,
-    productIds
-  );
-  const stockMap = new Map(stockRows.map((r) => [r.id, r]));
-  const insufficient = [];
-  for (const [productId, required] of requiredByProduct.entries()) {
-    const row = stockMap.get(productId);
-    const stock = row ? Number(row.stock) : 0;
-    if (stock < required) {
-      insufficient.push({
-        product_id: productId,
-        name: row?.name || "Producto",
-        stock,
-        required,
-      });
-    }
-  }
-  if (insufficient.length > 0) {
-    return res.status(400).json({
-      error: "Sin existencias suficientes en almacenes.",
-      details: insufficient,
-    });
-  }
-  const priceTypeItems = items.filter((i) => i.price_type_id);
-  let priceTypeMap = new Map();
-  if (priceTypeItems.length > 0) {
-    const priceTypeIds = Array.from(
-      new Set(priceTypeItems.map((i) => Number(i.price_type_id)))
-    );
-    const productIdsForPrice = Array.from(
-      new Set(priceTypeItems.map((i) => Number(i.product_id)))
-    );
-    const typePlaceholders = priceTypeIds.map(() => "?").join(", ");
-    const productPlaceholders = productIdsForPrice.map(() => "?").join(", ");
-    const rows = await query(
-      `SELECT tpp.producto_id, tpp.tipo_precio_id, tpp.precio
-       FROM tipos_precio_producto tpp
-       JOIN tipos_precio tp ON tp.id = tpp.tipo_precio_id
-       WHERE tpp.activo = 1 AND tp.activo = 1
-       AND tpp.tipo_precio_id IN (${typePlaceholders})
-       AND tpp.producto_id IN (${productPlaceholders})`,
-      [...priceTypeIds, ...productIdsForPrice]
-    );
-    priceTypeMap = new Map(
-      rows.map((r) => [`${r.producto_id}:${r.tipo_precio_id}`, Number(r.precio)])
-    );
-  }
-  const normalizedItems = [];
-  for (const item of items) {
-    const productId = Number(item.product_id);
-    const priceTypeId = item.price_type_id ? Number(item.price_type_id) : null;
-    let basePrice = Number(stockMap.get(productId)?.price || 0);
-    if (priceTypeId) {
-      const key = `${productId}:${priceTypeId}`;
-      if (!priceTypeMap.has(key)) {
-        return res.status(400).json({
-          error: "Tipo de precio sin precio definido para el producto.",
-        });
-      }
-      basePrice = priceTypeMap.get(key);
-    }
-    if (!(basePrice > 0)) {
-      return res.status(400).json({ error: "Precio inválido en productos" });
-    }
-    const discountUnit = Number(item.discount_unit || 0);
-    const finalPrice = Math.max(0, basePrice - discountUnit);
-    normalizedItems.push({
-      product_id: productId,
-      quantity: Number(item.quantity),
-      price: finalPrice,
-      price_type_id: priceTypeId,
-    });
-  }
-  const result = await query(
-    "INSERT INTO pedidos (cliente_id, direccion_id, estado, metodo_pago, prioridad, notas, fecha_programada, creado_por_usuario_id, actualizado_por_usuario_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-    [
-      customer_id,
-      address_id,
-      "Pendiente",
-      payment_method || null,
-      priority || "Normal",
-      notes || null,
-      toDateOnly(scheduled_date) || null,
-      req.user?.id || null,
-      req.user?.id || null,
-    ]
-  );
-  const orderId = result.insertId;
-  for (const item of normalizedItems) {
-    await query(
-      "INSERT INTO items_pedido (pedido_id, producto_id, cantidad, precio, tipo_precio_id, creado_por_usuario_id, actualizado_por_usuario_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+  await assertAddressBelongsToCustomer(Number(address_id), Number(customer_id));
+  const normalizedItems = await buildOrderItems(items);
+  const orderId = await withTransaction(async (exec) => {
+    const result = await exec(
+      "INSERT INTO pedidos (cliente_id, direccion_id, estado, metodo_pago, prioridad, notas, fecha_programada, creado_por_usuario_id, actualizado_por_usuario_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
       [
-        orderId,
-        item.product_id,
-        item.quantity,
-        item.price,
-        item.price_type_id || null,
+        customer_id,
+        address_id,
+        "Pendiente",
+        payment_method || null,
+        priority || "Normal",
+        notes || null,
+        toDateOnly(scheduled_date) || null,
         req.user?.id || null,
         req.user?.id || null,
       ]
     );
-  }
-  await query(
-    "INSERT INTO historial_estado_pedido (pedido_id, estado, nota) VALUES (?, ?, ?)",
-    [orderId, "Pendiente", "Pedido creado"]
-  );
+    const newOrderId = result.insertId;
+    for (const item of normalizedItems) {
+      await exec(
+        "INSERT INTO items_pedido (pedido_id, producto_id, cantidad, precio, tipo_precio_id, creado_por_usuario_id, actualizado_por_usuario_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [
+          newOrderId,
+          item.product_id,
+          item.quantity,
+          item.price,
+          item.price_type_id || null,
+          req.user?.id || null,
+          req.user?.id || null,
+        ]
+      );
+    }
+    await exec(
+      "INSERT INTO historial_estado_pedido (pedido_id, estado, nota) VALUES (?, ?, ?)",
+      [newOrderId, "Pendiente", "Pedido creado"]
+    );
+    return newOrderId;
+  });
   await req.audit({ action: "CREATE", entityId: orderId });
   res.status(201).json({ id: orderId });
 }));
 
 app.patch("/api/orders/:id/status", requireRole(() => ACCESS.orders), asyncHandler(async (req, res) => {
-  const { status, note, warehouse_id, scheduled_date } = req.body || {};
+  const { status, note } = req.body || {};
   if (!status) {
     return res.status(400).json({ error: "Estado requerido" });
   }
+  let scheduledDate = null;
   if (status === "Reprogramado") {
-    if (!scheduled_date || String(scheduled_date).trim().length < 10) {
+    scheduledDate = toDateOnly(req.body?.scheduled_date);
+    if (!scheduledDate) {
       return res.status(400).json({ error: "La fecha programada es obligatoria al reprogramar" });
     }
-    const dateOnly = toDateOnly(scheduled_date);
-    if (!dateOnly) {
-      return res.status(400).json({ error: "Fecha programada inválida" });
-    }
-    await query(
-      "UPDATE pedidos SET estado = ?, fecha_programada = ?, actualizado_por_usuario_id = ? WHERE id = ?",
-      [status, dateOnly, req.user?.id || null, req.params.id]
-    );
-  } else {
-    await query(
-      "UPDATE pedidos SET estado = ?, actualizado_por_usuario_id = ? WHERE id = ?",
-      [status, req.user?.id || null, req.params.id]
-    );
   }
-  await query(
-    "INSERT INTO historial_estado_pedido (pedido_id, estado, nota) VALUES (?, ?, ?)",
-    [req.params.id, status, note || (status === "Reprogramado" ? `Fecha programada: ${toDateOnly(scheduled_date)}` : null)]
+  await withTransaction((exec) =>
+    applyOrderStatusTx(exec, {
+      pedidoId: req.params.id,
+      status,
+      userId: req.user?.id || null,
+      scheduledDate,
+      note: note || (scheduledDate ? `Fecha programada: ${scheduledDate}` : null),
+    })
   );
-  if (status === "Entregado") {
-    const result = await deductInventoryOnDelivery(req.params.id, req.user?.id || null);
-    if (!result.ok) {
-      return res.status(400).json({ error: result.error });
-    }
-  }
   await req.audit({
     action: "STATUS",
     entityId: req.params.id,
@@ -1666,104 +1655,32 @@ app.patch(
     if (isDriverOnlyRequest(req) && !(await isDeliveryOwnedByDriver(req, req.params.id))) {
       return res.status(403).json({ error: "No autorizado para esta entrega" });
     }
-    await query(
-      "UPDATE entregas SET estado = ?, actualizado_por_usuario_id = ? WHERE id = ?",
-      [status, req.user?.id || null, req.params.id]
-    );
-    if (incident_type) {
-      await query(
-        "INSERT INTO incidencias_entrega (entrega_id, tipo, nota) VALUES (?, ?, ?)",
-        [req.params.id, incident_type, note || null]
-      );
+    const [delivery] = await query("SELECT pedido_id FROM entregas WHERE id = ?", [req.params.id]);
+    if (!delivery) {
+      return res.status(404).json({ error: "Entrega no encontrada" });
     }
-    if (status === "Entregado") {
-      await query(
-        "UPDATE entregas SET entregado_en = COALESCE(entregado_en, NOW()), actualizado_por_usuario_id = ? WHERE id = ?",
-        [req.user?.id || null, req.params.id]
-      );
-      const [delivery] = await query(
-        "SELECT pedido_id FROM entregas WHERE id = ?",
-        [req.params.id]
-      );
-      if (delivery) {
-        const result = await deductInventoryOnDelivery(delivery.pedido_id, req.user?.id || null);
-        if (!result.ok) {
-          return res.status(400).json({ error: result.error });
-        }
-        await query(
-          "UPDATE pedidos SET estado = 'Entregado', actualizado_por_usuario_id = ? WHERE id = ?",
-          [req.user?.id || null, delivery.pedido_id]
-        );
-        await query(
-          "INSERT INTO historial_estado_pedido (pedido_id, estado, nota) VALUES (?, 'Entregado', 'Entrega confirmada')",
-          [delivery.pedido_id]
+    const newDate = status === "Reprogramado" ? toDateOnly(scheduled_date) : null;
+    const defaultNotes = {
+      Entregado: "Entrega confirmada",
+      Cancelado: "Entrega cancelada",
+      Pendiente: "Venta deshecha desde Entregas móvil",
+      Reprogramado: newDate ? `Reprogramado para ${newDate}` : "Reprogramado desde Entregas móvil",
+    };
+    await withTransaction(async (exec) => {
+      await applyOrderStatusTx(exec, {
+        pedidoId: delivery.pedido_id,
+        status,
+        userId: req.user?.id || null,
+        scheduledDate: newDate,
+        note: defaultNotes[status] || null,
+      });
+      if (incident_type) {
+        await exec(
+          "INSERT INTO incidencias_entrega (entrega_id, tipo, nota) VALUES (?, ?, ?)",
+          [req.params.id, incident_type, note || null]
         );
       }
-    }
-    if (status === "Cancelado") {
-      const [delivery] = await query(
-        "SELECT pedido_id FROM entregas WHERE id = ?",
-        [req.params.id]
-      );
-      if (delivery) {
-        await query(
-          "UPDATE pedidos SET estado = 'Cancelado', actualizado_por_usuario_id = ? WHERE id = ?",
-          [req.user?.id || null, delivery.pedido_id]
-        );
-        await query(
-          "INSERT INTO historial_estado_pedido (pedido_id, estado, nota) VALUES (?, 'Cancelado', 'Entrega cancelada')",
-          [delivery.pedido_id]
-        );
-      }
-    }
-    if (status === "Pendiente") {
-      const [delivery] = await query(
-        "SELECT pedido_id FROM entregas WHERE id = ?",
-        [req.params.id]
-      );
-      if (delivery) {
-        await query(
-          "UPDATE pedidos SET estado = 'Pendiente', actualizado_por_usuario_id = ? WHERE id = ?",
-          [req.user?.id || null, delivery.pedido_id]
-        );
-        await query(
-          "UPDATE entregas SET entregado_en = NULL, actualizado_por_usuario_id = ? WHERE id = ?",
-          [req.user?.id || null, req.params.id]
-        );
-        await query(
-          "INSERT INTO historial_estado_pedido (pedido_id, estado, nota) VALUES (?, 'Pendiente', 'Venta deshecha desde Entregas móvil')",
-          [delivery.pedido_id]
-        );
-      }
-    }
-    if (status === "Reprogramado") {
-      const [delivery] = await query(
-        "SELECT pedido_id FROM entregas WHERE id = ?",
-        [req.params.id]
-      );
-      if (delivery) {
-        const newDate = toDateOnly(scheduled_date);
-        if (newDate) {
-          await query(
-            "UPDATE pedidos SET estado = 'Reprogramado', fecha_programada = ?, actualizado_por_usuario_id = ? WHERE id = ?",
-            [newDate, req.user?.id || null, delivery.pedido_id]
-          );
-          await query(
-            "UPDATE entregas SET programado_en = ?, actualizado_por_usuario_id = ? WHERE id = ?",
-            [`${newDate} 12:00:00`, req.user?.id || null, req.params.id]
-          );
-        } else {
-          await query(
-            "UPDATE pedidos SET estado = 'Reprogramado', actualizado_por_usuario_id = ? WHERE id = ?",
-            [req.user?.id || null, delivery.pedido_id]
-          );
-        }
-        await query(
-          "INSERT INTO historial_estado_pedido (pedido_id, estado, nota) VALUES (?, 'Reprogramado', ?)",
-          [delivery.pedido_id, newDate ? `Reprogramado para ${newDate}` : "Reprogramado desde Entregas móvil"]
-        );
-      }
-    }
+    });
     await req.audit({
       action: "DELIVERY_STATUS",
       entityId: req.params.id,
@@ -1774,20 +1691,62 @@ app.patch(
 );
 
 app.get("/api/logistics/deliveries/search", requireRole(() => ACCESS.logistics), asyncHandler(async (req, res) => {
-  const { q } = req.query || {};
-  if (!q || String(q).trim().length < 2) return res.json([]);
-  const term = `%${String(q).trim()}%`;
+  const { q, truck_id, driver_id, date, from, to } = req.query || {};
+  const isValidDate = (v) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v);
+  const hasName = q && String(q).trim().length >= 2;
+  const hasTruck = truck_id && Number(truck_id) > 0;
+  const hasDriver = driver_id && Number(driver_id) > 0;
+  const hasDate = isValidDate(date) || isValidDate(from) || isValidDate(to);
+  // Búsqueda por nombre (mín. 2 letras) o carga masiva por camión/repartidor/fecha
+  if (!hasName && !hasTruck && !hasDriver && !hasDate) {
+    return res.json([]);
+  }
+
+  const conditions = ["e.estado NOT IN ('Entregado','Cancelado')"];
+  const params = [];
+  if (hasName) {
+    conditions.push("c.nombre_completo LIKE ?");
+    params.push(`%${String(q).trim()}%`);
+  }
+  if (hasTruck) {
+    conditions.push("e.camion_id = ?");
+    params.push(Number(truck_id));
+  }
+  if (hasDriver) {
+    conditions.push("e.repartidor_id = ?");
+    params.push(Number(driver_id));
+  }
+  // Fecha de ruta: programada del pedido, o programado_en / creación en hora La Paz
+  const dateExpr =
+    "DATE(COALESCE(p.fecha_programada, DATE(CONVERT_TZ(COALESCE(e.programado_en, p.fecha_creacion), '+00:00', '-04:00'))))";
+  if (isValidDate(date)) {
+    conditions.push(`${dateExpr} = ?`);
+    params.push(date);
+  } else {
+    if (isValidDate(from)) {
+      conditions.push(`${dateExpr} >= ?`);
+      params.push(from);
+    }
+    if (isValidDate(to)) {
+      conditions.push(`${dateExpr} <= ?`);
+      params.push(to);
+    }
+  }
+
+  const limit = hasName && !hasTruck && !hasDriver && !hasDate ? 20 : 300;
   const rows = await query(
-    `SELECT e.id as delivery_id, c.nombre_completo as customer_name, c.zona, cam.placa as truck_plate, r.nombre as driver_name, e.estado as status, p.id as order_id
+    `SELECT e.id as delivery_id, c.nombre_completo as customer_name, c.zona,
+            cam.placa as truck_plate, r.nombre as driver_name, e.estado as status,
+            p.id as order_id, p.fecha_programada as scheduled_date
      FROM entregas e
      JOIN pedidos p ON p.id = e.pedido_id
      JOIN clientes c ON c.id = p.cliente_id
      JOIN camiones cam ON cam.id = e.camion_id
      JOIN repartidores r ON r.id = e.repartidor_id
-     WHERE c.nombre_completo LIKE ? AND e.estado NOT IN ('Entregado','Cancelado')
+     WHERE ${conditions.join(" AND ")}
      ORDER BY e.id DESC
-     LIMIT 20`,
-    [term]
+     LIMIT ${limit}`,
+    params
   );
   res.json(rows);
 }));
@@ -1900,8 +1859,8 @@ app.get("/api/logistics/truck-summary", requireRole(() => ACCESS.logistics), asy
      JOIN pedidos p ON p.id = e.pedido_id
      JOIN items_pedido oi ON oi.pedido_id = p.id
      WHERE e.camion_id = ?
-       AND DATE(COALESCE(e.programado_en, p.fecha_creacion)) = CURDATE()`,
-    [truck_id]
+       AND DATE(COALESCE(e.programado_en, CONVERT_TZ(p.fecha_creacion, '+00:00', '-04:00'))) = ?`,
+    [truck_id, getTodayLaPaz()]
   );
   res.json(rows[0] || { total_orders: 0, total_items: 0, total_value: 0 });
 }));
@@ -1974,13 +1933,16 @@ app.get("/api/logistics/truck-orders", requireRole(() => ACCESS.logistics), asyn
 }));
 
 app.post("/api/logistics/returns", requireRole(() => ACCESS.logistics), asyncHandler(async (req, res) => {
-  const { order_id, truck_id, cash_amount, return_date, gastos_gasolina, gastos_almuerzo, gastos_otros } = req.body || {};
+  const { truck_id, cash_amount, return_date, gastos_gasolina, gastos_almuerzo, gastos_otros } = req.body || {};
   if (!truck_id) {
     return res.status(400).json({ error: "Datos incompletos: falta el camión" });
   }
   const allowedTrucks = await getAllowedTruckIdsForDriver(req);
   if (allowedTrucks !== null && (allowedTrucks.length === 0 || !allowedTrucks.map(Number).includes(Number(truck_id)))) {
     return res.status(403).json({ error: "Solo puede registrar devoluciones de sus propios camiones." });
+  }
+  if (return_date && !/^\d{4}-\d{2}-\d{2}$/.test(String(return_date))) {
+    return res.status(400).json({ error: "Fecha de devolución inválida" });
   }
   const expectedDate = return_date || getTodayLaPaz();
   const [existingReturn] = await query(
@@ -2006,6 +1968,9 @@ app.post("/api/logistics/returns", requireRole(() => ACCESS.logistics), asyncHan
   const gastosGas = Number(gastos_gasolina || 0);
   const gastosAlm = Number(gastos_almuerzo || 0);
   const gastosOtros = Number(gastos_otros || 0);
+  if ([gastosGas, gastosAlm, gastosOtros].some((g) => !Number.isFinite(g) || g < 0)) {
+    return res.status(400).json({ error: "Gastos inválidos" });
+  }
   const totalGastos = gastosGas + gastosAlm + gastosOtros;
   const expectedTotal = Math.max(0, ventasTotal - totalGastos);
   const cashValue = Number(cash_amount || 0);
@@ -2020,104 +1985,50 @@ app.post("/api/logistics/returns", requireRole(() => ACCESS.logistics), asyncHan
       gastos_total: totalGastos,
     });
   }
-  if (order_id) {
-    const warehouseId = await getCentralWarehouseId();
-    if (!warehouseId) {
-      return res.status(400).json({ error: "No hay almacenes disponibles" });
-    }
-    const items = await query(
-      "SELECT producto_id, cantidad FROM items_pedido WHERE pedido_id = ?",
-      [order_id]
-    );
-    for (const item of items) {
-      await query(
-        "INSERT INTO movimientos_inventario (almacen_id, producto_id, cantidad, tipo, pedido_id, nota, creado_por_usuario_id, actualizado_por_usuario_id) VALUES (?, ?, ?, 'DEVOLUCION', ?, 'Devolución de vendedor', ?, ?)",
-        [
-          warehouseId,
-          item.producto_id,
-          item.cantidad,
-          order_id,
-          req.user?.id || null,
-          req.user?.id || null,
-        ]
-      );
-      await query(
-        `INSERT INTO inventario (almacen_id, producto_id, cantidad, stock_minimo, creado_por_usuario_id, actualizado_por_usuario_id)
-         VALUES (?, ?, ?, 0, ?, ?)
-         ON DUPLICATE KEY UPDATE
-           cantidad = cantidad + VALUES(cantidad),
-           actualizado_por_usuario_id = VALUES(actualizado_por_usuario_id)`,
-        [warehouseId, item.producto_id, item.cantidad, req.user?.id || null, req.user?.id || null]
-      );
-    }
-    await query(
-      "UPDATE pedidos SET estado = 'Reprogramado', actualizado_por_usuario_id = ? WHERE id = ?",
-      [req.user?.id || null, order_id]
-    );
-    await query(
-      "UPDATE entregas SET estado = 'Reprogramado', actualizado_por_usuario_id = ? WHERE pedido_id = ? AND camion_id = ?",
-      [req.user?.id || null, order_id, truck_id]
-    );
-    await query(
-      "INSERT INTO historial_estado_pedido (pedido_id, estado, nota) VALUES (?, 'Reprogramado', 'Devolución registrada')",
-      [order_id]
-    );
-    if (cash_amount && Number(cash_amount) > 0) {
-      await query(
-        "INSERT INTO pagos (pedido_id, monto, metodo, estado, creado_por_usuario_id, actualizado_por_usuario_id) VALUES (?, ?, 'Caja', 'Recibido', ?, ?)",
-        [order_id, Number(cash_amount), req.user?.id || null, req.user?.id || null]
-      );
-    }
-  }
-  const despachados = await query(
-    `SELECT e.pedido_id FROM entregas e
-     JOIN pedidos p ON p.id = e.pedido_id
-     WHERE e.camion_id = ?
-       AND e.estado = 'Despachado'
+  const dayDeliveryCondition = `e.camion_id = ?
        AND (DATE(CONVERT_TZ(COALESCE(e.programado_en, p.fecha_programada), '+00:00', '-04:00')) = ?
-            OR DATE(CONVERT_TZ(p.fecha_programada, '+00:00', '-04:00')) = ?)`,
+            OR DATE(CONVERT_TZ(p.fecha_programada, '+00:00', '-04:00')) = ?)`;
+  // Repartidor de la ruta de ese día (no cualquiera que haya usado el camión alguna vez).
+  const [repartidorRow] = await query(
+    `SELECT e.repartidor_id FROM entregas e
+     JOIN pedidos p ON p.id = e.pedido_id
+     WHERE ${dayDeliveryCondition}
+     ORDER BY e.id DESC LIMIT 1`,
     [truck_id, expectedDate, expectedDate]
   );
-  for (const row of despachados) {
-    const pid = row.pedido_id;
-    await query(
-      "UPDATE pedidos SET estado = 'Reprogramado', actualizado_por_usuario_id = ? WHERE id = ?",
-      [req.user?.id || null, pid]
+  const [lastRepartidorRow] = repartidorRow
+    ? [repartidorRow]
+    : await query(
+        "SELECT repartidor_id FROM entregas WHERE camion_id = ? ORDER BY id DESC LIMIT 1",
+        [truck_id]
+      );
+  const repartidorId = lastRepartidorRow?.repartidor_id || null;
+  const userId = req.user?.id || null;
+  await withTransaction(async (exec) => {
+    const despachados = await exec(
+      `SELECT e.pedido_id FROM entregas e
+       JOIN pedidos p ON p.id = e.pedido_id
+       WHERE e.estado = 'Despachado' AND ${dayDeliveryCondition}`,
+      [truck_id, expectedDate, expectedDate]
     );
-    await query(
-      "UPDATE entregas SET estado = 'Reprogramado', actualizado_por_usuario_id = ? WHERE pedido_id = ? AND camion_id = ?",
-      [req.user?.id || null, pid, truck_id]
+    for (const row of despachados) {
+      await applyOrderStatusTx(exec, {
+        pedidoId: row.pedido_id,
+        status: "Reprogramado",
+        userId,
+        note: "Devolución: pedidos no entregados del día",
+      });
+    }
+    await exec(
+      `INSERT INTO devoluciones_registro (fecha, camion_id, repartidor_id, pedido_id, monto_ventas, gastos_gasolina, gastos_almuerzo, gastos_otros, monto_neto_caja, usuario_id)
+       VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)`,
+      [expectedDate, truck_id, repartidorId, ventasTotal, gastosGas, gastosAlm, gastosOtros, expectedTotal, userId]
     );
-  await query(
-    "INSERT INTO historial_estado_pedido (pedido_id, estado, nota) VALUES (?, 'Reprogramado', 'Devolución: pedidos no entregados del día')",
-    [pid]
-  );
-  }
-  const [repartidorRow] = await query(
-    "SELECT repartidor_id FROM entregas WHERE camion_id = ? LIMIT 1",
-    [truck_id]
-  );
-  const repartidorId = repartidorRow?.repartidor_id || null;
-  await query(
-    `INSERT INTO devoluciones_registro (fecha, camion_id, repartidor_id, pedido_id, monto_ventas, gastos_gasolina, gastos_almuerzo, gastos_otros, monto_neto_caja, usuario_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      expectedDate,
-      truck_id,
-      repartidorId,
-      order_id || null,
-      ventasTotal,
-      gastosGas,
-      gastosAlm,
-      gastosOtros,
-      expectedTotal,
-      req.user?.id || null,
-    ]
-  );
+  });
   await req.audit({
     action: "RETURN_TO_WAREHOUSE",
-    entityId: order_id,
-    detail: `camion:${truck_id}`,
+    entityId: null,
+    detail: `camion:${truck_id} fecha:${expectedDate}`,
   });
   res.json({ ok: true });
 }));
@@ -2261,7 +2172,7 @@ app.get("/api/reports/sales-by-client-type", requireRole(() => ACCESS.reports), 
   const { from, to, status } = req.query;
   const fromDate = from || "1970-01-01";
   const toDate = to || "2999-12-31";
-  const where = ["DATE(o.fecha_creacion) BETWEEN ? AND ?"];
+  const where = ["DATE(CONVERT_TZ(o.fecha_creacion,'+00:00','-04:00')) BETWEEN ? AND ?"];
   const params = [fromDate, toDate];
   if (status && status !== "all") {
     where.push("o.estado = ?");
@@ -2290,7 +2201,7 @@ app.get("/api/reports/deliveries-by-truck", requireRole(() => ACCESS.reports), a
      FROM entregas e
      JOIN camiones cam ON cam.id = e.camion_id
      JOIN pedidos p ON p.id = e.pedido_id
-     WHERE DATE(COALESCE(e.programado_en, p.fecha_creacion)) BETWEEN ? AND ?
+     WHERE DATE(COALESCE(e.programado_en, CONVERT_TZ(p.fecha_creacion,'+00:00','-04:00'))) BETWEEN ? AND ?
      GROUP BY cam.placa
      ORDER BY total DESC`,
     [fromDate, toDate]
@@ -2444,9 +2355,7 @@ app.get(
       `SELECT
          w.nombre as warehouse,
          p.nombre as product,
-         (i.cantidad - COALESCE(SUM(CASE WHEN ${dateExpr} > ? THEN
-           CASE WHEN m.tipo IN ('SALIDA') THEN m.cantidad * -1 ELSE m.cantidad END
-         ELSE 0 END), 0)) as quantity,
+         (i.cantidad - COALESCE(SUM(CASE WHEN ${dateExpr} > ? THEN m.cantidad ELSE 0 END), 0)) as quantity,
          i.stock_minimo as min_stock
        FROM inventario i
        JOIN almacenes w ON w.id = i.almacen_id
@@ -2519,6 +2428,11 @@ app.put("/api/admin/roles/:id", requireRole(() => ACCESS.admin), asyncHandler(as
   const { name } = req.body || {};
   if (!name) {
     return res.status(400).json({ error: "Nombre requerido" });
+  }
+  // Los roles base se usan por nombre en el código (permisos, repartidor, admin).
+  const [current] = await query("SELECT nombre FROM roles WHERE id = ?", [req.params.id]);
+  if (current && ROLE_NAMES.includes(current.nombre) && current.nombre !== name) {
+    return res.status(409).json({ error: "Los roles base del sistema no se pueden renombrar" });
   }
   try {
     await query("UPDATE roles SET nombre = ? WHERE id = ?", [name, req.params.id]);
@@ -2728,6 +2642,7 @@ app.put("/api/admin/users/:id", requireRole(() => ACCESS.admin), asyncHandler(as
     "UPDATE usuarios SET nombre = ?, usuario = ?, activo = ? WHERE id = ?",
     [name, email, is_active ? 1 : 0, req.params.id]
   );
+  invalidateUserState(req.params.id);
   await req.audit({ action: "UPDATE_USER", entityId: req.params.id, detail: email });
   res.json({ ok: true });
 }));
@@ -2757,13 +2672,16 @@ app.put("/api/admin/users/:id/roles", requireRole(() => ACCESS.admin), asyncHand
   if (!Array.isArray(role_ids)) {
     return res.status(400).json({ error: "role_ids debe ser un arreglo" });
   }
-  await query("DELETE FROM usuarios_roles WHERE usuario_id = ?", [req.params.id]);
-  for (const roleId of role_ids) {
-    await query("INSERT INTO usuarios_roles (usuario_id, rol_id) VALUES (?, ?)", [
-      req.params.id,
-      roleId,
-    ]);
-  }
+  await withTransaction(async (exec) => {
+    await exec("DELETE FROM usuarios_roles WHERE usuario_id = ?", [req.params.id]);
+    for (const roleId of role_ids) {
+      await exec("INSERT INTO usuarios_roles (usuario_id, rol_id) VALUES (?, ?)", [
+        req.params.id,
+        roleId,
+      ]);
+    }
+  });
+  invalidateUserState(req.params.id);
   await req.audit({ action: "SET_ROLES", entityId: req.params.id });
   res.json({ ok: true });
 }));
@@ -2779,7 +2697,9 @@ async function start() {
   app.use((err, req, res, _next) => {
     console.error(`[${new Date().toISOString()}] ${req.method} ${req.path}:`, err);
     if (err.status) {
-      return res.status(err.status).json({ error: err.message || "Error" });
+      return res
+        .status(err.status)
+        .json({ error: err.message || "Error", ...(err.details ? { details: err.details } : {}) });
     }
     res.status(err.status || 500).json({ error: "Error interno del servidor" });
   });

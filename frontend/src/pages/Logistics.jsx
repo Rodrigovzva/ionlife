@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import api from "../api";
 import { getTodayLaPaz } from "../utils/dateUtils";
+import { escapeHtml } from "../utils/escapeHtml";
 
 function statusClass(status) {
   if (!status) return "tag";
@@ -122,6 +123,9 @@ export default function Logistics({ user }) {
 
   // Reasignación de entrega
   const [reassignSearch, setReassignSearch] = useState("");
+  const [reassignFilterTruckId, setReassignFilterTruckId] = useState("");
+  const [reassignFilterDriverId, setReassignFilterDriverId] = useState("");
+  const [reassignFilterDate, setReassignFilterDate] = useState(getTodayLaPaz);
   const [reassignResults, setReassignResults] = useState([]);
   const [reassignSelection, setReassignSelection] = useState({});
   const [reassignTruckId, setReassignTruckId] = useState("");
@@ -130,17 +134,55 @@ export default function Logistics({ user }) {
   const [reassignSearchLoading, setReassignSearchLoading] = useState(false);
   const [reassignError, setReassignError] = useState("");
   const [reassignSuccess, setReassignSuccess] = useState("");
+  const [reassignLastMode, setReassignLastMode] = useState("filter"); // "filter" | "search"
 
   async function searchReassignDeliveries(q) {
     setReassignSearch(q);
     setReassignSelection({});
-    if (!q || q.trim().length < 2) { setReassignResults([]); return; }
+    setReassignSuccess("");
+    setReassignError("");
+    if (!q || q.trim().length < 2) {
+      if (reassignLastMode === "search") setReassignResults([]);
+      return;
+    }
+    setReassignLastMode("search");
     setReassignSearchLoading(true);
     try {
       const res = await api.get("/api/logistics/deliveries/search", { params: { q } });
       setReassignResults(res.data || []);
     } catch (_) {
       setReassignResults([]);
+      setReassignError("No se pudo buscar entregas.");
+    } finally {
+      setReassignSearchLoading(false);
+    }
+  }
+
+  async function loadReassignByFilter({ keepMessages = false } = {}) {
+    if (!keepMessages) {
+      setReassignError("");
+      setReassignSuccess("");
+    }
+    setReassignSelection({});
+    if (!reassignFilterTruckId && !reassignFilterDriverId && !reassignFilterDate) {
+      setReassignError("Indique camión actual, repartidor actual o fecha para cargar.");
+      return;
+    }
+    setReassignLastMode("filter");
+    setReassignSearchLoading(true);
+    try {
+      const params = {};
+      if (reassignFilterTruckId) params.truck_id = reassignFilterTruckId;
+      if (reassignFilterDriverId) params.driver_id = reassignFilterDriverId;
+      if (reassignFilterDate) params.date = reassignFilterDate;
+      const res = await api.get("/api/logistics/deliveries/search", { params });
+      setReassignResults(res.data || []);
+      if (!(res.data || []).length && !keepMessages) {
+        setReassignError("Sin entregas activas para esos filtros.");
+      }
+    } catch (_) {
+      setReassignResults([]);
+      setReassignError("No se pudieron cargar las entregas.");
     } finally {
       setReassignSearchLoading(false);
     }
@@ -152,7 +194,7 @@ export default function Logistics({ user }) {
     setReassignSuccess("");
     const selectedIds = Object.keys(reassignSelection).filter((id) => reassignSelection[id]);
     if (selectedIds.length === 0 || !reassignTruckId || !reassignDriverId) {
-      setReassignError("Seleccione al menos una entrega, camión y repartidor.");
+      setReassignError("Seleccione al menos una entrega, camión nuevo y repartidor nuevo.");
       return;
     }
     setReassignLoading(true);
@@ -165,11 +207,19 @@ export default function Logistics({ user }) {
       const updated = res.data?.reassigned ?? selectedIds.length;
       const skipped = res.data?.skipped ?? 0;
       setReassignSuccess(`Reasignadas: ${updated}. ${skipped > 0 ? `Omitidas: ${skipped}.` : ""}`);
-      setReassignSearch("");
-      setReassignResults([]);
       setReassignSelection({});
       setReassignTruckId("");
       setReassignDriverId("");
+      if (reassignLastMode === "filter") {
+        await loadReassignByFilter({ keepMessages: true });
+      } else if (reassignSearch.trim().length >= 2) {
+        const res = await api.get("/api/logistics/deliveries/search", {
+          params: { q: reassignSearch },
+        });
+        setReassignResults(res.data || []);
+      } else {
+        setReassignResults([]);
+      }
       if (returnForm.truck_id) loadTruckOrders(returnForm.truck_id, returnDate);
     } catch (_err) {
       setReassignError("No se pudo reasignar la entrega.");
@@ -521,10 +571,10 @@ export default function Logistics({ user }) {
           (o, idx) => `
             <tr>
               <td class="num">${idx + 1}</td>
-              <td>${o.customer_name || "-"}</td>
-              <td>${o.zona || "-"}</td>
-              <td>${o.address || "-"}</td>
-              <td>${o.phone || "-"}</td>
+              <td>${escapeHtml(o.customer_name || "-")}</td>
+              <td>${escapeHtml(o.zona || "-")}</td>
+              <td>${escapeHtml(o.address || "-")}</td>
+              <td>${escapeHtml(o.phone || "-")}</td>
               <td>${Number(o.recarga || 0) || ""}</td>
               <td>${Number(o.botellon_purificada || 0) || ""}</td>
               <td>${Number(o.botellon || 0) || ""}</td>
@@ -536,7 +586,7 @@ export default function Logistics({ user }) {
               <td>${Number(o.packs_600 || 0) || ""}</td>
               <td>${Number(o.total || 0).toFixed(2)}</td>
               <td class="center"></td>
-              <td class="obs">${o.notes || "-"}</td>
+              <td class="obs">${escapeHtml(o.notes || "-")}</td>
             </tr>
           `
         )
@@ -575,7 +625,7 @@ export default function Logistics({ user }) {
         .map(
           ([plate, s]) => `
             <tr>
-              <td>${plate}</td>
+              <td>${escapeHtml(plate)}</td>
               <td>${s.orders}</td>
               <td>${s.recarga || ""}</td>
               <td>${s.botellon_purificada || ""}</td>
@@ -629,10 +679,10 @@ export default function Logistics({ user }) {
             </style>
           </head>
           <body>
-            <div class="meta"><strong>Fecha programada:</strong> ${scheduledLabel}</div>
+            <div class="meta"><strong>Fecha programada:</strong> ${escapeHtml(scheduledLabel)}</div>
             <div class="meta-grid">
-              <div><strong>Camión:</strong> ${truckName}</div>
-              <div><strong>Distribuidor:</strong> ${driverName}</div>
+              <div><strong>Camión:</strong> ${escapeHtml(truckName)}</div>
+              <div><strong>Distribuidor:</strong> ${escapeHtml(driverName)}</div>
               <div><strong>Ayudante:</strong> <span class="line"></span></div>
               <div><strong>Refrigerio:</strong> <span class="line"></span></div>
               <div><strong>KM inicial:</strong> <span class="line"></span></div>
@@ -763,10 +813,10 @@ export default function Logistics({ user }) {
             return `
             <tr>
               <td>${idx + 1}</td>
-              <td>${o.customer_name || "-"}</td>
-              <td>${o.status || "-"}</td>
+              <td>${escapeHtml(o.customer_name || "-")}</td>
+              <td>${escapeHtml(o.status || "-")}</td>
               <td>${progDate}</td>
-              <td>${o.items || "-"}</td>
+              <td>${escapeHtml(o.items || "-")}</td>
               <td>Bs. ${Number(o.total || 0).toFixed(2)}</td>
             </tr>
           `;
@@ -801,7 +851,7 @@ export default function Logistics({ user }) {
           <body>
             <h2>Resumen de devolución</h2>
             <div class="meta"><strong>Fecha:</strong> ${dateLabel}</div>
-            <div class="meta"><strong>Camión:</strong> ${truckName} | <strong>Repartidor:</strong> ${driverName}</div>
+            <div class="meta"><strong>Camión:</strong> ${escapeHtml(truckName)} | <strong>Repartidor:</strong> ${escapeHtml(driverName)}</div>
             <div class="resumen-box">
               <h3>Resumen del monto entregado y devolución</h3>
               <div class="line"><strong>Ventas entregadas:</strong> ${deliveredOrders.length} pedido(s) — Total Bs. ${resumenMontoEntregado}</div>
@@ -1489,41 +1539,99 @@ export default function Logistics({ user }) {
           <div className="card" style={{ marginTop: 16 }}>
             <h4>Reasignar entrega a otro camión / repartidor</h4>
             <div style={{ color: "#6b7a8c", fontSize: 13, marginBottom: 10 }}>
-              Escribe el nombre del cliente para encontrar entregas activas y reasignarlas en forma masiva.
+              Carga masiva por camión/fecha, o busca un cliente. Luego selecciona y pasa a otro camión/repartidor.
             </div>
-            <form onSubmit={submitReassign} className="form">
-              <div className="form-row" style={{ flexWrap: "wrap", gap: 10, alignItems: "flex-start" }}>
-                <div style={{ position: "relative", flex: "1 1 260px", minWidth: 220 }}>
+
+            <div className="form" style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>1. Cargar entregas activas</div>
+              <div className="form-row" style={{ flexWrap: "wrap", gap: 10, alignItems: "flex-end" }}>
+                <div className="form-field">
+                  <label>Camión actual</label>
+                  <select
+                    value={reassignFilterTruckId}
+                    onChange={(e) => setReassignFilterTruckId(e.target.value)}
+                  >
+                    <option value="">Todos</option>
+                    {trucks.map((t) => (
+                      <option key={t.id} value={t.id}>{t.plate}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-field">
+                  <label>Repartidor actual</label>
+                  <select
+                    value={reassignFilterDriverId}
+                    onChange={(e) => setReassignFilterDriverId(e.target.value)}
+                  >
+                    <option value="">Todos</option>
+                    {drivers.map((d) => (
+                      <option key={d.id} value={d.id}>{d.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-field">
+                  <label>Fecha de ruta</label>
+                  <input
+                    type="date"
+                    value={reassignFilterDate}
+                    onChange={(e) => setReassignFilterDate(e.target.value)}
+                  />
+                </div>
+                <button
+                  className="btn btn-outline"
+                  type="button"
+                  onClick={loadReassignByFilter}
+                  disabled={reassignSearchLoading}
+                >
+                  {reassignSearchLoading && reassignLastMode === "filter"
+                    ? "Cargando..."
+                    : "Cargar por filtro"}
+                </button>
+              </div>
+              <div className="form-row" style={{ marginTop: 10, flexWrap: "wrap", gap: 10, alignItems: "flex-end" }}>
+                <div className="form-field" style={{ flex: "1 1 260px", minWidth: 220 }}>
+                  <label>O buscar por cliente</label>
                   <input
                     type="search"
                     placeholder="Buscar cliente..."
                     value={reassignSearch}
                     onChange={(e) => searchReassignDeliveries(e.target.value)}
                     autoComplete="off"
-                    style={{ width: "100%" }}
                   />
-                  {reassignSearchLoading && (
+                  {reassignSearchLoading && reassignLastMode === "search" && (
                     <div style={{ fontSize: 12, color: "#6b7a8c", marginTop: 2 }}>Buscando...</div>
                   )}
                 </div>
-                <select
-                  value={reassignTruckId}
-                  onChange={(e) => setReassignTruckId(e.target.value)}
-                >
-                  <option value="">Nuevo camión</option>
-                  {trucks.map((t) => (
-                    <option key={t.id} value={t.id}>{t.plate}</option>
-                  ))}
-                </select>
-                <select
-                  value={reassignDriverId}
-                  onChange={(e) => setReassignDriverId(e.target.value)}
-                >
-                  <option value="">Nuevo repartidor</option>
-                  {drivers.map((d) => (
-                    <option key={d.id} value={d.id}>{d.name}</option>
-                  ))}
-                </select>
+              </div>
+            </div>
+
+            <form onSubmit={submitReassign} className="form">
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>2. Destino de reasignación</div>
+              <div className="form-row" style={{ flexWrap: "wrap", gap: 10, alignItems: "flex-end" }}>
+                <div className="form-field">
+                  <label>Nuevo camión</label>
+                  <select
+                    value={reassignTruckId}
+                    onChange={(e) => setReassignTruckId(e.target.value)}
+                  >
+                    <option value="">Seleccione camión</option>
+                    {trucks.map((t) => (
+                      <option key={t.id} value={t.id}>{t.plate}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-field">
+                  <label>Nuevo repartidor</label>
+                  <select
+                    value={reassignDriverId}
+                    onChange={(e) => setReassignDriverId(e.target.value)}
+                  >
+                    <option value="">Seleccione repartidor</option>
+                    {drivers.map((d) => (
+                      <option key={d.id} value={d.id}>{d.name}</option>
+                    ))}
+                  </select>
+                </div>
                 <button
                   className="btn"
                   type="submit"
@@ -1537,11 +1645,13 @@ export default function Logistics({ user }) {
               </div>
             </form>
             <div style={{ marginTop: 10, fontSize: 13, color: "#6b7a8c" }}>
-              Seleccionados: <strong>{Object.keys(reassignSelection).filter((id) => reassignSelection[id]).length}</strong>
+              En lista: <strong>{reassignResults.length}</strong>
+              {" · "}
+              Seleccionados:{" "}
+              <strong>
+                {Object.keys(reassignSelection).filter((id) => reassignSelection[id]).length}
+              </strong>
             </div>
-            {reassignSearch.trim().length >= 2 && reassignResults.length === 0 && !reassignSearchLoading && (
-              <div style={{ marginTop: 8, fontSize: 13, color: "#6b7a8c" }}>Sin resultados.</div>
-            )}
             {reassignResults.length > 0 && (
               <div className="table-scroll" style={{ marginTop: 8 }}>
                 <table className="table">
@@ -1570,6 +1680,7 @@ export default function Logistics({ user }) {
                       </th>
                       <th>Cliente</th>
                       <th>Zona</th>
+                      <th>Fecha</th>
                       <th>Camión</th>
                       <th>Repartidor</th>
                       <th>Estado</th>
@@ -1594,6 +1705,11 @@ export default function Logistics({ user }) {
                         </td>
                         <td>{r.customer_name}</td>
                         <td>{r.zona || "-"}</td>
+                        <td>
+                          {r.scheduled_date
+                            ? String(r.scheduled_date).slice(0, 10)
+                            : "-"}
+                        </td>
                         <td>{r.truck_plate}</td>
                         <td>{r.driver_name}</td>
                         <td><span className={statusClass(r.status)}>{r.status}</span></td>
