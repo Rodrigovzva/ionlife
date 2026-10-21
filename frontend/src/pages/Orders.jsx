@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import api from "../api";
 import { getTodayLaPaz } from "../utils/dateUtils";
@@ -11,6 +11,12 @@ function statusClass(status) {
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/\s+/g, "_");
   return `tag status-${normalized}`;
+}
+
+const MAX_ORDER_ROWS = 300;
+const laPazDateFmt = new Intl.DateTimeFormat("en-CA", { timeZone: "America/La_Paz" });
+function toLaPazDate(value) {
+  return value ? laPazDateFmt.format(new Date(value)) : "";
 }
 
 export default function Orders({ user }) {
@@ -73,7 +79,10 @@ export default function Orders({ user }) {
     },
   ]);
 
+  const lastLoadRef = useRef(0);
+
   async function load() {
+    lastLoadRef.current = Date.now();
     const results = await Promise.allSettled([
       api.get("/api/orders"),
       api.get("/api/products"),
@@ -123,7 +132,8 @@ export default function Orders({ user }) {
   useEffect(() => {
     load();
     function handleVisibility() {
-      if (document.visibilityState === "visible") load();
+      // recargar solo si pasó más de 1 minuto desde la última carga
+      if (document.visibilityState === "visible" && Date.now() - lastLoadRef.current > 60000) load();
     }
     document.addEventListener("visibilitychange", handleVisibility);
     return () => document.removeEventListener("visibilitychange", handleVisibility);
@@ -214,8 +224,7 @@ export default function Orders({ user }) {
         return false;
       }
       if (!o.created_at) return false;
-      const createdInLaPaz = new Date(o.created_at).toLocaleDateString("en-CA", { timeZone: "America/La_Paz" });
-      return createdInLaPaz === todayLaPaz;
+      return toLaPazDate(o.created_at) === todayLaPaz;
     });
     if (hasOrderToday) {
       const ok = window.confirm(
@@ -637,22 +646,18 @@ export default function Orders({ user }) {
     }
   }
 
-  const filteredOrders = orders.filter((order) => {
+  const filteredOrders = useMemo(() => {
     const statusFilter = orderFilters.status;
-    const matchStatus =
-      !statusFilter ||
-      (statusFilter.includes("|")
-        ? statusFilter.split("|").includes(order.status)
-        : order.status === statusFilter);
-    if (!matchStatus) return false;
-    const fechaIso = orderFilters.fecha_registro && orderFilters.fecha_registro.length >= 10
+    const statusList = statusFilter.includes("|") ? statusFilter.split("|") : null;
+    const fechaIso = orderFilters.fecha_registro?.length >= 10
       ? orderFilters.fecha_registro.slice(0, 10)
       : "";
-    if (!fechaIso) return true;
-    if (!order.created_at) return false;
-    const orderDate = new Date(order.created_at).toLocaleDateString("en-CA", { timeZone: "America/La_Paz" });
-    return orderDate === fechaIso;
-  });
+    return orders.filter((order) => {
+      if (statusFilter && (statusList ? !statusList.includes(order.status) : order.status !== statusFilter)) return false;
+      if (!fechaIso) return true;
+      return toLaPazDate(order.created_at) === fechaIso;
+    });
+  }, [orders, orderFilters]);
   const pendientesTotal = filteredOrders.filter(
     (order) => order.status === "Pendiente"
   ).length;
@@ -1036,6 +1041,9 @@ export default function Orders({ user }) {
             ) : null}
             {" · "}
             Pendientes: <strong>{pendientesTotal}</strong>
+            {filteredOrders.length > MAX_ORDER_ROWS ? (
+              <span> · Se muestran los primeros {MAX_ORDER_ROWS}; filtre por fecha para ver el resto</span>
+            ) : null}
           </div>
         </div>
         <table className="table">
@@ -1055,7 +1063,7 @@ export default function Orders({ user }) {
             </tr>
           </thead>
           <tbody>
-            {filteredOrders.map((o) => (
+            {filteredOrders.slice(0, MAX_ORDER_ROWS).map((o) => (
               <tr key={o.id}>
                 <td>{o.id}</td>
                 <td>{o.customer_name}</td>

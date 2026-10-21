@@ -591,7 +591,7 @@ app.get("/api/precios-producto", requireAuth, asyncHandler(async (_req, res) => 
   res.json(rows);
 }));
 
-app.get("/api/customers", requireRole(ACCESS.customers), asyncHandler(async (req, res) => {
+app.get("/api/customers", requireRole(() => ACCESS.customers), asyncHandler(async (req, res) => {
   const limit = Number(req.query?.limit);
   const offset = Number(req.query?.offset) || 0;
   const hasLimit = Number.isFinite(limit) && limit > 0;
@@ -653,7 +653,7 @@ app.get("/api/customers/search", requireAuth, asyncHandler(async (req, res) => {
   res.json({ rows, total: Number(total), limit: 20, offset: safeOffset });
 }));
 
-app.post("/api/customers", requireRole(ACCESS.customers), asyncHandler(async (req, res) => {
+app.post("/api/customers", requireRole(() => ACCESS.customers), asyncHandler(async (req, res) => {
   const {
     nombre_completo,
     telefono_principal,
@@ -748,7 +748,7 @@ app.get("/api/customers/:id", requireAuth, asyncHandler(async (req, res) => {
   res.json({ ...customer, addresses });
 }));
 
-app.put("/api/customers/:id", requireRole(ACCESS.customers), asyncHandler(async (req, res) => {
+app.put("/api/customers/:id", requireRole(() => ACCESS.customers), asyncHandler(async (req, res) => {
   const {
     nombre_completo,
     telefono_principal,
@@ -784,13 +784,13 @@ app.put("/api/customers/:id", requireRole(ACCESS.customers), asyncHandler(async 
   res.json({ ok: true });
 }));
 
-app.delete("/api/customers/:id", requireRole(ACCESS.customers), asyncHandler(async (req, res) => {
+app.delete("/api/customers/:id", requireRole(() => ACCESS.customers), asyncHandler(async (req, res) => {
   await query("DELETE FROM clientes WHERE id = ?", [req.params.id]);
   await req.audit({ action: "DELETE", entityId: req.params.id });
   res.json({ ok: true });
 }));
 
-app.get("/api/customers/:id/addresses", requireRole([...ACCESS.customers, ...ACCESS.orders, "Repartidor"]), asyncHandler(async (req, res) => {
+app.get("/api/customers/:id/addresses", requireRole(() => [...ACCESS.customers, ...ACCESS.orders, "Repartidor"]), asyncHandler(async (req, res) => {
   const rows = await query(
     "SELECT * FROM direcciones_clientes WHERE cliente_id = ?",
     [req.params.id]
@@ -798,7 +798,7 @@ app.get("/api/customers/:id/addresses", requireRole([...ACCESS.customers, ...ACC
   res.json(rows);
 }));
 
-app.post("/api/customers/:id/addresses", requireRole(ACCESS.customers), asyncHandler(async (req, res) => {
+app.post("/api/customers/:id/addresses", requireRole(() => ACCESS.customers), asyncHandler(async (req, res) => {
   const { etiqueta, direccion, ciudad, referencia, es_principal } = req.body || {};
   if (!direccion) {
     return res.status(400).json({ error: "Dirección requerida" });
@@ -824,7 +824,7 @@ app.post("/api/customers/:id/addresses", requireRole(ACCESS.customers), asyncHan
   res.status(201).json({ id: result.insertId });
 }));
 
-app.put("/api/addresses/:id", requireAuth, requireRole(ACCESS.customers), asyncHandler(async (req, res) => {
+app.put("/api/addresses/:id", requireAuth, requireRole(() => ACCESS.customers), asyncHandler(async (req, res) => {
   const { etiqueta, direccion, ciudad, referencia, es_principal } = req.body || {};
   await query(
     "UPDATE direcciones_clientes SET etiqueta = ?, direccion = ?, ciudad = ?, referencia = ?, es_principal = ?, actualizado_por_usuario_id = ? WHERE id = ?",
@@ -841,20 +841,20 @@ app.put("/api/addresses/:id", requireAuth, requireRole(ACCESS.customers), asyncH
   res.json({ ok: true });
 }));
 
-app.delete("/api/addresses/:id", requireAuth, requireRole(ACCESS.customers), asyncHandler(async (req, res) => {
+app.delete("/api/addresses/:id", requireAuth, requireRole(() => ACCESS.customers), asyncHandler(async (req, res) => {
   await query("DELETE FROM direcciones_clientes WHERE id = ?", [req.params.id]);
   await req.audit({ action: "DELETE_ADDRESS", entityId: req.params.id });
   res.json({ ok: true });
 }));
 
-app.get("/api/products", requireRole([...ACCESS.products, ...ACCESS.orders]), asyncHandler(async (_req, res) => {
+app.get("/api/products", requireRole(() => [...ACCESS.products, ...ACCESS.orders]), asyncHandler(async (_req, res) => {
   const rows = await query(
     "SELECT id, nombre as name, descripcion as description, precio as price, activo as active FROM productos ORDER BY id DESC"
   );
   res.json(rows);
 }));
 
-app.post("/api/products", requireRole(ACCESS.products), asyncHandler(async (req, res) => {
+app.post("/api/products", requireRole(() => ACCESS.products), asyncHandler(async (req, res) => {
   const { name, description, price, active } = req.body || {};
   if (!name || price == null) {
     return res.status(400).json({ error: "Nombre y precio requeridos" });
@@ -874,7 +874,7 @@ app.post("/api/products", requireRole(ACCESS.products), asyncHandler(async (req,
   res.status(201).json({ id: result.insertId });
 }));
 
-app.put("/api/products/:id", requireRole(ACCESS.products), asyncHandler(async (req, res) => {
+app.put("/api/products/:id", requireRole(() => ACCESS.products), asyncHandler(async (req, res) => {
   const { name, description, price, active } = req.body || {};
   await query(
     "UPDATE productos SET nombre = ?, descripcion = ?, precio = ?, activo = ?, actualizado_por_usuario_id = ? WHERE id = ?",
@@ -891,7 +891,7 @@ app.put("/api/products/:id", requireRole(ACCESS.products), asyncHandler(async (r
   res.json({ ok: true });
 }));
 
-app.delete("/api/products/:id", requireRole(ACCESS.products), asyncHandler(async (req, res) => {
+app.delete("/api/products/:id", requireRole(() => ACCESS.products), asyncHandler(async (req, res) => {
   await query(
     "UPDATE productos SET activo = 0, actualizado_por_usuario_id = ? WHERE id = ?",
     [req.user?.id || null, req.params.id]
@@ -900,14 +900,14 @@ app.delete("/api/products/:id", requireRole(ACCESS.products), asyncHandler(async
   res.json({ ok: true });
 }));
 
-app.get("/api/warehouses", requireRole(ACCESS.warehouses), asyncHandler(async (_req, res) => {
+app.get("/api/warehouses", requireRole(() => ACCESS.warehouses), asyncHandler(async (_req, res) => {
   const rows = await query(
     "SELECT id, nombre as name, ubicacion as location FROM almacenes ORDER BY id DESC"
   );
   res.json(rows);
 }));
 
-app.post("/api/warehouses", requireRole(ACCESS.warehouses), asyncHandler(async (req, res) => {
+app.post("/api/warehouses", requireRole(() => ACCESS.warehouses), asyncHandler(async (req, res) => {
   const { name, location } = req.body || {};
   if (!name) {
     return res.status(400).json({ error: "Nombre requerido" });
@@ -920,7 +920,7 @@ app.post("/api/warehouses", requireRole(ACCESS.warehouses), asyncHandler(async (
   res.status(201).json({ id: result.insertId });
 }));
 
-app.put("/api/warehouses/:id", requireRole(ACCESS.warehouses), asyncHandler(async (req, res) => {
+app.put("/api/warehouses/:id", requireRole(() => ACCESS.warehouses), asyncHandler(async (req, res) => {
   const { name, location } = req.body || {};
   await query(
     "UPDATE almacenes SET nombre = ?, ubicacion = ?, actualizado_por_usuario_id = ? WHERE id = ?",
@@ -930,7 +930,7 @@ app.put("/api/warehouses/:id", requireRole(ACCESS.warehouses), asyncHandler(asyn
   res.json({ ok: true });
 }));
 
-app.delete("/api/warehouses/:id", requireRole(ACCESS.warehouses), asyncHandler(async (req, res) => {
+app.delete("/api/warehouses/:id", requireRole(() => ACCESS.warehouses), asyncHandler(async (req, res) => {
   await query("DELETE FROM almacenes WHERE id = ?", [req.params.id]);
   await req.audit({ action: "DELETE", entityId: req.params.id });
   res.json({ ok: true });
@@ -938,7 +938,7 @@ app.delete("/api/warehouses/:id", requireRole(ACCESS.warehouses), asyncHandler(a
 
 app.get(
   "/api/warehouses/:id/inventory",
-  requireRole(ACCESS.warehouses),
+  requireRole(() => ACCESS.warehouses),
   asyncHandler(async (req, res) => {
     const rows = await query(
       "SELECT i.id, i.cantidad as quantity, i.stock_minimo as min_stock, p.nombre as product_name, p.id as product_id FROM inventario i JOIN productos p ON p.id = i.producto_id WHERE i.almacen_id = ?",
@@ -951,7 +951,7 @@ app.get(
 app.post(
   "/api/inventory/move",
   requireAuth,
-  requireRole(ACCESS.warehouses),
+  requireRole(() => ACCESS.warehouses),
   auditMiddleware("inventory"),
   asyncHandler(async (req, res) => {
   const { warehouse_id, product_id, qty, type, order_id, note } = req.body || {};
@@ -1265,7 +1265,7 @@ app.put("/api/orders/:id", requireAuth, asyncHandler(async (req, res) => {
   res.json({ ok: true });
 }));
 
-app.post("/api/orders", requireRole(ACCESS.orders), asyncHandler(async (req, res) => {
+app.post("/api/orders", requireRole(() => ACCESS.orders), asyncHandler(async (req, res) => {
   const {
     customer_id,
     address_id,
@@ -1407,7 +1407,7 @@ app.post("/api/orders", requireRole(ACCESS.orders), asyncHandler(async (req, res
   res.status(201).json({ id: orderId });
 }));
 
-app.patch("/api/orders/:id/status", requireRole(ACCESS.orders), asyncHandler(async (req, res) => {
+app.patch("/api/orders/:id/status", requireRole(() => ACCESS.orders), asyncHandler(async (req, res) => {
   const { status, note, warehouse_id, scheduled_date } = req.body || {};
   if (!status) {
     return res.status(400).json({ error: "Estado requerido" });
@@ -1448,7 +1448,7 @@ app.patch("/api/orders/:id/status", requireRole(ACCESS.orders), asyncHandler(asy
   res.json({ ok: true });
 }));
 
-app.get("/api/logistics/trucks", requireRole(ACCESS.logistics), asyncHandler(async (req, res) => {
+app.get("/api/logistics/trucks", requireRole(() => ACCESS.logistics), asyncHandler(async (req, res) => {
   const allowedTrucks = await getAllowedTruckIdsForDriver(req);
   if (allowedTrucks === null) {
     const rows = await query(
@@ -1471,7 +1471,7 @@ app.get("/api/logistics/trucks", requireRole(ACCESS.logistics), asyncHandler(asy
   res.json(rows);
 }));
 
-app.get("/api/logistics/pending-orders", requireRole(ACCESS.logistics), asyncHandler(async (req, res) => {
+app.get("/api/logistics/pending-orders", requireRole(() => ACCESS.logistics), asyncHandler(async (req, res) => {
   const allowedTrucks = await getAllowedTruckIdsForDriver(req);
   if (allowedTrucks !== null) {
     return res.json([]);
@@ -1499,7 +1499,7 @@ app.get("/api/logistics/pending-orders", requireRole(ACCESS.logistics), asyncHan
   res.json(rows);
 }));
 
-app.post("/api/logistics/trucks", requireRole(ACCESS.logisticsManage), asyncHandler(async (req, res) => {
+app.post("/api/logistics/trucks", requireRole(() => ACCESS.logisticsManage), asyncHandler(async (req, res) => {
   const { plate, capacity, active } = req.body || {};
   if (!plate) {
     return res.status(400).json({ error: "Placa requerida" });
@@ -1512,7 +1512,7 @@ app.post("/api/logistics/trucks", requireRole(ACCESS.logisticsManage), asyncHand
   res.status(201).json({ id: result.insertId });
 }));
 
-app.put("/api/logistics/trucks/:id", requireRole(ACCESS.logisticsManage), asyncHandler(async (req, res) => {
+app.put("/api/logistics/trucks/:id", requireRole(() => ACCESS.logisticsManage), asyncHandler(async (req, res) => {
   const { plate, capacity, active } = req.body || {};
   await query(
     "UPDATE camiones SET placa = ?, capacidad = ?, activo = ?, actualizado_por_usuario_id = ? WHERE id = ?",
@@ -1522,14 +1522,14 @@ app.put("/api/logistics/trucks/:id", requireRole(ACCESS.logisticsManage), asyncH
   res.json({ ok: true });
 }));
 
-app.get("/api/logistics/drivers", requireRole(ACCESS.logistics), asyncHandler(async (_req, res) => {
+app.get("/api/logistics/drivers", requireRole(() => ACCESS.logistics), asyncHandler(async (_req, res) => {
   const rows = await query(
     "SELECT id, nombre as name, telefono as phone, activo as active FROM repartidores ORDER BY id DESC"
   );
   res.json(rows);
 }));
 
-app.post("/api/logistics/drivers", requireRole(ACCESS.logisticsManage), asyncHandler(async (req, res) => {
+app.post("/api/logistics/drivers", requireRole(() => ACCESS.logisticsManage), asyncHandler(async (req, res) => {
   const { name, phone, active } = req.body || {};
   if (!name) {
     return res.status(400).json({ error: "Nombre requerido" });
@@ -1542,7 +1542,7 @@ app.post("/api/logistics/drivers", requireRole(ACCESS.logisticsManage), asyncHan
   res.status(201).json({ id: result.insertId });
 }));
 
-app.put("/api/logistics/drivers/:id", requireRole(ACCESS.logisticsManage), asyncHandler(async (req, res) => {
+app.put("/api/logistics/drivers/:id", requireRole(() => ACCESS.logisticsManage), asyncHandler(async (req, res) => {
   const { name, phone, active } = req.body || {};
   await query(
     "UPDATE repartidores SET nombre = ?, telefono = ?, activo = ?, actualizado_por_usuario_id = ? WHERE id = ?",
@@ -1552,7 +1552,7 @@ app.put("/api/logistics/drivers/:id", requireRole(ACCESS.logisticsManage), async
   res.json({ ok: true });
 }));
 
-app.post("/api/logistics/deliveries", requireRole(ACCESS.logistics), asyncHandler(async (req, res) => {
+app.post("/api/logistics/deliveries", requireRole(() => ACCESS.logistics), asyncHandler(async (req, res) => {
   const { order_id, truck_id, driver_id, scheduled_at } = req.body || {};
   if (!order_id || !truck_id || !driver_id) {
     return res.status(400).json({ error: "Datos incompletos" });
@@ -1594,7 +1594,7 @@ app.post("/api/logistics/deliveries", requireRole(ACCESS.logistics), asyncHandle
   res.status(201).json({ id: result.insertId });
 }));
 
-app.post("/api/logistics/deliveries/bulk", requireRole(ACCESS.logistics), asyncHandler(async (req, res) => {
+app.post("/api/logistics/deliveries/bulk", requireRole(() => ACCESS.logistics), asyncHandler(async (req, res) => {
   const { order_ids, truck_id, driver_id } = req.body || {};
   if (!Array.isArray(order_ids) || order_ids.length === 0 || !truck_id || !driver_id) {
     return res.status(400).json({ error: "Datos incompletos" });
@@ -1657,7 +1657,7 @@ app.post("/api/logistics/deliveries/bulk", requireRole(ACCESS.logistics), asyncH
 
 app.patch(
   "/api/logistics/deliveries/:id/status",
-  requireRole(ACCESS.logistics),
+  requireRole(() => ACCESS.logistics),
   asyncHandler(async (req, res) => {
     const { status, incident_type, note, scheduled_date } = req.body || {};
     if (!status) {
@@ -1773,7 +1773,7 @@ app.patch(
   })
 );
 
-app.get("/api/logistics/deliveries/search", requireRole(ACCESS.logistics), asyncHandler(async (req, res) => {
+app.get("/api/logistics/deliveries/search", requireRole(() => ACCESS.logistics), asyncHandler(async (req, res) => {
   const { q } = req.query || {};
   if (!q || String(q).trim().length < 2) return res.json([]);
   const term = `%${String(q).trim()}%`;
@@ -1794,7 +1794,7 @@ app.get("/api/logistics/deliveries/search", requireRole(ACCESS.logistics), async
 
 app.patch(
   "/api/logistics/deliveries/:id/reassign",
-  requireRole(ACCESS.logisticsManage),
+  requireRole(() => ACCESS.logisticsManage),
   asyncHandler(async (req, res) => {
     const { truck_id, driver_id } = req.body || {};
     if (!truck_id || !driver_id) {
@@ -1819,7 +1819,7 @@ app.patch(
 
 app.post(
   "/api/logistics/deliveries/reassign-bulk",
-  requireRole(ACCESS.logisticsManage),
+  requireRole(() => ACCESS.logisticsManage),
   asyncHandler(async (req, res) => {
     const { delivery_ids, truck_id, driver_id } = req.body || {};
     if (!Array.isArray(delivery_ids) || delivery_ids.length === 0 || !truck_id || !driver_id) {
@@ -1882,7 +1882,7 @@ async function getCentralWarehouseId() {
   return first ? first.id : null;
 }
 
-app.get("/api/logistics/truck-summary", requireRole(ACCESS.logistics), asyncHandler(async (req, res) => {
+app.get("/api/logistics/truck-summary", requireRole(() => ACCESS.logistics), asyncHandler(async (req, res) => {
   const { truck_id } = req.query || {};
   if (!truck_id) {
     return res.status(400).json({ error: "truck_id requerido" });
@@ -1906,7 +1906,7 @@ app.get("/api/logistics/truck-summary", requireRole(ACCESS.logistics), asyncHand
   res.json(rows[0] || { total_orders: 0, total_items: 0, total_value: 0 });
 }));
 
-app.get("/api/logistics/truck-orders", requireRole(ACCESS.logistics), asyncHandler(async (req, res) => {
+app.get("/api/logistics/truck-orders", requireRole(() => ACCESS.logistics), asyncHandler(async (req, res) => {
   const { truck_id, delivered_to, scheduled_date, delivery_date, fecha_registro } = req.query || {};
   if (!truck_id) {
     return res.status(400).json({ error: "truck_id requerido" });
@@ -1973,7 +1973,7 @@ app.get("/api/logistics/truck-orders", requireRole(ACCESS.logistics), asyncHandl
   res.json(rows);
 }));
 
-app.post("/api/logistics/returns", requireRole(ACCESS.logistics), asyncHandler(async (req, res) => {
+app.post("/api/logistics/returns", requireRole(() => ACCESS.logistics), asyncHandler(async (req, res) => {
   const { order_id, truck_id, cash_amount, return_date, gastos_gasolina, gastos_almuerzo, gastos_otros } = req.body || {};
   if (!truck_id) {
     return res.status(400).json({ error: "Datos incompletos: falta el camión" });
@@ -2122,7 +2122,7 @@ app.post("/api/logistics/returns", requireRole(ACCESS.logistics), asyncHandler(a
   res.json({ ok: true });
 }));
 
-app.get("/api/logistics/returns-history", requireRole(ACCESS.logistics), asyncHandler(async (req, res) => {
+app.get("/api/logistics/returns-history", requireRole(() => ACCESS.logistics), asyncHandler(async (req, res) => {
   const roles = req.user?.roles || [];
   const isAdmin = roles.includes("Administrador del sistema");
   const isJefe = roles.includes("Jefe de logística");
@@ -2153,7 +2153,7 @@ app.get("/api/logistics/returns-history", requireRole(ACCESS.logistics), asyncHa
   res.json(rows);
 }));
 
-app.get("/api/reports/sales", requireRole(ACCESS.reports), asyncHandler(async (req, res) => {
+app.get("/api/reports/sales", requireRole(() => ACCESS.reports), asyncHandler(async (req, res) => {
   const { from, to, status, truck_id } = req.query;
   const rangeFrom = from || "1970-01-01";
   const rangeTo = to || "2999-12-31";
@@ -2190,7 +2190,7 @@ app.get("/api/reports/sales", requireRole(ACCESS.reports), asyncHandler(async (r
   res.json(rows);
 }));
 
-app.get("/api/reports/orders-by-status", requireRole(ACCESS.reports), asyncHandler(async (req, res) => {
+app.get("/api/reports/orders-by-status", requireRole(() => ACCESS.reports), asyncHandler(async (req, res) => {
   const { from, to, truck_id, status } = req.query || {};
   const rangeFrom = from || "1970-01-01";
   const rangeTo = to || "2999-12-31";
@@ -2230,7 +2230,7 @@ app.get("/api/reports/orders-by-status", requireRole(ACCESS.reports), asyncHandl
   res.json(rows);
 }));
 
-app.get("/api/reports/deliveries", requireRole(ACCESS.reports), asyncHandler(async (req, res) => {
+app.get("/api/reports/deliveries", requireRole(() => ACCESS.reports), asyncHandler(async (req, res) => {
   const { from, to, truck_id, status } = req.query || {};
   const rangeFrom = from || "1970-01-01";
   const rangeTo = to || "2999-12-31";
@@ -2257,7 +2257,7 @@ app.get("/api/reports/deliveries", requireRole(ACCESS.reports), asyncHandler(asy
   res.json(rows);
 }));
 
-app.get("/api/reports/sales-by-client-type", requireRole(ACCESS.reports), asyncHandler(async (req, res) => {
+app.get("/api/reports/sales-by-client-type", requireRole(() => ACCESS.reports), asyncHandler(async (req, res) => {
   const { from, to, status } = req.query;
   const fromDate = from || "1970-01-01";
   const toDate = to || "2999-12-31";
@@ -2281,7 +2281,7 @@ app.get("/api/reports/sales-by-client-type", requireRole(ACCESS.reports), asyncH
   res.json(rows);
 }));
 
-app.get("/api/reports/deliveries-by-truck", requireRole(ACCESS.reports), asyncHandler(async (req, res) => {
+app.get("/api/reports/deliveries-by-truck", requireRole(() => ACCESS.reports), asyncHandler(async (req, res) => {
   const { from, to } = req.query;
   const fromDate = from || "1970-01-01";
   const toDate = to || "2999-12-31";
@@ -2298,21 +2298,21 @@ app.get("/api/reports/deliveries-by-truck", requireRole(ACCESS.reports), asyncHa
   res.json(rows);
 }));
 
-app.get("/api/reports/trucks", requireRole(ACCESS.reports), asyncHandler(async (_req, res) => {
+app.get("/api/reports/trucks", requireRole(() => ACCESS.reports), asyncHandler(async (_req, res) => {
   const rows = await query(
     "SELECT id, placa as plate FROM camiones ORDER BY placa"
   );
   res.json(rows);
 }));
 
-app.get("/api/reports/drivers", requireRole(ACCESS.reports), asyncHandler(async (_req, res) => {
+app.get("/api/reports/drivers", requireRole(() => ACCESS.reports), asyncHandler(async (_req, res) => {
   const rows = await query(
     "SELECT id, nombre as name FROM repartidores ORDER BY nombre"
   );
   res.json(rows);
 }));
 
-app.get("/api/reports/users", requireRole(ACCESS.reports), asyncHandler(async (_req, res) => {
+app.get("/api/reports/users", requireRole(() => ACCESS.reports), asyncHandler(async (_req, res) => {
   const rows = await query(
     "SELECT id, nombre as name FROM usuarios WHERE activo = 1 ORDER BY nombre"
   );
@@ -2321,7 +2321,7 @@ app.get("/api/reports/users", requireRole(ACCESS.reports), asyncHandler(async (_
 
 app.get(
   "/api/reports/orders-status-summary",
-  requireRole(ACCESS.reports),
+  requireRole(() => ACCESS.reports),
   asyncHandler(async (req, res) => {
     const { from, to, month, truck_id, driver_id, seller_id } = req.query || {};
     let rangeFrom = from || "1970-01-01";
@@ -2369,7 +2369,7 @@ app.get(
 
 app.get(
   "/api/reports/orders-summary",
-  requireRole(ACCESS.reports),
+  requireRole(() => ACCESS.reports),
   asyncHandler(async (req, res) => {
     const { from, to, truck_id, status } = req.query || {};
     const rangeFrom = from || "1970-01-01";
@@ -2429,7 +2429,7 @@ app.get(
 
 app.get(
   "/api/reports/stock-by-warehouse",
-  requireRole(ACCESS.reports),
+  requireRole(() => ACCESS.reports),
   asyncHandler(async (req, res) => {
     const { from, to } = req.query || {};
     const rangeTo = to || from || "";
@@ -2460,7 +2460,7 @@ app.get(
   })
 );
 
-app.get("/api/reports/performance", requireRole(ACCESS.reports), asyncHandler(async (req, res) => {
+app.get("/api/reports/performance", requireRole(() => ACCESS.reports), asyncHandler(async (req, res) => {
   const { from, to, truck_id } = req.query || {};
   const rangeFrom = from || "1970-01-01";
   const rangeTo = to || "2999-12-31";
@@ -2486,7 +2486,7 @@ app.get("/api/reports/performance", requireRole(ACCESS.reports), asyncHandler(as
   res.json(rows);
 }));
 
-app.get("/api/admin/roles", requireRole(ACCESS.admin), asyncHandler(async (_req, res) => {
+app.get("/api/admin/roles", requireRole(() => ACCESS.admin), asyncHandler(async (_req, res) => {
   const roles = await getRoleModulesMap();
   res.json({
     roles,
@@ -2494,11 +2494,11 @@ app.get("/api/admin/roles", requireRole(ACCESS.admin), asyncHandler(async (_req,
   });
 }));
 
-app.get("/api/admin/modules", requireRole(ACCESS.admin), asyncHandler(async (_req, res) => {
+app.get("/api/admin/modules", requireRole(() => ACCESS.admin), asyncHandler(async (_req, res) => {
   res.json(MODULE_CATALOG);
 }));
 
-app.post("/api/admin/roles", requireRole(ACCESS.admin), asyncHandler(async (req, res) => {
+app.post("/api/admin/roles", requireRole(() => ACCESS.admin), asyncHandler(async (req, res) => {
   const { name } = req.body || {};
   if (!name) {
     return res.status(400).json({ error: "Nombre requerido" });
@@ -2515,7 +2515,7 @@ app.post("/api/admin/roles", requireRole(ACCESS.admin), asyncHandler(async (req,
   }
 }));
 
-app.put("/api/admin/roles/:id", requireRole(ACCESS.admin), asyncHandler(async (req, res) => {
+app.put("/api/admin/roles/:id", requireRole(() => ACCESS.admin), asyncHandler(async (req, res) => {
   const { name } = req.body || {};
   if (!name) {
     return res.status(400).json({ error: "Nombre requerido" });
@@ -2532,7 +2532,7 @@ app.put("/api/admin/roles/:id", requireRole(ACCESS.admin), asyncHandler(async (r
   }
 }));
 
-app.put("/api/admin/roles/:id/modules", requireRole(ACCESS.admin), asyncHandler(async (req, res) => {
+app.put("/api/admin/roles/:id/modules", requireRole(() => ACCESS.admin), asyncHandler(async (req, res) => {
   const modules = Array.isArray(req.body?.modules) ? req.body.modules : null;
   if (!modules) {
     return res.status(400).json({ error: "modules debe ser un arreglo" });
@@ -2546,21 +2546,21 @@ app.put("/api/admin/roles/:id/modules", requireRole(ACCESS.admin), asyncHandler(
   res.json({ ok: true, modules: saved });
 }));
 
-app.get("/api/admin/tipos-cliente", requireRole(ACCESS.admin), asyncHandler(async (_req, res) => {
+app.get("/api/admin/tipos-cliente", requireRole(() => ACCESS.admin), asyncHandler(async (_req, res) => {
   const rows = await query(
     "SELECT id, nombre, activo, descuento_unidades, fecha_creacion FROM tipos_cliente ORDER BY nombre"
   );
   res.json(rows);
 }));
 
-app.get("/api/admin/tipos-precio", requireRole(ACCESS.admin), asyncHandler(async (_req, res) => {
+app.get("/api/admin/tipos-precio", requireRole(() => ACCESS.admin), asyncHandler(async (_req, res) => {
   const rows = await query(
     "SELECT id, nombre, activo, fecha_creacion FROM tipos_precio ORDER BY nombre"
   );
   res.json(rows);
 }));
 
-app.get("/api/admin/precios-producto", requireRole(ACCESS.admin), asyncHandler(async (_req, res) => {
+app.get("/api/admin/precios-producto", requireRole(() => ACCESS.admin), asyncHandler(async (_req, res) => {
   const rows = await query(
     `SELECT tpp.id, tpp.precio, tpp.activo, tpp.tipo_precio_id, tp.nombre as tipo_precio,
       tpp.producto_id, p.nombre as producto
@@ -2572,7 +2572,7 @@ app.get("/api/admin/precios-producto", requireRole(ACCESS.admin), asyncHandler(a
   res.json(rows);
 }));
 
-app.post("/api/admin/tipos-cliente", requireRole(ACCESS.admin), asyncHandler(async (req, res) => {
+app.post("/api/admin/tipos-cliente", requireRole(() => ACCESS.admin), asyncHandler(async (req, res) => {
   const { nombre, descuento_unidades } = req.body || {};
   if (!nombre) {
     return res.status(400).json({ error: "Nombre requerido" });
@@ -2585,7 +2585,7 @@ app.post("/api/admin/tipos-cliente", requireRole(ACCESS.admin), asyncHandler(asy
   res.status(201).json({ id: result.insertId });
 }));
 
-app.post("/api/admin/tipos-precio", requireRole(ACCESS.admin), asyncHandler(async (req, res) => {
+app.post("/api/admin/tipos-precio", requireRole(() => ACCESS.admin), asyncHandler(async (req, res) => {
   const { nombre } = req.body || {};
   if (!nombre) {
     return res.status(400).json({ error: "Nombre requerido" });
@@ -2598,7 +2598,7 @@ app.post("/api/admin/tipos-precio", requireRole(ACCESS.admin), asyncHandler(asyn
   res.status(201).json({ id: result.insertId });
 }));
 
-app.post("/api/admin/precios-producto", requireRole(ACCESS.admin), asyncHandler(async (req, res) => {
+app.post("/api/admin/precios-producto", requireRole(() => ACCESS.admin), asyncHandler(async (req, res) => {
   const { tipo_precio_id, producto_id, precio, activo } = req.body || {};
   if (!tipo_precio_id || !producto_id || precio === undefined) {
     return res.status(400).json({ error: "Datos incompletos" });
@@ -2632,7 +2632,7 @@ app.post("/api/admin/precios-producto", requireRole(ACCESS.admin), asyncHandler(
   }
 }));
 
-app.put("/api/admin/tipos-cliente/:id", requireRole(ACCESS.admin), asyncHandler(async (req, res) => {
+app.put("/api/admin/tipos-cliente/:id", requireRole(() => ACCESS.admin), asyncHandler(async (req, res) => {
   const { nombre, activo, descuento_unidades } = req.body || {};
   if (!nombre) {
     return res.status(400).json({ error: "Nombre requerido" });
@@ -2645,7 +2645,7 @@ app.put("/api/admin/tipos-cliente/:id", requireRole(ACCESS.admin), asyncHandler(
   res.json({ ok: true });
 }));
 
-app.put("/api/admin/tipos-precio/:id", requireRole(ACCESS.admin), asyncHandler(async (req, res) => {
+app.put("/api/admin/tipos-precio/:id", requireRole(() => ACCESS.admin), asyncHandler(async (req, res) => {
   const { nombre, activo } = req.body || {};
   if (!nombre) {
     return res.status(400).json({ error: "Nombre requerido" });
@@ -2658,7 +2658,7 @@ app.put("/api/admin/tipos-precio/:id", requireRole(ACCESS.admin), asyncHandler(a
   res.json({ ok: true });
 }));
 
-app.put("/api/admin/precios-producto/:id", requireRole(ACCESS.admin), asyncHandler(async (req, res) => {
+app.put("/api/admin/precios-producto/:id", requireRole(() => ACCESS.admin), asyncHandler(async (req, res) => {
   const { precio, activo } = req.body || {};
   if (precio === undefined) {
     return res.status(400).json({ error: "Precio requerido" });
@@ -2677,7 +2677,7 @@ app.put("/api/admin/precios-producto/:id", requireRole(ACCESS.admin), asyncHandl
   res.json({ ok: true });
 }));
 
-app.get("/api/admin/users", requireRole(ACCESS.admin), asyncHandler(async (_req, res) => {
+app.get("/api/admin/users", requireRole(() => ACCESS.admin), asyncHandler(async (_req, res) => {
   const rows = await query(
     `SELECT u.id, u.nombre as name, u.usuario as email, u.activo as is_active,
             u.fecha_creacion as created_at,
@@ -2702,7 +2702,7 @@ app.get("/api/admin/users", requireRole(ACCESS.admin), asyncHandler(async (_req,
   );
 }));
 
-app.post("/api/admin/users", requireRole(ACCESS.admin), asyncHandler(async (req, res) => {
+app.post("/api/admin/users", requireRole(() => ACCESS.admin), asyncHandler(async (req, res) => {
   const { name, email, password, is_active } = req.body || {};
   if (!name || !email || !password) {
     return res.status(400).json({ error: "Nombre, usuario y contraseña requeridos" });
@@ -2722,7 +2722,7 @@ app.post("/api/admin/users", requireRole(ACCESS.admin), asyncHandler(async (req,
   res.status(201).json({ id: result.insertId });
 }));
 
-app.put("/api/admin/users/:id", requireRole(ACCESS.admin), asyncHandler(async (req, res) => {
+app.put("/api/admin/users/:id", requireRole(() => ACCESS.admin), asyncHandler(async (req, res) => {
   const { name, email, is_active } = req.body || {};
   await query(
     "UPDATE usuarios SET nombre = ?, usuario = ?, activo = ? WHERE id = ?",
@@ -2732,7 +2732,7 @@ app.put("/api/admin/users/:id", requireRole(ACCESS.admin), asyncHandler(async (r
   res.json({ ok: true });
 }));
 
-app.put("/api/admin/users/:id/password", requireRole(ACCESS.admin), asyncHandler(async (req, res) => {
+app.put("/api/admin/users/:id/password", requireRole(() => ACCESS.admin), asyncHandler(async (req, res) => {
   const { password } = req.body || {};
   if (!password) {
     return res.status(400).json({ error: "Contraseña requerida" });
@@ -2752,7 +2752,7 @@ app.put("/api/admin/users/:id/password", requireRole(ACCESS.admin), asyncHandler
   res.json({ ok: true });
 }));
 
-app.put("/api/admin/users/:id/roles", requireRole(ACCESS.admin), asyncHandler(async (req, res) => {
+app.put("/api/admin/users/:id/roles", requireRole(() => ACCESS.admin), asyncHandler(async (req, res) => {
   const { role_ids } = req.body || {};
   if (!Array.isArray(role_ids)) {
     return res.status(400).json({ error: "role_ids debe ser un arreglo" });

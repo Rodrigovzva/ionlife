@@ -17,12 +17,15 @@ function requireAuth(req, res, next) {
   }
 }
 
+// `roles` puede ser un arreglo o una función que lo devuelve; la función se
+// evalúa en cada petición para respetar los permisos recargados desde BD.
+// Una lista vacía solo permite al administrador.
 function requireRole(roles = []) {
   return (req, res, next) => {
+    const allowedRoles = (typeof roles === "function" ? roles() : roles) || [];
     const userRoles = req.user?.roles || [];
     const isAdmin = userRoles.includes("Administrador del sistema");
-    const allowed =
-      isAdmin || roles.length === 0 || roles.some((r) => userRoles.includes(r));
+    const allowed = isAdmin || allowedRoles.some((r) => userRoles.includes(r));
     if (!allowed) {
       return res.status(403).json({ error: "Acceso denegado" });
     }
